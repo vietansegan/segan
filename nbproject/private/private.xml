@@ -1,39 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
-    <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/1">
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/RCRPSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/util/Table.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/util/NCRPNode.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/util/Restaurant.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/util/Node.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/HLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/core/AbstractSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/likelihood/DirichletMultinomialModel.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/LDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/AbstractDiscreteFiniteLikelihoodModel.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/dynamic/DHLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/SHDPSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/SLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/HDPSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/SHLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/SamplerRunner.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/backup/SentSHLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/likelihood/TruncatedStickBreaking.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/objective/GaussianIndLinearRegObjective.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/util/normalizer/MinMaxNormalizer.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampling/util/SparseCount.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/backup/SentCrpNCrpSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/backup/SGHLDASampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/data/AbstractTokenizeDataset.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/core/crossvalidation/Fold.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/util/StatisticsUtils.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/objective/LaplaceIndLinearRegObjective.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/main/TestProgram.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/util/normalizer/AbstractNormalizer.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/util/MiscUtils.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/data/CorpusProcessor.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/classification/SLDAClassificationSampler.java</file>
-        <file>file:/Users/vietan/Dropbox/segan/src/sampler/supervised/LexicalMSHLDASampler.java</file>
-    </open-files>
 </project-private>

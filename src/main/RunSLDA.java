@@ -19,7 +19,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.supervised.SLDASampler;
+import sampler.supervised.regression.SLDASampler;
 import util.IOUtils;
 import util.StatisticsUtils;
 import util.evaluation.Measurement;
@@ -294,7 +294,7 @@ public class RunSLDA {
                     sampler.outputTopicRegressionParameters(samplerFolder + "topic-reg-params.txt");
                 }
                 else if(runMode.equals("test")){
-                    sampler.regressNewDocuments(teRevWords);
+                    sampler.testSampler(teRevWords);
                     
                     String teResultFolder = samplerFolder + "te-results/";
                     IOUtils.createFolder(teResultFolder);
@@ -316,7 +316,7 @@ public class RunSLDA {
                     sampler.outputTopicRegressionParameters(samplerFolder + "topic-reg-params.txt");
                     
                     // test
-                    sampler.regressNewDocuments(teRevWords);
+                    sampler.testSampler(teRevWords);
                     String teResultFolder = samplerFolder + "te-results/";
                     IOUtils.createFolder(teResultFolder);
                     sampler.computeSingleFinal(teResultFolder, teResponses);

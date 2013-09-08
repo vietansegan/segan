@@ -75,34 +75,34 @@ public class IOUtils {
 //        }
 //        writer.close();
 //    }
-    
-    public static ArrayList<String> loadVocab(String filepath) throws Exception{
+
+    public static ArrayList<String> loadVocab(String filepath) throws Exception {
         ArrayList<String> voc = new ArrayList<String>();
         BufferedReader reader = IOUtils.getBufferedReader(filepath);
         String line;
-        while((line = reader.readLine()) != null){
+        while ((line = reader.readLine()) != null) {
             voc.add(line);
         }
         reader.close();
         return voc;
     }
-    
-    public static int[][] loadLDACFile(String filepath) throws Exception{
+
+    public static int[][] loadLDACFile(String filepath) throws Exception {
         BufferedReader reader = IOUtils.getBufferedReader(filepath);
 
         ArrayList<int[]> wordList = new ArrayList<int[]>();
         String line;
         String[] sline;
-        while((line = reader.readLine()) != null){
+        while ((line = reader.readLine()) != null) {
             sline = line.split(" ");
-            
+
             int numTypes = Integer.parseInt(sline[0]);
             int[] types = new int[numTypes];
             int[] counts = new int[numTypes];
-            
+
             int numTokens = 0;
             for (int ii = 0; ii < numTypes; ++ii) {
-                String[] entry = sline[ii+1].split(":");
+                String[] entry = sline[ii + 1].split(":");
                 int count = Integer.parseInt(entry[1]);
                 int id = Integer.parseInt(entry[0]);
                 numTokens += count;
@@ -123,19 +123,19 @@ public class IOUtils {
         int[][] words = wordList.toArray(new int[wordList.size()][]);
         return words;
     }
-    
-    public static ZipOutputStream getZipOutputStream(String outptuFile) throws Exception{
+
+    public static ZipOutputStream getZipOutputStream(String outptuFile) throws Exception {
         File f = new File(outptuFile);
         ZipOutputStream out = new ZipOutputStream(new FileOutputStream(f));
         return out;
     }
-    
-    public static ZipInputStream getZipInputStream(String inputFile) throws Exception{
+
+    public static ZipInputStream getZipInputStream(String inputFile) throws Exception {
         File f = new File(inputFile);
         ZipInputStream in = new ZipInputStream(new FileInputStream(f));
         return in;
     }
-    
+
     public static BufferedReader getBufferedReader(String filepath)
             throws FileNotFoundException, UnsupportedEncodingException {
         BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(filepath), "UTF-8"));
@@ -154,20 +154,34 @@ public class IOUtils {
         return out;
     }
 
-    /** Create a folder if it does not exist */
+    /**
+     * Create a folder if it does not exist
+     */
     public static void createFolder(String dir) {
         try {
             File folder = new File(dir);
-            if (!folder.exists()) {
-                folder.mkdirs();
-            }
+            createFolder(folder);
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(0);
+            throw new RuntimeException("Exception while creating folder " + dir);
         }
     }
 
-    /** Method that makes an empty folder. If the folder does not exist, create it.
+    public static void createFolder(File dir) {
+        try {
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while creating folder " + dir);
+        }
+    }
+
+    /**
+     * Method that makes an empty folder. If the folder does not exist, create
+     * it.
+     *
      * @param dir the String indicates the directory to the folder
      */
     public static void makeEmptyFolder(String dir) {
@@ -184,7 +198,9 @@ public class IOUtils {
         }
     }
 
-    /** Delete a file
+    /**
+     * Delete a file
+     *
      * @param filepath The directory of the file to be deleted
      */
     public static void deleteFile(String filepath) {
@@ -199,7 +215,9 @@ public class IOUtils {
         }
     }
 
-    /** Method that deletes all the files in a given folder
+    /**
+     * Method that deletes all the files in a given folder
+     *
      * @param dir Directory of the folder to be deleted
      */
     public static void deleteFolderContent(String dir) {
@@ -219,7 +237,9 @@ public class IOUtils {
         }
     }
 
-    /** Method that returns all the file names in a folder
+    /**
+     * Method that returns all the file names in a folder
+     *
      * @param dir Directory of the folder
      * @return A String array consists of all the file names in that folder
      */
@@ -237,29 +257,31 @@ public class IOUtils {
         return subFolderName;
     }
 
-    /** Method that returns the file name without the extension
-     * @param oriFilename
-     *      A file name with extension (eg: filename.ext)
-     * @return
-     *      The file name without the extension (eg: filename)
+    /**
+     * Method that returns the file name without the extension
+     *
+     * @param oriFilename A file name with extension (eg: filename.ext)
+     * @return The file name without the extension (eg: filename)
      */
     public static String removeExtension(String oriFilename) {
         int dotAt = oriFilename.lastIndexOf(".");
         return oriFilename.substring(0, dotAt);
     }
-    
-    /** Return the file name from a given file path
-     * @param filepath 
-     *      The given file path
-     * @return 
-     *      The file name
+
+    /**
+     * Return the file name from a given file path
+     *
+     * @param filepath The given file path
+     * @return The file name
      */
-    public static String getFilename(String filepath){
+    public static String getFilename(String filepath) {
         String[] dirs = filepath.split("/");
-        return dirs[dirs.length-1];
+        return dirs[dirs.length - 1];
     }
 
-    /** Copy files from one folder to another */
+    /**
+     * Copy files from one folder to another
+     */
     public static void copyFile(String sourceFile, String destinationFile) {
         try {
             File f1 = new File(sourceFile);
@@ -284,7 +306,9 @@ public class IOUtils {
         }
     }
 
-    /** Output top words for each topic
+    /**
+     * Output top words for each topic
+     *
      * @param topicWordDistr 2D array containing topical word distributions
      * @param vocab List of tokens in the vocabulary
      * @param numTopWord Number of top words to output
@@ -312,8 +336,10 @@ public class IOUtils {
         }
         writer.close();
     }
-    
-    /** Output top words for each topic
+
+    /**
+     * Output top words for each topic
+     *
      * @param topicWordDistr array list containing topical word distributions
      * @param vocab List of tokens in the vocabulary
      * @param numTopWord Number of top words to output
@@ -351,12 +377,14 @@ public class IOUtils {
         writer.close();
     }
 
-    public static ArrayList<RankingItem<String>> getSortedVocab(double[] distr, ArrayList<String> vocab){
-        if(distr.length != vocab.size())
+    public static ArrayList<RankingItem<String>> getSortedVocab(double[] distr, ArrayList<String> vocab) {
+        if (distr.length != vocab.size()) {
             throw new RuntimeException("In IOUtils: dimensions mismatched");
+        }
         ArrayList<RankingItem<String>> sortedVocab = new ArrayList<RankingItem<String>>();
-        for(int i=0; i<distr.length; i++)
+        for (int i = 0; i < distr.length; i++) {
             sortedVocab.add(new RankingItem<String>(vocab.get(i), distr[i]));
+        }
         Collections.sort(sortedVocab);
         return sortedVocab;
     }
@@ -387,7 +415,9 @@ public class IOUtils {
         writer.close();
     }
 
-    /** Output top words for each topic with indices
+    /**
+     * Output top words for each topic with indices
+     *
      * @param topicIndices List of topic indices
      * @param topicWordDistr 2D array containing topical word distributions
      * @param vocab List of tokens in the vocabulary
@@ -418,7 +448,9 @@ public class IOUtils {
         writer.close();
     }
 
-    /** Output latent variable values
+    /**
+     * Output latent variable values
+     *
      * @param distrs 2D array containing the variable values
      * @param filepath Path to the output file
      */
@@ -436,7 +468,9 @@ public class IOUtils {
         writer.close();
     }
 
-    /** Input latent variable values
+    /**
+     * Input latent variable values
+     *
      * @param filepath Path to the input file
      */
     public static double[][] inputDistributions(String filepath)
@@ -464,22 +498,26 @@ public class IOUtils {
     public static void outputDistribution(double[] distr, String filepath)
             throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-        for(double d : distr)
+        for (double d : distr) {
             writer.write(d + " ");
+        }
         writer.close();
     }
 
-    public static double[] inputDistribution(String filepath) throws Exception{
+    public static double[] inputDistribution(String filepath) throws Exception {
         BufferedReader reader = IOUtils.getBufferedReader(filepath);
         String[] sline = reader.readLine().split(" ");
         reader.close();
         double[] distr = new double[sline.length];
-        for(int i=0; i<distr.length; i++)
+        for (int i = 0; i < distr.length; i++) {
             distr[i] = Double.parseDouble(sline[i]);
+        }
         return distr;
     }
 
-    /** Output latent variable assignments */
+    /**
+     * Output latent variable assignments
+     */
     public static void outputLatentVariableAssignment(int[][] var, String filepath)
             throws Exception {
         StringBuilder outputLine;
@@ -499,7 +537,9 @@ public class IOUtils {
         writer.close();
     }
 
-    /** Input latent variable assignments */
+    /**
+     * Input latent variable assignments
+     */
     public static int[][] inputLatentVariableAssignment(String filepath)
             throws Exception {
         ArrayList<int[]> list = new ArrayList<int[]>();
@@ -527,7 +567,7 @@ public class IOUtils {
         }
         return latentVar;
     }
-    
+
     public static void outputLatentVariables(double[][] vars, String filepath)
             throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
@@ -546,7 +586,7 @@ public class IOUtils {
             throws Exception {
         ArrayList<double[]> var_list = new ArrayList<double[]>();
         BufferedReader reader = IOUtils.getBufferedReader(filepath);
-        String line ;
+        String line;
         while ((line = reader.readLine()) != null) {
             String[] sline = line.split(" ");
             double[] distr = new double[sline.length];
@@ -563,61 +603,64 @@ public class IOUtils {
         }
         return vars;
     }
-    
-    public static void metaSummarize(ArrayList<String> singleRunFilepaths, String outputFolderpath) throws Exception{
+
+    public static void metaSummarize(ArrayList<String> singleRunFilepaths, String outputFolderpath) throws Exception {
         BufferedReader reader;
-        String line; String[] sline;
-        HashMap<String, HashMap<String, ArrayList<Double>>> metaSummary = 
+        String line;
+        String[] sline;
+        HashMap<String, HashMap<String, ArrayList<Double>>> metaSummary =
                 new HashMap<String, HashMap<String, ArrayList<Double>>>();
         ArrayList<String> measurementNames = new ArrayList<String>();
         ArrayList<String> modelNames = new ArrayList<String>();
-        
+
         // input
-        for(int j=0; j<singleRunFilepaths.size(); j++){
+        for (int j = 0; j < singleRunFilepaths.size(); j++) {
             String singleRunFilepath = singleRunFilepaths.get(j);
             reader = getBufferedReader(singleRunFilepath);
-            
+
             // header - first line
             line = reader.readLine();
             sline = line.split("\t");
-            if(metaSummary.isEmpty()){ // for the first file
-                for(int i=1; i<sline.length; i++){
+            if (metaSummary.isEmpty()) { // for the first file
+                for (int i = 1; i < sline.length; i++) {
                     metaSummary.put(sline[i], new HashMap<String, ArrayList<Double>>());
                     measurementNames.add(sline[i]);
                 }
-            }            
-            
+            }
+
             // from 2nd line onwards
-            while((line = reader.readLine()) != null){
+            while ((line = reader.readLine()) != null) {
                 sline = line.split("\t");
                 String modelName = sline[0];
-                
-                if(j == 0)
+
+                if (j == 0) {
                     modelNames.add(modelName);
-                
-                for(int i=1; i<sline.length; i++){
+                }
+
+                for (int i = 1; i < sline.length; i++) {
                     double perfValue = Double.parseDouble(sline[i]);
-                    String measurementName = measurementNames.get(i-1);
-                    
-                    HashMap<String, ArrayList<Double>> measurementTable = 
+                    String measurementName = measurementNames.get(i - 1);
+
+                    HashMap<String, ArrayList<Double>> measurementTable =
                             metaSummary.get(measurementName);
                     ArrayList<Double> modelPerfList = measurementTable.get(modelName);
-                    if(modelPerfList == null)
+                    if (modelPerfList == null) {
                         modelPerfList = new ArrayList<Double>();
+                    }
                     modelPerfList.add(perfValue);
                     measurementTable.put(modelName, modelPerfList);
                     metaSummary.put(measurementName, measurementTable);
                 }
-            }            
+            }
             reader.close();
         }
-        
+
         // output
         BufferedWriter writer;
-        for(String measurement : metaSummary.keySet()){
+        for (String measurement : metaSummary.keySet()) {
             writer = getBufferedWriter(outputFolderpath + measurement + ".txt");
             HashMap<String, ArrayList<Double>> measurementTable = metaSummary.get(measurement);
-            
+
 //            for(String modelName : modelNames){
 //                writer.write(modelName);
 //                ArrayList<Double> values = measurementTable.get(modelName);
@@ -625,16 +668,18 @@ public class IOUtils {
 //                    writer.write("\t" + value);
 //                writer.write("\n");
 //            }
-            
+
             // write header
-            for(int i=0; i<modelNames.size(); i++)
+            for (int i = 0; i < modelNames.size(); i++) {
                 writer.write(modelNames.get(i) + "\t");
+            }
             writer.write("\n");
-            
+
             // write contents
-            for(int j=0; j<measurementTable.get(modelNames.get(0)).size(); j++){
-                for(int i=0; i<modelNames.size(); i++)
-                    writer.write(measurementTable.get(modelNames.get(i)).get(j) + "\t");                
+            for (int j = 0; j < measurementTable.get(modelNames.get(0)).size(); j++) {
+                for (int i = 0; i < modelNames.size(); i++) {
+                    writer.write(measurementTable.get(modelNames.get(i)).get(j) + "\t");
+                }
                 writer.write("\n");
             }
             writer.close();

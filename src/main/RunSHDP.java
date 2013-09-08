@@ -18,7 +18,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.supervised.SHDPSampler;
+import sampler.supervised.regression.SHDPSampler;
 import util.IOUtils;
 import util.StatisticsUtils;
 import util.evaluation.Measurement;

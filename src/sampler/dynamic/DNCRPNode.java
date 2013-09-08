@@ -5,7 +5,6 @@
 package sampler.dynamic;
 
 import java.util.HashMap;
-import java.util.TreeSet;
 import sampling.likelihood.LogisticNormalModel;
 import sampling.util.Node;
 import util.MiscUtils;
@@ -15,53 +14,53 @@ import util.MiscUtils;
  * @author vietan
  */
 public class DNCRPNode extends Node<DNCRPNode, LogisticNormalModel> {
+
     public static final int PSEUDO_CHILD_INDEX = -1;
     public static final String EMPTY_NODE_PATH = "*";
-    
     private DNCRPNode preNode;
     private DNCRPNode posNode;
     private DNCRPNode pseudoChildNode;
-    
     private int numActualCustomers; // M
     private double numPseudoCustomers; // S
-    
-    public DNCRPNode(int index, int level, 
-            LogisticNormalModel content, 
+
+    public DNCRPNode(int index, int level,
+            LogisticNormalModel content,
             DNCRPNode parent,
             DNCRPNode preNode,
-            DNCRPNode posNode
-            ){
+            DNCRPNode posNode) {
         super(index, level, content, parent);
         this.preNode = preNode;
         this.posNode = posNode;
         this.numActualCustomers = 0;
         this.numPseudoCustomers = 0.0;
     }
-    
-    public String getPreNodePathString(){
-        if(this.preNode == null)
+
+    public String getPreNodePathString() {
+        if (this.preNode == null) {
             return EMPTY_NODE_PATH;
-        else
+        } else {
             return this.preNode.getPathString();
+        }
     }
-    
-    public String getPosNodePathString(){
-        if(this.posNode == null)
+
+    public String getPosNodePathString() {
+        if (this.posNode == null) {
             return EMPTY_NODE_PATH;
-        else
+        } else {
             return this.posNode.getPathString();
+        }
     }
-    
-    public void updateNumeratorLogProduct(){
+
+    public void updateNumeratorLogProduct() {
         throw new RuntimeException("to be implemented");
     }
-    
-    public void updateDenominatorLogProduct(){
+
+    public void updateDenominatorLogProduct() {
         throw new RuntimeException("to be implemented");
     }
-    
+
     @Override
-    public String toString(){
+    public String toString() {
         StringBuilder str = new StringBuilder();
         str.append("[")
                 .append(getPathString())
@@ -74,12 +73,13 @@ public class DNCRPNode extends Node<DNCRPNode, LogisticNormalModel> {
                 .append("]")
                 .append(" [")
                 .append(posNode == null ? "*" : posNode.getPathString())
-                .append("]")
-                ;
+                .append("]");
         return str.toString();
     }
-    
-    /**TODO: redundant. check fillInactiveChildIndices */
+
+    /**
+     * TODO: redundant. check fillInactiveChildIndices
+     */
 //    public void updateInactiveChildIndices(){
 //        int maxChildIndex = -1;
 //        for(DNCRPNode child : this.getChildren()){
@@ -93,39 +93,40 @@ public class DNCRPNode extends Node<DNCRPNode, LogisticNormalModel> {
 //                this.inactiveChildren.add(i);
 //        }
 //    }
-        
-    public void createPseudoChildNode(){
-        this.pseudoChildNode = new DNCRPNode(PSEUDO_CHILD_INDEX, this.level + 1, 
+    public void createPseudoChildNode() {
+        this.pseudoChildNode = new DNCRPNode(PSEUDO_CHILD_INDEX, this.level + 1,
                 null, this, null, null);
     }
-    
-    public void addObservations(HashMap<Integer, Integer> obsCounts){
-        for(int obs : obsCounts.keySet())
+
+    public void addObservations(HashMap<Integer, Integer> obsCounts) {
+        for (int obs : obsCounts.keySet()) {
             this.content.changeCount(obs, obsCounts.get(obs));
+        }
     }
-    
-    public void removeObservations(HashMap<Integer, Integer> obsCounts){
-        for(int obs : obsCounts.keySet())
-            this.content.changeCount(obs, - obsCounts.get(obs));
+
+    public void removeObservations(HashMap<Integer, Integer> obsCounts) {
+        for (int obs : obsCounts.keySet()) {
+            this.content.changeCount(obs, -obsCounts.get(obs));
+        }
     }
-    
-    public void changeNumCustomers(int delta){
+
+    public void changeNumCustomers(int delta) {
         this.numActualCustomers += delta;
     }
-    
-    public void incrementNumCustomers(){
-        this.numActualCustomers ++;
+
+    public void incrementNumCustomers() {
+        this.numActualCustomers++;
     }
-    
-    public void decrementNumCustomers(){
-        this.numActualCustomers --;
+
+    public void decrementNumCustomers() {
+        this.numActualCustomers--;
     }
-    
-    public int getNumActualCustomers(){
+
+    public int getNumActualCustomers() {
         return this.numActualCustomers;
     }
-    
-    public DNCRPNode getPseudoChildNode(){
+
+    public DNCRPNode getPseudoChildNode() {
         return this.pseudoChildNode;
     }
 
