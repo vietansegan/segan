@@ -18,99 +18,107 @@ public class SamplerUtils {
     public static final double MAX_LOG = Math.log(Double.MAX_VALUE);
     public static final double HALF_LOG_TWO_PI = Math.log(2 * Math.PI) / 2;
     public static final double EULER_MASCHERONI = -0.5772156649015328606065121;
-    
     public static Random rand = new Random(RAND_SEED);
-    
-    public static void resetRand(){
+
+    public static void resetRand() {
         rand = new Random(RAND_SEED);
     }
-    
-    public static int[] getSortedTopic(double[] distribution){
+
+    public static int[] getSortedTopic(double[] distribution) {
         int[] sortedTopic = new int[distribution.length];
         ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
-        for(int v=0; v<sortedTopic.length; v++)
+        for (int v = 0; v < sortedTopic.length; v++) {
             rankItems.add(new RankingItem<Integer>(v, distribution[v]));
+        }
         Collections.sort(rankItems);
-        for(int i=0; i<rankItems.size(); i++)
+        for (int i = 0; i < rankItems.size(); i++) {
             sortedTopic[i] = rankItems.get(i).getObject();
+        }
         return sortedTopic;
     }
-    
     private static double[] cc = {76.18009172947146, -86.50532032941677,
         24.01409824083091, -1.231739572450155,
         0.1208650973866179e-2, -0.5395239384953e-5};
-    
-    public static int maxIndex(double[] arrays){
+
+    public static int maxIndex(double[] arrays) {
         int mIdx = -1;
-        double maxValue = - Double.MAX_VALUE;
-        for(int i=0; i<arrays.length; i++){
-            if(arrays[i] > maxValue){
+        double maxValue = -Double.MAX_VALUE;
+        for (int i = 0; i < arrays.length; i++) {
+            if (arrays[i] > maxValue) {
                 maxValue = arrays[i];
                 mIdx = i;
             }
         }
         return mIdx;
     }
-    
-    public static int maxIndex(int[] counts){
+
+    public static int maxIndex(int[] counts) {
         int mIdx = -1;
-        double maxValue = - Integer.MAX_VALUE;
-        for(int i=0; i<counts.length; i++){
-            if(counts[i] > maxValue){
+        double maxValue = -Integer.MAX_VALUE;
+        for (int i = 0; i < counts.length; i++) {
+            if (counts[i] > maxValue) {
                 maxValue = counts[i];
                 mIdx = i;
             }
         }
         return mIdx;
     }
-    
-    public static int maxIndex(ArrayList<Double> list){
+
+    public static int maxIndex(ArrayList<Double> list) {
         int mIdx = -1;
-        double maxValue = - Double.MAX_VALUE;
-        for(int i=0; i<list.size(); i++){
-            if(list.get(i) > maxValue){
+        double maxValue = -Double.MAX_VALUE;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i) > maxValue) {
                 maxValue = list.get(i);
                 mIdx = i;
             }
         }
         return mIdx;
     }
-    
-    /** Compute the log joint probability of table assignments 
+
+    /**
+     * Compute the log joint probability of table assignments
+     *
      * @param customerCounts Number of customers assigned to each table
-     * @param pseudoCustomerCount The pseudo number of customers (DP hyperparameter)
+     * @param pseudoCustomerCount The pseudo number of customers (DP
+     * hyperparameter)
      */
     public static double getAssignmentJointLogProbability(
-            ArrayList<Integer> customerCounts, 
-            double pseudoCustomerCount){
-        if(customerCounts.isEmpty())
+            ArrayList<Integer> customerCounts,
+            double pseudoCustomerCount) {
+        if (customerCounts.isEmpty()) {
             return 0.0;
-        
+        }
+
         int numTables = customerCounts.size();
         int numTotalCustomers = 0;
         int maxNumTotalCustomers = Integer.MIN_VALUE;
-        
-        for(int customerCount : customerCounts){
+
+        for (int customerCount : customerCounts) {
             numTotalCustomers += customerCount;
-            if(customerCount > maxNumTotalCustomers)
+            if (customerCount > maxNumTotalCustomers) {
                 maxNumTotalCustomers = customerCount;
+            }
         }
-        
+
         double[] cachedLogs = new double[maxNumTotalCustomers];
-        for(int i=0; i<maxNumTotalCustomers; i++)
-            cachedLogs[i] = Math.log(i+1);
-        
-        double logprob = numTables * Math.log(pseudoCustomerCount);
-        for(int customerCount : customerCounts){
-            for(int i=0; i<customerCount; i++)
-                logprob += cachedLogs[i];
+        for (int i = 0; i < maxNumTotalCustomers; i++) {
+            cachedLogs[i] = Math.log(i + 1);
         }
-        for(int x=1; x<=numTotalCustomers; x++)
+
+        double logprob = numTables * Math.log(pseudoCustomerCount);
+        for (int customerCount : customerCounts) {
+            for (int i = 0; i < customerCount; i++) {
+                logprob += cachedLogs[i];
+            }
+        }
+        for (int x = 1; x <= numTotalCustomers; x++) {
             logprob -= Math.log(x - 1 + pseudoCustomerCount);
+        }
         return logprob;
     }
-    
-    public static double getGaussian(double aMean, double aVariance){
+
+    public static double getGaussian(double aMean, double aVariance) {
         return aMean + rand.nextGaussian() * Math.sqrt(aVariance);
     }
 
@@ -237,18 +245,21 @@ public class SamplerUtils {
      */
     public static double computeLogLhood(int[] obs, int sum, double[] prior_vals) {
         double prior_sum = 0;
-        for (double p : prior_vals) 
+        for (double p : prior_vals) {
             prior_sum += p;
+        }
 
         double val = 0.0;
         val += SamplerUtils.logGammaStirling(prior_sum);
-        
-        for (double p : prior_vals) 
+
+        for (double p : prior_vals) {
             val -= SamplerUtils.logGammaStirling(p);
-            
-        for (int ii = 0; ii < obs.length; ++ii) 
+        }
+
+        for (int ii = 0; ii < obs.length; ++ii) {
             val += SamplerUtils.logGammaStirling(prior_vals[ii] + (double) obs[ii]);
-        
+        }
+
         val -= SamplerUtils.logGammaStirling(sum + prior_sum);
 
         return val;
@@ -321,8 +332,8 @@ public class SamplerUtils {
         }
         return index;
     }
-    
-    public static int scaleSample(double[] weights, double sum){
+
+    public static int scaleSample(double[] weights, double sum) {
         double b = 0, r = rand.nextDouble() * sum;
         int i;
         for (i = 0; i < weights.length; i++) {
@@ -338,33 +349,34 @@ public class SamplerUtils {
 //                + "\n");
         return i;
     }
-    
-    public static int logMaxRescaleSample(ArrayList<Double> logDistList){
+
+    public static int logMaxRescaleSample(ArrayList<Double> logDistList) {
         double[] logDist = new double[logDistList.size()];
-        for(int i=0; i<logDist.length; i++)
+        for (int i = 0; i < logDist.length; i++) {
             logDist[i] = logDistList.get(i);
+        }
         return logMaxRescaleSample(logDist);
     }
-    
-    public static int logMaxRescaleSample(double[] logDist){
+
+    public static int logMaxRescaleSample(double[] logDist) {
         double sum = 0.0;
         double max = Double.NEGATIVE_INFINITY;
-        for(int i=0; i<logDist.length; i++){
-            if(logDist[i] > max)
+        for (int i = 0; i < logDist.length; i++) {
+            if (logDist[i] > max) {
                 max = logDist[i];
+            }
         }
         double[] weights = new double[logDist.length];
-        for(int i=0; i<logDist.length; i++){
+        for (int i = 0; i < logDist.length; i++) {
             weights[i] = Math.exp(logDist[i] - max);
             sum += weights[i];
         }
         return scaleSample(weights, sum);
     }
-    
+
 //    public static int logScaleSampleNew(double[] logPdf){
 //        
 //    }
-
     /**
      * Scale sample from a pdf in the log space
      */
@@ -397,7 +409,7 @@ public class SamplerUtils {
                 break;
             }
         }
-        
+
         //debug
 //        System.out.println("logpdf: " + MiscUtils.arrayToString(logPdf));
 //        System.out.println("logcdf: " + MiscUtils.arrayToString(logCdf));
@@ -406,7 +418,7 @@ public class SamplerUtils {
 //                + ". sampleLogVal = " + MiscUtils.formatDouble(sampledLogVal)
 //                + ". index = " + index);
 //        System.out.println();
-        
+
         return index;
     }
 
@@ -426,22 +438,25 @@ public class SamplerUtils {
         }
         return logMinRescaleSample(logPdfArr);
     }
-    
+
     /**
      * Compute log(X) using log(X + Y) and log(Y)
+     *
      * @param logXAndY log(X + Y)
      * @param logY log(Y)
      * @return log(X)
      */
-    public static double logMinus(double logXAndY, double logY){
+    public static double logMinus(double logXAndY, double logY) {
         double diffLog = logXAndY - logY;
-        if(diffLog > 20)
+        if (diffLog > 20) {
             return logXAndY;
+        }
         return logY + Math.log(Math.expm1(diffLog));
     }
 
     /**
      * Compute log(X + Y) from logX and logY
+     *
      * @param logX log of X
      * @param logY log of Y
      * @return log(X + Y)

@@ -7,16 +7,18 @@ package core.crossvalidation;
 /**
  * Note: groupId can be discarded since it is only used for stratified sampling.
  * Should pass a separate array to the stratified sampling function.
+ *
  * @author vietan
  */
-public class Instance <I> {
+public class Instance<I> {
+
     private final I id;
-    
-    public Instance(I id){
+
+    public Instance(I id) {
         this.id = id;
     }
-    
-    public I getId(){
+
+    public I getId() {
         return this.id;
     }
 }

@@ -2,21 +2,20 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package util.data;
 
 /**
  *
  * @author vietan
  */
-public class Turn implements Comparable<Turn>{
+public class Turn implements Comparable<Turn> {
+
     private int index; // the turn order in the conversation
     private String speaker;
     private String text;
-
     private int[] tokens;
 
-    public Turn(int index, String speaker, String text){
+    public Turn(int index, String speaker, String text) {
         this.index = index;
         this.speaker = speaker;
         this.text = text;
@@ -55,7 +54,7 @@ public class Turn implements Comparable<Turn>{
     }
 
     @Override
-    public int hashCode(){
+    public int hashCode() {
         return Integer.toString(index).hashCode();
     }
 
@@ -78,7 +77,7 @@ public class Turn implements Comparable<Turn>{
     }
 
     @Override
-    public String toString(){
+    public String toString() {
         return this.index + "\t" + this.speaker + "\t" + this.text;
     }
 }

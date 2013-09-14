@@ -14,180 +14,200 @@ import java.util.TreeSet;
  *
  * @author vietan
  */
-public class Node<N extends Node, C> implements Comparable<Node<N, C>>{
+public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
+
     public static final int ROOT_PARENT_INDEX = -1;
-    
     protected int index;
     protected int level;
     protected C content;
     protected N parent;
-    
     protected SortedSet<Integer> inactiveChildren; // indices for reuse
     protected HashMap<Integer, N> children;
-        
-    public Node(int index, int level, C content, N parent){
+
+    public Node(int index, int level, C content, N parent) {
         this.index = index;
         this.level = level;
         this.content = content;
         this.parent = parent;
-        
+
         this.inactiveChildren = new TreeSet<Integer>();
         this.children = new HashMap<Integer, N>();
     }
-    
-    /** Fill in the inactive indices (after all children nodes are loaded) */
-    public void fillInactiveChildIndices(){
+
+    /**
+     * Fill in the inactive indices (after all children nodes are loaded)
+     */
+    public void fillInactiveChildIndices() {
         int maxChildIndex = -1;
-        for(Node child : this.getChildren()){
-            if(child.getIndex() > maxChildIndex)
+        for (Node child : this.getChildren()) {
+            if (child.getIndex() > maxChildIndex) {
                 maxChildIndex = child.getIndex();
+            }
         }
-        
+
         this.inactiveChildren = new TreeSet<Integer>();
-        for(int i=0; i<maxChildIndex; i++){
-            if(!isChild(i))
+        for (int i = 0; i < maxChildIndex; i++) {
+            if (!isChild(i)) {
                 this.inactiveChildren.add(i);
+            }
         }
     }
-    
-    public void removeAllChilren(){
+
+    public void removeAllChilren() {
         this.children = new HashMap<Integer, N>();
         this.inactiveChildren = new TreeSet<Integer>();
     }
-    
-    public N getChild(int index){
+
+    public N getChild(int index) {
         return this.children.get(index);
     }
-    
-    public N addChild(int childIndex, N child){
-        if(this.children.containsKey(childIndex))
-            throw new RuntimeException("Child node " + childIndex + " has already existed. " 
+
+    public N addChild(int childIndex, N child) {
+        if (this.children.containsKey(childIndex)) {
+            throw new RuntimeException("Child node " + childIndex + " has already existed. "
                     + this.toString());
-        
+        }
+
         // remove this index from the inactive set
-        if(this.inactiveChildren.contains(childIndex))
+        if (this.inactiveChildren.contains(childIndex)) {
             this.inactiveChildren.remove(childIndex);
-        
+        }
+
         child.index = childIndex;
         this.children.put(childIndex, child);
         return child;
     }
-    
-    /** Remove a child node. After the removal, the index will be added to the 
+
+    /**
+     * Remove a child node. After the removal, the index will be added to the
      * inactive set for reuse
+     *
      * @param childIndex The index of the child node to be removed
      */
-    public void removeChild(int childIndex){
-        if(!this.isChild(childIndex))
+    public void removeChild(int childIndex) {
+        if (!this.isChild(childIndex)) {
             throw new RuntimeException("Child " + childIndex + " does not exist. "
                     + "In node " + this.toString());
+        }
         this.children.remove(childIndex);
         this.inactiveChildren.add(childIndex);
     }
-    
-    /** Get the next available child index */
-    public int getNextChildIndex(){
-        if(this.inactiveChildren.isEmpty())
+
+    /**
+     * Get the next available child index
+     */
+    public int getNextChildIndex() {
+        if (this.inactiveChildren.isEmpty()) {
             return this.children.size();
+        }
         return this.inactiveChildren.first();
     }
-    
-    /** Return the unique path string for each node in the tree */
-    public String getPathString(){
-        if(this.isRoot())
+
+    /**
+     * Return the unique path string for each node in the tree
+     */
+    public String getPathString() {
+        if (this.isRoot()) {
             return Integer.toString(this.index);
-        else
+        } else {
             return this.parent.getPathString() + ":" + this.index;
+        }
     }
-    
-    public int[] getPathIndex(){
+
+    public int[] getPathIndex() {
         int[] pathIndex = new int[this.level + 1];
         getPathIndex(this, pathIndex);
         return pathIndex;
     }
-    
-    private void getPathIndex(Node<N, C> curNode, int[] pathIndex){
-        if(curNode == null)
+
+    private void getPathIndex(Node<N, C> curNode, int[] pathIndex) {
+        if (curNode == null) {
             return;
+        }
         pathIndex[curNode.getLevel()] = curNode.getIndex();
         getPathIndex(curNode.getParent(), pathIndex);
     }
-    
-    public boolean isRoot(){
+
+    public boolean isRoot() {
         return this.parent == null;
     }
-    
-    public boolean isChild(int childIndex){
+
+    public boolean isChild(int childIndex) {
         return this.children.containsKey(childIndex);
     }
-    
-    public int getNumChildren(){
+
+    public int getNumChildren() {
         return this.children.size();
     }
-    
-    public Collection<N> getChildren(){
+
+    public Collection<N> getChildren() {
         return this.children.values();
     }
-    
-    public int getLevel(){
+
+    public int getLevel() {
         return this.level;
     }
-    
-    public int getIndex(){
+
+    public int getIndex() {
         return this.index;
     }
-    
-    public N getParent(){
+
+    public N getParent() {
         return this.parent;
     }
-    
-    public int getParentIndex(){
-        if(parent == null)
+
+    public int getParentIndex() {
+        if (parent == null) {
             return ROOT_PARENT_INDEX;
+        }
         return this.parent.getIndex();
     }
-    
-    public C getContent(){
+
+    public C getContent() {
         return this.content;
     }
-    
-    public void setContent(C content){
+
+    public void setContent(C content) {
         this.content = content;
     }
-    
-    public String printSubtreeStructure(){
+
+    public String printSubtreeStructure() {
         HashMap<Integer, Integer> levelNodeCounts = new HashMap<Integer, Integer>();
         int maxLevel = 0;
         Stack<Node<N, C>> stack = new Stack<Node<N, C>>();
         stack.add(this);
-        while(!stack.isEmpty()){
+        while (!stack.isEmpty()) {
             Node<N, C> node = stack.pop();
             int nodeLevel = node.getLevel();
-            if(nodeLevel > maxLevel)
+            if (nodeLevel > maxLevel) {
                 maxLevel = nodeLevel;
-            
+            }
+
             Integer count = levelNodeCounts.get(nodeLevel);
-            if(count == null)
+            if (count == null) {
                 levelNodeCounts.put(nodeLevel, 1);
-            else
+            } else {
                 levelNodeCounts.put(nodeLevel, count + 1);
-            
-            for(N child : node.getChildren())
+            }
+
+            for (N child : node.getChildren()) {
                 stack.add(child);
+            }
         }
-        
+
         StringBuilder str = new StringBuilder();
-        for(int l=0; l<=maxLevel; l++)
+        for (int l = 0; l <= maxLevel; l++) {
             str.append(l).append("(").append(levelNodeCounts.get(l)).append(")\t");
+        }
         return str.toString();
     }
-    
+
     @Override
-    public int hashCode(){
+    public int hashCode() {
         String hashCodeStr = getPathString();
         return hashCodeStr.hashCode();
     }
-    
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -202,21 +222,22 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>>{
                 && r.level == this.level
                 && r.getParentIndex() == this.getParentIndex();
     }
-    
+
     @Override
     public int compareTo(Node<N, C> r) {
-        if(this.level == r.level){
-            if(this.parent.equals(r.parent))
+        if (this.level == r.level) {
+            if (this.parent.equals(r.parent)) {
                 return this.index - r.index;
-            else
+            } else {
                 return this.parent.compareTo(r.parent);
-        }
-        else
+            }
+        } else {
             return this.getLevel() - r.getLevel();
+        }
     }
-    
+
     @Override
-    public String toString(){
+    public String toString() {
         StringBuilder str = new StringBuilder();
         str.append("[")
                 .append(getPathString())

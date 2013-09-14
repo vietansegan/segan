@@ -1333,9 +1333,9 @@ public class SLDASampler extends AbstractSampler implements SupervisedSampler {
         }
         writer.write("\n");
         writer.close();
-    }    
+    }
     // End prediction ----------------------------------------------------------
-    
+
     @Override
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();

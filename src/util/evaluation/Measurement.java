@@ -9,10 +9,11 @@ package util.evaluation;
  * @author vietan
  */
 public class Measurement {
+
     private final String name;
     private double value;
-    
-    public Measurement(String name, double value){
+
+    public Measurement(String name, double value) {
         this.name = name;
         this.value = value;
     }
@@ -28,9 +29,9 @@ public class Measurement {
     public String getName() {
         return name;
     }
-    
+
     @Override
-    public String toString(){
+    public String toString() {
         return this.name + "\t" + this.value;
     }
 }

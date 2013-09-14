@@ -2,24 +2,24 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package util.data;
 
 /**
  *
  * @author vietan
  */
-public class CongressionalTurn extends Turn{
+public class CongressionalTurn extends Turn {
+
     private char party;
     private char mention;
     private char vote;
 
-    public CongressionalTurn(int index, String speaker, String text){
+    public CongressionalTurn(int index, String speaker, String text) {
         super(index, speaker, text);
     }
 
     public CongressionalTurn(int index, String speaker, String text,
-            char party, char mention, char vote){
+            char party, char mention, char vote) {
         super(index, speaker, text);
         this.party = party;
         this.mention = mention;

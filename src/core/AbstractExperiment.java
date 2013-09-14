@@ -2,7 +2,6 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package core;
 
 /**
@@ -10,27 +9,25 @@ package core;
  * @author vietan
  */
 public abstract class AbstractExperiment<D extends AbstractDataset> {
+
     public static final String SummaryFile = "summary.txt";
     public static final String SupervisedFolder = "supervised/";
     public static final String UnsupervisedFolder = "unsupervised/";
-    
     public static final String SamplerFolder = "data/sampler/";
     public static final String TopWordFile = "top-words.txt";
     public static final String TopicCoherenceFile = "topic-coherence.txt";
-    
     public static final int UNOBSERVED = -1;
-    public static enum RunType { SUPERFAST, FAST, FASTMOD, MODERATE, MODLONG, LONG, EXTENSIVE };
 
+    public static enum RunType {
+
+        SUPERFAST, FAST, FASTMOD, MODERATE, MODLONG, LONG, EXTENSIVE
+    };
     public static int burn_in = 100;
     public static int max_iters = 1000;
     public static int sample_lag = 50;
-
     public static String experimentPath;
-    
     protected D data;
-
     public boolean debug;
-    
     public boolean verbose = true;
 
     public abstract void setup() throws Exception;
@@ -39,8 +36,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset> {
 
     public abstract void evaluate() throws Exception;
 
-    protected void setRun(RunType type){
-        switch (type){
+    protected void setRun(RunType type) {
+        switch (type) {
             case SUPERFAST:
                 burn_in = 1;
                 max_iters = 2;
@@ -84,17 +81,15 @@ public abstract class AbstractExperiment<D extends AbstractDataset> {
         }
     }
 
-    public static void log(String msg){
+    public static void log(String msg) {
         System.out.print("[LOG] " + msg);
     }
 
-    public static void logln(String msg){
+    public static void logln(String msg) {
         System.out.println("[LOG] " + msg);
     }
-    
-    public String getDatasetFolder(){
+
+    public String getDatasetFolder() {
         return data.getFolder();
     }
-    
-    
 }

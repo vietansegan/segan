@@ -2,7 +2,6 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package util.data;
 
 import java.util.Hashtable;
@@ -12,34 +11,34 @@ import java.util.Hashtable;
  * @author vietan
  */
 public class Review {
-    public static final String UNKNOWN = "unknown";
 
+    public static final String UNKNOWN = "unknown";
     private String id;
     private String text;
     private String reviewer;
     private double rating;
-
     private Hashtable<String, String> features;
     private int numHelpfuls;
     private int numFeedbacks;
 
-    public Review(String id){
+    public Review(String id) {
         this(id, new String(), UNKNOWN);
     }
-    
-    public Review(String id, String text){
+
+    public Review(String id, String text) {
         this.id = id;
         this.text = text;
         this.reviewer = UNKNOWN;
         this.features = new Hashtable<String, String>();
     }
 
-    public Review(String id, String text, String reviewer){
+    public Review(String id, String text, String reviewer) {
         this.id = id;
         this.text = text;
         this.reviewer = reviewer;
-        if(this.reviewer.equals(""))
+        if (this.reviewer.equals("")) {
             this.reviewer = UNKNOWN;
+        }
         this.features = new Hashtable<String, String>();
     }
 
@@ -67,11 +66,11 @@ public class Review {
         this.text = text;
     }
 
-    public double getRating(){
+    public double getRating() {
         return this.rating;
     }
 
-    public void setRating(double r){
+    public void setRating(double r) {
         this.rating = r;
     }
 
@@ -91,11 +90,11 @@ public class Review {
         this.numHelpfuls = numHelpfuls;
     }
 
-    public void setFeatureValue(String feature, String value){
+    public void setFeatureValue(String feature, String value) {
         this.features.put(feature, value);
     }
 
-    public String getFeatureValue(String feature){
+    public String getFeatureValue(String feature) {
         return this.features.get(feature);
     }
 }

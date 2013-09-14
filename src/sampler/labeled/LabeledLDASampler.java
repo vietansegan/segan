@@ -309,6 +309,4 @@ public class LabeledLDASampler {
 //            System.exit(1);
 //        }
 //    }
-    
-    
 }

@@ -9,12 +9,15 @@ package util;
  * @author Viet-An Nguyen
  */
 public class RankingItem<A> implements Comparable<RankingItem<A>> {
+
     private A object;
     private double primaryValue;
     private double secondaryValue;
     private int ranking;
-    
-    /** Creates a new instance of Ranking */
+
+    /**
+     * Creates a new instance of Ranking
+     */
     public RankingItem(A obj, double value) {
         this.object = obj;
         this.primaryValue = value;
@@ -30,14 +33,14 @@ public class RankingItem<A> implements Comparable<RankingItem<A>> {
         return object;
     }
 
-    public int getRankingOrder(){
+    public int getRankingOrder() {
         return this.ranking;
     }
-    
-    public void setRankingOrder(int ranking){
+
+    public void setRankingOrder(int ranking) {
         this.ranking = ranking;
     }
-    
+
     public double getPrimaryValue() {
         return primaryValue;
     }
@@ -57,14 +60,15 @@ public class RankingItem<A> implements Comparable<RankingItem<A>> {
     // implement compareTo method of the Comparable interface to facilitate sorting
     @Override
     public int compareTo(RankingItem r) {
-        if(this.primaryValue != r.primaryValue)
+        if (this.primaryValue != r.primaryValue) {
             return -(Double.compare(this.getPrimaryValue(), r.getPrimaryValue()));
-        else
+        } else {
             return -(Double.compare(this.getSecondaryValue(), r.getSecondaryValue()));
+        }
     }
-    
+
     @Override
-    public int hashCode(){
+    public int hashCode() {
         return this.object.hashCode();
     }
 

@@ -14,139 +14,167 @@ import java.util.TreeSet;
  * @author vietan
  */
 public class Restaurant<T extends Table<C, M>, C, M> {
+
     public static final int EMPTY_TABLE_INDEX = -1;
-    
     private HashMap<Integer, T> activeTables;
     private SortedSet<Integer> inactiveTables;
     private int totalNumCustomers;
-    
-    public Restaurant(){
+
+    public Restaurant() {
         this.totalNumCustomers = 0;
         this.activeTables = new HashMap<Integer, T>();
         this.inactiveTables = new TreeSet<Integer>();
     }
-    
-    public boolean isEmpty(){
+
+    public boolean isEmpty() {
         return this.activeTables.isEmpty();
     }
-    
-    public void fillInactiveTableIndices(){
+
+    public void fillInactiveTableIndices() {
         int maxTableIndex = -1;
-        for(T table : this.getTables()){
-            if(table.getIndex() > maxTableIndex)
+        for (T table : this.getTables()) {
+            if (table.getIndex() > maxTableIndex) {
                 maxTableIndex = table.getIndex();
+            }
         }
-        
+
         this.inactiveTables = new TreeSet<Integer>();
-        for(int i=0; i<maxTableIndex; i++){
-            if(!isActive(i))
+        for (int i = 0; i < maxTableIndex; i++) {
+            if (!isActive(i)) {
                 this.inactiveTables.add(i);
+            }
         }
     }
-    
-    public void addCustomerToTable(C customer, int tableIndex){
-        this.totalNumCustomers ++;
+
+    public void addCustomerToTable(C customer, int tableIndex) {
+        this.totalNumCustomers++;
         this.getTable(tableIndex).addCustomer(customer);
     }
-    
-    public void removeCustomerFromTable(C customer, int tableIndex){
-        this.totalNumCustomers --;
+
+    public void removeCustomerFromTable(C customer, int tableIndex) {
+        this.totalNumCustomers--;
         this.getTable(tableIndex).removeCustomer(customer);
     }
-    
-    /** Return the next available table index */
-    public int getNextTableIndex(){
+
+    /**
+     * Return the next available table index
+     */
+    public int getNextTableIndex() {
         int newTableIndex;
-        if(this.inactiveTables.isEmpty())
+        if (this.inactiveTables.isEmpty()) {
             newTableIndex = this.activeTables.size();
-        else
+        } else {
             newTableIndex = this.inactiveTables.first();
+        }
         return newTableIndex;
     }
-    
-    /** Return a table 
+
+    /**
+     * Return a table
+     *
      * @param index The table index
      */
-    public T getTable(int index){
+    public T getTable(int index) {
         return this.activeTables.get(index);
     }
-    
-    /** Remove an existing table 
+
+    /**
+     * Remove an existing table
+     *
      * @param tableIndex Table index
      */
-    public void removeTable(int tableIndex){
-        if(!this.activeTables.containsKey(tableIndex))
+    public void removeTable(int tableIndex) {
+        if (!this.activeTables.containsKey(tableIndex)) {
             throw new RuntimeException("Removing table that does not exist. " + tableIndex);
+        }
         this.totalNumCustomers -= this.getTable(tableIndex).getNumCustomers();
         this.inactiveTables.add(tableIndex);
         this.activeTables.remove(tableIndex);
     }
-    
-    /** Add a new table
-     * @param table The new table   
+
+    /**
+     * Add a new table
+     *
+     * @param table The new table
      */
-    public void addTable(T table){
+    public void addTable(T table) {
         int tableIndex = table.getIndex();
-        if(this.activeTables.containsKey(tableIndex))
-            throw new RuntimeException("Exception while creating new table. Table " 
+        if (this.activeTables.containsKey(tableIndex)) {
+            throw new RuntimeException("Exception while creating new table. Table "
                     + tableIndex + " already exists.");
-        if(inactiveTables.contains(tableIndex))
+        }
+        if (inactiveTables.contains(tableIndex)) {
             this.inactiveTables.remove(tableIndex);
+        }
         this.activeTables.put(tableIndex, table);
     }
-    
-    /** Return the total number of customers sitting in this restaurant */
-    public int getTotalNumCustomers(){
+
+    /**
+     * Return the total number of customers sitting in this restaurant
+     */
+    public int getTotalNumCustomers() {
         return this.totalNumCustomers;
     }
-    
-    /** Get the number of active tables */
-    public int getNumTables(){
+
+    /**
+     * Get the number of active tables
+     */
+    public int getNumTables() {
         return this.activeTables.size();
     }
-    
-    /** Check whether this restaurant contains a given table
+
+    /**
+     * Check whether this restaurant contains a given table
+     *
      * @param tableIndex The table index
      */
-    public boolean isActive(int tableIndex){
+    public boolean isActive(int tableIndex) {
         return this.activeTables.containsKey(tableIndex);
     }
-    
-    /** Return the set of active tables */
-    public Collection<T> getTables(){
+
+    /**
+     * Return the set of active tables
+     */
+    public Collection<T> getTables() {
         return this.activeTables.values();
     }
-    
-    public double getJointProbabilityAssignments(double alpha){
+
+    public double getJointProbabilityAssignments(double alpha) {
         double llh = this.getNumTables() * Math.log(alpha);
-        for(Table<C, M> table : this.activeTables.values()){
-            for(int n=1; n<table.getNumCustomers(); n++)
+        for (Table<C, M> table : this.activeTables.values()) {
+            for (int n = 1; n < table.getNumCustomers(); n++) {
                 llh += Math.log(n);
+            }
         }
-        for(int x=1; x<=this.totalNumCustomers; x++)
+        for (int x = 1; x <= this.totalNumCustomers; x++) {
             llh -= Math.log(x - 1 + alpha);
+        }
         return llh;
     }
-    
-    public void validate(String msg){
+
+    public void validate(String msg) {
         int tnc = 0;
-        for(Table<C, M> table : this.getTables())
+        for (Table<C, M> table : this.getTables()) {
             tnc += table.getNumCustomers();
-        if(tnc != this.totalNumCustomers)
-            throw new RuntimeException(msg + ": Total number of customers mismatched. " 
-                    + tnc + " vs. " + this.totalNumCustomers);
-        
-        int maxTableIndex = -1;
-        for(T table : this.getTables()){
-            if(table.getIndex() > maxTableIndex)
-                maxTableIndex = table.getIndex();
         }
-        
-        for(int i=0; i<maxTableIndex; i++){
-            if(!isActive(i) && !inactiveTables.contains(i))
+        if (tnc != this.totalNumCustomers) {
+            throw new RuntimeException(msg + ": Total number of customers mismatched. "
+                    + tnc + " vs. " + this.totalNumCustomers);
+        }
+
+        int maxTableIndex = -1;
+        for (T table : this.getTables()) {
+            if (table.getIndex() > maxTableIndex) {
+                maxTableIndex = table.getIndex();
+            }
+        }
+
+        for (int i = 0; i < maxTableIndex; i++) {
+            if (!isActive(i) && !inactiveTables.contains(i)) {
                 throw new RuntimeException(msg + ". Inactive index has not been updated."
                         + ". Table " + toString()
                         + ". index " + i + " is neither active nor inactive");
+            }
         }
     }
 }

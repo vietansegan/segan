@@ -11,37 +11,37 @@ import java.util.HashMap;
  * @author vietan
  */
 public class Product {
+
     public static final String TYPE = "type";
     public static final String BRAND = "brand";
-    
     private final String id;
     private final String name;
     private HashMap<String, String> features;
-    
-    public Product(String id, String name){
+
+    public Product(String id, String name) {
         this.id = id;
         this.name = name;
         this.features = new HashMap<String, String>();
     }
-    
-    public String getId(){
+
+    public String getId() {
         return this.id;
     }
-    
-    public String getName(){
+
+    public String getName() {
         return this.name;
     }
-    
-    public void setFeatureValue(String feature, String value){
+
+    public void setFeatureValue(String feature, String value) {
         this.features.put(feature, value);
     }
 
-    public String getFeatureValue(String feature){
+    public String getFeatureValue(String feature) {
         return this.features.get(feature);
     }
-    
+
     @Override
-    public String toString(){
+    public String toString() {
         return this.id + "\t" + this.name;
     }
 }

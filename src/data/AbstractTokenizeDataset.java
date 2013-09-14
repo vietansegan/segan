@@ -2,7 +2,6 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package data;
 
 import core.AbstractDataset;
@@ -20,7 +19,8 @@ import util.IOUtils;
  *
  * @author vietan
  */
-public abstract class AbstractTokenizeDataset extends AbstractDataset{
+public abstract class AbstractTokenizeDataset extends AbstractDataset {
+
     public static final String wordVocabExt = ".wvoc";
     public static final String speakerVocabExt = ".svoc";
     public static final String numDocDataExt = ".dat";
@@ -28,78 +28,74 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset{
     public static final String docIdExt = ".docid";
     public static final String docTextExt = ".text";
     public static final String docInfoExt = ".docinfo";
-    
     protected String folder; // main folder of the dataset
     protected String formatFolder = "format/";
-
     protected Set<String> stopwords;
     protected Tokenizer tokenizer;
     protected CorpusProcessor corpProc;
-    
+
     public AbstractTokenizeDataset(
             String name,
-            String folder){
+            String folder) {
         super(name);
         this.folder = folder;
-        try{
+        try {
             // initiate tokenizer
             InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
             TokenizerModel tokenizeModel = new TokenizerModel(tokenizeIn);
             this.tokenizer = new TokenizerME(tokenizeModel);
-        }
-        catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
     }
-    
+
     public AbstractTokenizeDataset(
             String name, // dataset name
             String folder, // dataset folder
             CorpusProcessor corpProc// corpus processor
-            ){
+            ) {
         super(name);
         this.folder = folder;
-        
+
         this.corpProc = corpProc;
-        
-        try{
+
+        try {
             // initiate tokenizer
             InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
             TokenizerModel tokenizeModel = new TokenizerModel(tokenizeIn);
             this.tokenizer = new TokenizerME(tokenizeModel);
-        }
-        catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
     }
-    
-    protected void outputDataPreprocessingConfigurations() throws Exception{
+
+    protected void outputDataPreprocessingConfigurations() throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(folder);
         writer.write(this.corpProc.getSettings() + "\n");
         writer.close();
     }
-    
+
     @Override
-    public String getName(){
+    public String getName() {
         return this.name;
     }
-    
+
     @Override
-    public String getFolder(){
+    public String getFolder() {
         return this.folder;
     }
-    
-    public String getDatasetFolderPath(){
+
+    public String getDatasetFolderPath() {
         return this.folder + getName() + "/";
     }
-    
+
     public String getFormatPath() {
         return this.getDatasetFolderPath() + formatFolder;
     }
-    
-    public void setFormatFolder(String ff){
+
+    public void setFormatFolder(String ff) {
         this.formatFolder = ff;
     }
 }

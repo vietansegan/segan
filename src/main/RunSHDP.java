@@ -31,186 +31,187 @@ import util.normalizer.ZNormalizer;
  * @author vietan
  */
 public class RunSHDP {
+
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
-    
     private static CommandLineParser parser;
     private static Options options;
     private static CommandLine cmd;
-    
     private static SingleResponseTextDataset data;
-    private static MimnoTopicCoherence topicCoherence;;
+    private static MimnoTopicCoherence topicCoherence;
+    ;
     private static int numTopWords;
-    
-    public static void main(String[] args){
-        try{
+
+    public static void main(String[] args) {
+        try {
             // create the command line parser
             parser = new BasicParser();
-            
+
             // create the Options
             options = new Options();
-            
-            options.addOption( OptionBuilder.withLongOpt( "output" )
-                            .withDescription( "Output folder" )
-                            .hasArg()
-                            .withArgName("Output folder")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "dataset" )
-                            .withDescription( "Dataset name" )
-                            .hasArg()
-                            .withArgName("Dataset")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "folder" )
-                            .withDescription( "Folder that stores the processed data" )
-                            .hasArg()
-                            .withArgName("Folder directory")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "burnIn" )
-                            .withDescription( "Burn-in. Default 250." )
-                            .hasArg()
-                            .withArgName("Burn-in")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "maxIter" )
-                            .withDescription( "Maximum number of iterations" )
-                            .hasArg()
-                            .withArgName("Maximum number of iterations")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "sampleLag" )
-                            .withDescription( "Sample lag" )
-                            .hasArg()
-                            .withArgName("sample lag")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "numTopwords" )
-                            .withDescription( "Number of top words" )
-                            .hasArg()
-                            .withArgName("Number of top words")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "alpha-global" )
-                            .withDescription( "Hyperparameter of global DP" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "alpha-local" )
-                            .withDescription( "Hyperparameter of local DP" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "beta" )
-                            .withDescription( "Hyperparameter of the symmetric Dirichlet prior for word distributions" )
-                            .hasArg()
-                            .withArgName("beta")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "mu" )
-                            .withDescription( "Prior mean of regression parameters. Default: 0.0" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "sigma" )
-                            .withDescription( "Prior variance of regression parameters. Default: 1.0" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "rho" )
-                            .withDescription( "Variance of the response variable. Default: 1.0" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "report" )
-                            .withDescription( "Report interval" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "cv-folder" )
-                            .withDescription( "Cross validation folder" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "num-folds" )
-                            .withDescription( "Number of folds" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
-            options.addOption( OptionBuilder.withLongOpt( "run-mode" )
-                            .withDescription( "Mode of running during cross validation (train, test, hack)" )
-                            .hasArg()
-                            .withArgName("")
-                            .create() );
-            
+
+            options.addOption(OptionBuilder.withLongOpt("output")
+                    .withDescription("Output folder")
+                    .hasArg()
+                    .withArgName("Output folder")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("dataset")
+                    .withDescription("Dataset name")
+                    .hasArg()
+                    .withArgName("Dataset")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("folder")
+                    .withDescription("Folder that stores the processed data")
+                    .hasArg()
+                    .withArgName("Folder directory")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("burnIn")
+                    .withDescription("Burn-in. Default 250.")
+                    .hasArg()
+                    .withArgName("Burn-in")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("maxIter")
+                    .withDescription("Maximum number of iterations")
+                    .hasArg()
+                    .withArgName("Maximum number of iterations")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("sampleLag")
+                    .withDescription("Sample lag")
+                    .hasArg()
+                    .withArgName("sample lag")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("numTopwords")
+                    .withDescription("Number of top words")
+                    .hasArg()
+                    .withArgName("Number of top words")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("alpha-global")
+                    .withDescription("Hyperparameter of global DP")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("alpha-local")
+                    .withDescription("Hyperparameter of local DP")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("beta")
+                    .withDescription("Hyperparameter of the symmetric Dirichlet prior for word distributions")
+                    .hasArg()
+                    .withArgName("beta")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("mu")
+                    .withDescription("Prior mean of regression parameters. Default: 0.0")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("sigma")
+                    .withDescription("Prior variance of regression parameters. Default: 1.0")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("rho")
+                    .withDescription("Variance of the response variable. Default: 1.0")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("report")
+                    .withDescription("Report interval")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("cv-folder")
+                    .withDescription("Cross validation folder")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("num-folds")
+                    .withDescription("Number of folds")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("run-mode")
+                    .withDescription("Mode of running during cross validation (train, test, hack)")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
             options.addOption("paramOpt", false, "Whether hyperparameter optimization using slice sampling is performed");
             options.addOption("v", false, "verbose");
             options.addOption("d", false, "debug");
             options.addOption("s", false, "standardize (z-score normalization)");
             options.addOption("help", false, "Help");
-            
-            cmd = parser.parse( options, args );
-            if(cmd.hasOption("help")){
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
                 CLIUtils.printHelp("java -cp dist/segan.jar main.RunSLDA -help", options);
                 return;
             }
-            
-            if(cmd.hasOption("cv-folder"))
+
+            if (cmd.hasOption("cv-folder")) {
                 runCrossValidation();
-            else
+            } else {
                 throw new RuntimeException("Missing cv-folder");
-        }
-        catch(Exception e){
+            }
+        } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp("java -cp dist/segan.jar main.RunSLDA -help", options);
             System.exit(1);
         }
     }
-    
-    public static void runCrossValidation(){
-        try{
+
+    public static void runCrossValidation() {
+        try {
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder"); // processed (format) folder
             data = new SingleResponseTextDataset(datasetName, datasetFolder);
             data.loadFormattedData();
-            
+
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
             topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
             topicCoherence.prepare();
-            
+
             ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
-            for(int i=0; i<data.getDocIds().length; i++)
-                instanceList.add(new RegressionDocumentInstance(data.getDocIds()[i], data.getWords()[i], data.getResponses()[i]));        
-            
+            for (int i = 0; i < data.getDocIds().length; i++) {
+                instanceList.add(new RegressionDocumentInstance(data.getDocIds()[i], data.getWords()[i], data.getResponses()[i]));
+            }
+
             String cvName = "";
             String cvFolder = cmd.getOptionValue("cv-folder");
-            CrossValidation<String, RegressionDocumentInstance> crossValidation 
-                    = new CrossValidation<String, RegressionDocumentInstance>(
-                    cvFolder, 
-                    cvName , 
+            CrossValidation<String, RegressionDocumentInstance> crossValidation = new CrossValidation<String, RegressionDocumentInstance>(
+                    cvFolder,
+                    cvName,
                     instanceList);
             int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
-            
+
             System.out.println("\nLoading cross validation info from " + cvFolder);
             crossValidation.inputFolds(numFolds);
-            
+
             String resultFolder = cmd.getOptionValue("output");
-            if(resultFolder == null)
+            if (resultFolder == null) {
                 throw new RuntimeException("Result folder has not been set. Use option --output");
-            
+            }
+
             String runMode = cmd.getOptionValue("run-mode");
-            
-            for(Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()){
+
+            for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
                 String foldFolder = resultFolder + fold.getFoldFolder();
 
                 int V = data.getWordVocab().size();
@@ -228,10 +229,11 @@ public class RunSHDP {
                 InitialState initState = InitialState.PRESET;
 
                 double[] responses = data.getResponses();
-                if(cmd.hasOption("s")){
+                if (cmd.hasOption("s")) {
                     ZNormalizer zNorm = new ZNormalizer(responses);
-                    for(int i=0; i<responses.length; i++)
+                    for (int i = 0; i < responses.length; i++) {
                         responses[i] = zNorm.normalize(responses[i]);
+                    }
                 }
 
                 double meanResponse = StatisticsUtils.mean(responses);
@@ -252,44 +254,42 @@ public class RunSHDP {
                 ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
                 int[][] trRevWords = getRevWords(trInstIndices);
                 double[] trResponses = getResponses(trInstIndices, responses);
-                
+
                 // test data
                 ArrayList<Integer> teInstIndices = fold.getTestingInstances();
                 int[][] teRevWords = getRevWords(teInstIndices);
                 double[] teResponses = getResponses(teInstIndices, responses);
-                
+
                 sampler.configure(foldFolder, trRevWords, trResponses,
-                        V, alpha_global, alpha_local, beta, 
+                        V, alpha_global, alpha_local, beta,
                         mu, sigma, rho,
-                        initState, paramOpt, 
+                        initState, paramOpt,
                         burnIn, maxIters, sampleLag, repInterval);
 
                 String samplerFolder = foldFolder + sampler.getSamplerFolder();
                 IOUtils.createFolder(samplerFolder);
 
-                if(runMode.equals("train")){
+                if (runMode.equals("train")) {
                     sampler.initialize();
                     sampler.iterate();
                     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
                     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, topicCoherence);
-                }
-                else if(runMode.equals("test")){
+                } else if (runMode.equals("test")) {
                     sampler.regressNewDocuments(teRevWords);
-                    
+
                     String teResultFolder = samplerFolder + "te-results/";
                     IOUtils.createFolder(teResultFolder);
                     sampler.computeSingleFinal(teResultFolder, teResponses);
                     sampler.computeSingleAverage(teResultFolder, teResponses);
                     sampler.computeMultipleFinal(teResultFolder, teResponses);
                     sampler.computeMultipleAverage(teResultFolder, teResponses);
-                }
-                else if(runMode.equals("train-test")){
+                } else if (runMode.equals("train-test")) {
                     // train
                     sampler.initialize();
                     sampler.iterate();
                     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
                     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, topicCoherence);
-                    
+
                     // test
                     sampler.regressNewDocuments(teRevWords);
                     String teResultFolder = samplerFolder + "te-results/";
@@ -298,24 +298,21 @@ public class RunSHDP {
                     sampler.computeSingleAverage(teResultFolder, teResponses);
                     sampler.computeMultipleFinal(teResultFolder, teResponses);
                     sampler.computeMultipleAverage(teResultFolder, teResponses);
-                }
-                else if(runMode.equals("hack")){
-
-                }
-                else
+                } else if (runMode.equals("hack")) {
+                } else {
                     throw new RuntimeException("Run mode " + runMode + " not supported");
-                
-                break; 
+                }
+
+                break;
             }
-        }
-        catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
     }
-    
-    public static ArrayList<Measurement> outputRegressionResults(String outputFilepath, 
-            double[] trueValues, double[] predValues) throws Exception{
+
+    public static ArrayList<Measurement> outputRegressionResults(String outputFilepath,
+            double[] trueValues, double[] predValues) throws Exception {
         // output different measurements
         System.out.println(">>> Output regression results to " + outputFilepath);
         BufferedWriter writer = IOUtils.getBufferedWriter(outputFilepath);
@@ -325,24 +322,25 @@ public class RunSHDP {
         eval.computeRSquared();
         eval.computePredictiveRSquared();
         ArrayList<Measurement> measurements = eval.getMeasurements();
-        for(Measurement m : measurements)
+        for (Measurement m : measurements) {
             writer.write(m.getName() + "\t" + m.getValue() + "\n");
+        }
         writer.close();
         return measurements;
     }
-    
-    private static double[] getResponses(ArrayList<Integer> instances, double[] responses){
+
+    private static double[] getResponses(ArrayList<Integer> instances, double[] responses) {
         double[] res = new double[instances.size()];
-        for(int i=0; i<res.length; i++){
+        for (int i = 0; i < res.length; i++) {
             int idx = instances.get(i);
             res[i] = responses[idx];
         }
         return res;
     }
-    
-    private static int[][] getRevWords(ArrayList<Integer> instances){
+
+    private static int[][] getRevWords(ArrayList<Integer> instances) {
         int[][] revWords = new int[instances.size()][];
-        for(int i=0; i<revWords.length; i++){
+        for (int i = 0; i < revWords.length; i++) {
             int idx = instances.get(i);
             revWords[i] = data.getWords()[idx];
         }
