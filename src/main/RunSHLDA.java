@@ -129,14 +129,14 @@ public class RunSHLDA {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar main.RunSHLDA -help", options);
+                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunSHLDA -help", options);
                 return;
             }
 
             runModels();
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.RunSHLDA -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunSHLDA -help", options);
             System.exit(1);
         }
     }
@@ -219,7 +219,7 @@ public class RunSHLDA {
                     paramOpt, verbose, debug);
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.RunSHLDA -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunSHLDA -help", options);
         }
     }
 

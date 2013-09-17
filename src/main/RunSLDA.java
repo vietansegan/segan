@@ -13,6 +13,7 @@ import core.crossvalidation.RegressionDocumentInstance;
 import data.SingleResponseTextDataset;
 import data.TextDataset;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -455,7 +456,7 @@ public class RunSLDA {
                     paramOpt, verbose, debug);
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.RunSLDA -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA -help", options);
         }
     }
 
@@ -508,7 +509,7 @@ public class RunSLDA {
                     V, K, alpha, beta, mu, sigma, rho, initState, paramOpt,
                     burn_in, max_iters, sample_lag, reportInterval);
 
-            String sldaFolder = resultFolder + sampler.getSamplerFolder();
+            String sldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
             IOUtils.createFolder(sldaFolder);
             sampler.sample();
             sampler.outputTopicTopWords(sldaFolder + TopWordFile, numTopWords);

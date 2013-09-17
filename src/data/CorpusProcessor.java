@@ -23,9 +23,10 @@ import opennlp.tools.tokenize.Tokenizer;
 import opennlp.tools.tokenize.TokenizerME;
 import opennlp.tools.tokenize.TokenizerModel;
 import org.apache.commons.math3.stat.inference.ChiSquareTest;
-import util.DataUtils;
 import util.IOUtils;
 import util.RankingItem;
+import util.Stemmer;
+import util.StopwordRemoval;
 import weka.core.stemmers.SnowballStemmer;
 
 /**
@@ -54,8 +55,8 @@ public class CorpusProcessor {
     // tools
     protected Tokenizer tokenizer;
     protected SentenceDetector sentenceDetector;
-    private Set<String> stopwords;
-    private SnowballStemmer stemmer;
+    private StopwordRemoval stopwordRemoval;
+    private Stemmer stemmer;
     private HashMap<String, Integer> termFreq;
     private HashMap<String, Integer> docFreq;
     private HashMap<String, Integer> leftFreq;
@@ -109,15 +110,11 @@ public class CorpusProcessor {
         this.totalBigram = 0;
 
         try {
-            this.stopwords = DataUtils.loadStopwords(GlobalConstants.stopwordFilePath);
-            this.stemmer = new SnowballStemmer();
+            this.stemmer = new Stemmer();
             if (lemmatization) {
-                Set<String> tempSet = new HashSet<String>();
-                for (String sw : this.stopwords) {
-                    String stemmedStopword = this.stemmer.stem(sw);
-                    tempSet.add(stemmedStopword);
-                }
-                this.stopwords = tempSet;
+                this.stopwordRemoval = new StopwordRemoval(stemmer);
+            } else {
+                this.stopwordRemoval = new StopwordRemoval();
             }
 
             // initiate tokenizer
@@ -508,7 +505,7 @@ public class CorpusProcessor {
             }
         }
 
-        if (filterStopwords && stopwords.contains(reduced)) {
+        if (filterStopwords && stopwordRemoval.isStopword(reduced)) {
             return "";
         }
         return reduced;

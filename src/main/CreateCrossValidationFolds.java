@@ -77,7 +77,7 @@ public class CreateCrossValidationFolds {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar main.CreateCrossValidationFolds -help", options);
+                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds -help", options);
                 return;
             }
 
@@ -130,7 +130,7 @@ public class CreateCrossValidationFolds {
             System.out.println("--- Cross validation data are written to " + outputFolder);
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.CreateCrossValidationFolds -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds -help", options);
         }
     }
 

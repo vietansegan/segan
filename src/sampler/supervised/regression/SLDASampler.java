@@ -255,16 +255,16 @@ public class SLDASampler extends AbstractSampler implements SupervisedSampler {
 
         int[][] ldaZ = null;
         try {
-            String ldaFile = this.folder + "lda-init-" + K + ".txt";
-            File ldaZFile = new File(ldaFile);
+            File ldaZFile = new File(this.folder, "lda-init-" + K + ".txt");
             if (ldaZFile.exists()) {
-                ldaZ = inputLDAInitialization(ldaFile);
+                ldaZ = inputLDAInitialization(ldaZFile.getAbsolutePath());
             } else {
                 lda.sample();
                 ldaZ = lda.getZ();
-                outputLDAInitialization(ldaFile, ldaZ);
+                outputLDAInitialization(ldaZFile.getAbsolutePath(), ldaZ);
                 lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(this.folder + "lda-topwords.txt", 15);
+                lda.outputTopicTopWords(
+                        new File(folder, "lda-topwords.txt").getAbsolutePath(), 15);
             }
         } catch (Exception e) {
             e.printStackTrace();

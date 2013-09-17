@@ -92,7 +92,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         StringBuilder docText;
         for (String filename : filenames) {
             docIdList.add(IOUtils.removeExtension(filename));
-            reader = IOUtils.getBufferedReader(textFolderPath + filename);
+            reader = IOUtils.getBufferedReader(new File(fd, filename));
             docText = new StringBuilder();
             while ((line = reader.readLine()) != null) {
                 docText.append(line).append("\n");

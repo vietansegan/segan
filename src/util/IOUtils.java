@@ -141,10 +141,22 @@ public class IOUtils {
         BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(filepath), "UTF-8"));
         return in;
     }
+    
+    public static BufferedReader getBufferedReader(File file)
+            throws FileNotFoundException, UnsupportedEncodingException {
+        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+        return in;
+    }
 
     public static BufferedWriter getBufferedWriter(String filepath)
             throws FileNotFoundException, UnsupportedEncodingException {
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filepath), "UTF-8"));
+        return out;
+    }
+    
+    public static BufferedWriter getBufferedWriter(File file)
+            throws FileNotFoundException, UnsupportedEncodingException {
+        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
         return out;
     }
 

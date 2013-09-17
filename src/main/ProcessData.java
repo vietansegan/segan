@@ -10,7 +10,6 @@ import data.TextDataset;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 
@@ -117,7 +116,7 @@ public class ProcessData {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
+                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData -help", options);
                 return;
             }
 

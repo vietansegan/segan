@@ -14,8 +14,6 @@ import util.IOUtils;
  * @author vietan
  */
 public class SingleResponseTextDataset extends TextDataset {
-//    protected ArrayList<Double> responseList;
-
     protected double[] responses;
 
     public SingleResponseTextDataset(String name, String folder) {

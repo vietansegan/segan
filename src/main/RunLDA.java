@@ -190,7 +190,7 @@ public class RunLDA {
             expt.runSampler(outputFolder, dataset.getWords(), K, alpha, beta, paramOpt, verbose, debug);
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunLDA -help", options);
         }
     }
 
