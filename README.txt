@@ -118,6 +118,12 @@ C) To run on a particular fold, use the "--fold" option. For example, "--fold 0"
 Example
     java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 10 --maxIter 20 --sampleLag 5 -s -v -d --cv-folder amazon-data/crossvalidation-5-0.8/ --num-folds 5 --run-mode train-test
 
+8. To run Lexical SHLDA:
+   - Set up gurobi (see HOWTO.txt)
+   - Use main.RunLexicalSHLDA
+   - Include gurobi.jar in the classpath
+
+   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' main.RunLexicalSHLDA --dataset 112 --folder /fs/clip-political/vietan/data/govtrack/ --output /fs/clip-political/vietan/data/govtrack/model/lex-shlda -v -report 1 --burnIn 100 --maxIter 200 --sampleLag 5 -s -v -d
 
 *** Example of a pipeline to run SLDA on the amazon reviews
 # compile
