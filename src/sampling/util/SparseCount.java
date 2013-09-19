@@ -44,6 +44,10 @@ public class SparseCount implements Cloneable {
     public Set<Integer> getUniqueObservations() {
         return this.counts.keySet();
     }
+    
+    public Set<Integer> getIndices() {
+        return this.counts.keySet();
+    }
 
     public int getCountSum() {
         return this.countSum;

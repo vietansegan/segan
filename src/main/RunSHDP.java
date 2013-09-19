@@ -12,6 +12,7 @@ import core.crossvalidation.Instance;
 import core.crossvalidation.RegressionDocumentInstance;
 import data.SingleResponseTextDataset;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -181,8 +182,9 @@ public class RunSHDP {
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder"); // processed (format) folder
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
             data = new SingleResponseTextDataset(datasetName, datasetFolder);
-            data.loadFormattedData();
+            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
             topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
@@ -266,7 +268,7 @@ public class RunSHDP {
                         initState, paramOpt,
                         burnIn, maxIters, sampleLag, repInterval);
 
-                String samplerFolder = foldFolder + sampler.getSamplerFolder();
+                String samplerFolder = new File(foldFolder, sampler.getSamplerFolder()).getAbsolutePath();
                 IOUtils.createFolder(samplerFolder);
 
                 if (runMode.equals("train")) {

@@ -5,8 +5,10 @@
 package main;
 
 import data.CorpusProcessor;
+import data.MultiLabelTextData;
 import data.SingleResponseTextDataset;
 import data.TextDataset;
+import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -51,6 +53,18 @@ public class ProcessData {
 
             options.addOption(OptionBuilder.withLongOpt("response-file")
                     .withDescription("Directory of the response file")
+                    .hasArg()
+                    .withArgName("Response file")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("label-file")
+                    .withDescription("Directory of the label file")
+                    .hasArg()
+                    .withArgName("Response file")
+                    .create());
+            
+            options.addOption(OptionBuilder.withLongOpt("format-folder")
+                    .withDescription("Folder holding formatted data")
                     .hasArg()
                     .withArgName("Response file")
                     .create());
@@ -134,6 +148,7 @@ public class ProcessData {
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("output-folder");
             String textInputData = cmd.getOptionValue("text-data");
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
 
             int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);
             int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 0);
@@ -171,11 +186,20 @@ public class ProcessData {
                 } else {
                     dataset.loadTextDataFromFolder(textInputData);
                 }
+                dataset.loadResponses(responseFile); // load response data
+                dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+            } else if (cmd.hasOption("label-file")) {
+                String labelFile = cmd.getOptionValue("label-file");
+                MultiLabelTextData dataset = new MultiLabelTextData(datasetName, datasetFolder, corpProc);
 
-                // load response data
-                dataset.loadResponses(responseFile);
-
-                dataset.format(dataset.getFormatPath());
+                // load text data
+                if (cmd.hasOption("file")) {
+                    dataset.loadTextDataFromFile(textInputData);
+                } else {
+                    dataset.loadTextDataFromFolder(textInputData);
+                }
+                dataset.loadLabels(labelFile);
+                dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             } else {
                 TextDataset dataset = new TextDataset(datasetName, datasetFolder, corpProc);
 
@@ -184,7 +208,7 @@ public class ProcessData {
                 } else {
                     dataset.loadTextDataFromFolder(textInputData);
                 }
-                dataset.format(dataset.getFormatPath());
+                dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             }
         } catch (Exception e) {
             e.printStackTrace();

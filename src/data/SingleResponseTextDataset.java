@@ -6,6 +6,7 @@ package data;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import util.IOUtils;
 
@@ -51,7 +52,10 @@ public class SingleResponseTextDataset extends TextDataset {
 
     @Override
     protected void outputInfo(String outputFolder) throws Exception {
-        BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFolder + name + docInfoExt);
+        File outputFile = new File(outputFolder, name + docInfoExt);
+        logln("--- Outputing document info ... " + outputFile);
+        
+        BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
         for (int docIndex : this.processedDocIndices) {
             infoWriter.write(this.docIdList.get(docIndex)
                     + "\t" + this.responses[docIndex]
@@ -61,7 +65,7 @@ public class SingleResponseTextDataset extends TextDataset {
     }
 
     @Override
-    public void inputDocumentInfo(String filepath) throws Exception {
+    public void inputDocumentInfo(File filepath) throws Exception {
         logln("--- Reading document info from " + filepath);
 
         BufferedReader reader = IOUtils.getBufferedReader(filepath);

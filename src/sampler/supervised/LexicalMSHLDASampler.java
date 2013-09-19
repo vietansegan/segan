@@ -605,9 +605,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             logLikelihoods.add(loglikelihood);
 
             double[] storeWeights = new double[V];
-            for (int v = 0; v < V; v++) {
-                storeWeights[v] = this.lexicalWeights[v];
-            }
+            System.arraycopy(this.lexicalWeights, 0, storeWeights, 0, V);
             this.lexicalWeightsOverTime.add(storeWeights);
 
             if (verbose) {
@@ -1314,11 +1312,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             for (int i = 0; i < numTopicParams; i++) {
                 designMatrix[d][i] /= docTokenCounts[d];
             }
-
-            // lexicon
-            for (int ii = 0; ii < numLexParams; ii++) {
-                designMatrix[d][numTopicParams + ii] = docLexicalDesignMatrix[d][ii];
-            }
+            System.arraycopy(docLexicalDesignMatrix[d], 0, designMatrix[d], numTopicParams, numLexParams);
         }
 
         GurobiMultipleLinearRegression mlr = new GurobiMultipleLinearRegression(designMatrix, responses, lambdas);

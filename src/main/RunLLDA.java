@@ -6,14 +6,14 @@ package main;
 
 import core.AbstractExperiment;
 import core.AbstractSampler.InitialState;
-import data.TextDataset;
+import data.MultiLabelTextData;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.LDASampler;
+import sampler.labeled.LabeledLDASampler;
 import util.IOUtils;
 import util.evaluation.MimnoTopicCoherence;
 
@@ -21,12 +21,15 @@ import util.evaluation.MimnoTopicCoherence;
  *
  * @author vietan
  */
-public class RunLDA {
-
+public class RunLLDA {
     private static CommandLineParser parser;
     private static Options options;
     private static CommandLine cmd;
-
+    
+    private static MultiLabelTextData data;
+    private static MimnoTopicCoherence topicCoherence;
+    private static int numTopWords;
+    
     public static void main(String[] args) {
         try {
             // create the command line parser
@@ -49,6 +52,12 @@ public class RunLDA {
 
             options.addOption(OptionBuilder.withLongOpt("folder")
                     .withDescription("Folder that stores the processed data")
+                    .hasArg()
+                    .withArgName("Folder directory")
+                    .create());
+            
+            options.addOption(OptionBuilder.withLongOpt("format-folder")
+                    .withDescription("Folder containing formatted data")
                     .hasArg()
                     .withArgName("Folder directory")
                     .create());
@@ -77,66 +86,6 @@ public class RunLDA {
                     .withArgName("Number of top words")
                     .create());
 
-            options.addOption(OptionBuilder.withLongOpt("K")
-                    .withDescription("Number of topics")
-                    .hasArg()
-                    .withArgName("Number of topics")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("alpha")
-                    .withDescription("Hyperparameter of the symmetric Dirichlet prior for topic distributions")
-                    .hasArg()
-                    .withArgName("alpha")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("beta")
-                    .withDescription("Hyperparameter of the symmetric Dirichlet prior for word distributions")
-                    .hasArg()
-                    .withArgName("beta")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("report")
-                    .withDescription("Report interval")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("K")
-                    .withDescription("Number of topics")
-                    .hasArg()
-                    .withArgName("Number of topics")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("alpha")
-                    .withDescription("Hyperparameter of the symmetric Dirichlet prior for topic distributions")
-                    .hasArg()
-                    .withArgName("alpha")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("beta")
-                    .withDescription("Hyperparameter of the symmetric Dirichlet prior for word distributions")
-                    .hasArg()
-                    .withArgName("beta")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("mu")
-                    .withDescription("Prior mean of regression parameters. Default: 0.0")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("sigma")
-                    .withDescription("Prior variance of regression parameters. Default: 1.0")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("rho")
-                    .withDescription("Variance of the response variable. Default: 1.0")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
             options.addOption(OptionBuilder.withLongOpt("report")
                     .withDescription("Report interval")
                     .hasArg()
@@ -154,100 +103,120 @@ public class RunLDA {
                 CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
                 return;
             }
-
+            
             runModels();
+
         } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
             System.exit(1);
         }
     }
-
+    
     public static void runModels() {
-        try {
+        try{
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
             String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-            TextDataset dataset = new TextDataset(datasetName, datasetFolder);
-            dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+            data = new MultiLabelTextData(datasetName, datasetFolder);
+            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+            
+            numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+            topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
+            topicCoherence.prepare();
 
             int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
             int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
             int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-            int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
             int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-            int K = CLIUtils.getIntegerArgument(cmd, "K", 25);
+            
+            int K = data.getLabelVocab().size();
+            int V = data.getWordVocab().size();
             double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-            double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+            double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1) * V;
+            double eta = CLIUtils.getDoubleArgument(cmd, "eta", 100.0);
+            
             boolean paramOpt = cmd.hasOption("paramOpt");
             boolean verbose = cmd.hasOption("v");
             boolean debug = cmd.hasOption("d");
-
-            System.out.println("\nRunning model ...");
-            Experiment expt = new Experiment(dataset);
+            
+            verbose = true;
+            debug = true;
+            
+            Experiment expt = new Experiment(data);
             expt.configure(burnIn, maxIters, sampleLag, repInterval, numTopWords);
             expt.setup();
-            expt.runSampler(outputFolder, dataset.getWords(), K, alpha, beta, paramOpt, verbose, debug);
-        } catch (Exception e) {
+
+            expt.runSampler(outputFolder, data.getWords(), data.getLabels(),
+                    K, alpha, beta, eta,
+                    paramOpt, verbose, debug);
+        }
+        catch(Exception e){
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunLDA -help", options);
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunLLDA -help", options);
+            throw new RuntimeException("Exception while running model");
         }
     }
-
-    static class Experiment extends AbstractExperiment<TextDataset> {
-
-        protected static int repInterval;
+    
+    static class Experiment extends AbstractExperiment<MultiLabelTextData> {
+        protected static int reportInterval;
         protected static int numTopWords;
         protected static MimnoTopicCoherence topicCoherence;
 
-        public Experiment(TextDataset d) {
+        public Experiment(MultiLabelTextData d) {
             this.data = d;
         }
-
-        public void configure(int burnIn, int maxIters, int sampleLag, int repInts, int nTopwords) {
+        
+        public void configure(int burnIn, int maxIters, int sampleLag, int repInt, int nTopwords) {
             burn_in = burnIn;
             max_iters = maxIters;
             sample_lag = sampleLag;
+            reportInterval = repInt;
             numTopWords = nTopwords;
-            repInterval = repInts;
         }
-
+        
         @Override
         public void setup() {
-            topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
+            topicCoherence = new MimnoTopicCoherence(
+                    data.getWords(), 
+                    data.getWordVocab().size(), 
+                    numTopWords);
             topicCoherence.prepare();
         }
-
+        
         public void runSampler(
                 String resultFolder,
                 int[][] words,
+                int[][] labels,
                 int K,
                 double alpha,
                 double beta,
+                double eta,
                 boolean paramOpt,
                 boolean verbose,
                 boolean debug) throws Exception {
             int V = data.getWordVocab().size();
             InitialState initState = InitialState.RANDOM;
 
-            LDASampler sampler = new LDASampler();
+            LabeledLDASampler sampler = new LabeledLDASampler();
             sampler.setVerbose(verbose);
             sampler.setDebug(debug);
             sampler.setWordVocab(data.getWordVocab());
 
-            sampler.configure(resultFolder, words,
-                    V, K, alpha, beta, initState, paramOpt,
-                    burn_in, max_iters, sample_lag, repInterval);
+            sampler.configure(resultFolder, words, labels,
+                    V, K, alpha, beta, eta, initState, paramOpt,
+                    burn_in, max_iters, sample_lag, reportInterval);
 
-            String ldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
-            IOUtils.createFolder(ldaFolder);
+            String sldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
+            IOUtils.createFolder(sldaFolder);
             sampler.sample();
-            sampler.outputTopicTopWords(ldaFolder + TopWordFile, numTopWords);
-            sampler.outputTopicCoherence(ldaFolder + TopicCoherenceFile, topicCoherence);
-            sampler.outputDocTopicDistributions(ldaFolder + "doc-topic.txt");
-            sampler.outputTopicWordDistributions(ldaFolder + "topic-word.txt");
+            sampler.outputTopicTopWords(sldaFolder + TopWordFile, numTopWords);
+//            sampler.outputTopicCoherence(sldaFolder + TopicCoherenceFile, topicCoherence);
+//            sampler.outputDocTopicDistributions(sldaFolder + "doc-topic.txt");
+//            sampler.outputTopicWordDistributions(sldaFolder + "topic-word.txt");
+//            sampler.outputTopicRegressionParameters(sldaFolder + "topic-reg-params.txt");
         }
 
         @Override

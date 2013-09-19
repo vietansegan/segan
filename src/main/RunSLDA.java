@@ -45,7 +45,6 @@ public class RunSLDA {
     private static CommandLine cmd;
     private static SingleResponseTextDataset data;
     private static MimnoTopicCoherence topicCoherence;
-    ;
     private static int numTopWords;
 
     public static void main(String[] args) {
@@ -193,8 +192,9 @@ public class RunSLDA {
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder"); // processed (format) folder
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
             data = new SingleResponseTextDataset(datasetName, datasetFolder);
-            data.loadFormattedData();
+            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
             topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
@@ -409,8 +409,9 @@ public class RunSLDA {
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
             data = new SingleResponseTextDataset(datasetName, datasetFolder);
-            data.loadFormattedData();
+            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
             topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
@@ -480,7 +481,10 @@ public class RunSLDA {
 
         @Override
         public void setup() {
-            topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
+            topicCoherence = new MimnoTopicCoherence(
+                    data.getWords(), 
+                    data.getWordVocab().size(), 
+                    numTopWords);
             topicCoherence.prepare();
         }
 

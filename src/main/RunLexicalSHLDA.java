@@ -8,6 +8,7 @@ import core.AbstractExperiment;
 import core.AbstractSampler.InitialState;
 import data.SingleResponseTextDataset;
 import data.TextDataset;
+import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -165,8 +166,9 @@ public class RunLexicalSHLDA {
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
             SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder);
-            dataset.loadFormattedData();
+            dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
             int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
@@ -312,7 +314,7 @@ public class RunLexicalSHLDA {
                     initState, paramOpt,
                     burn_in, max_iters, sample_lag, reportInterval);
 
-            String shldaFolder = resultFolder + sampler.getSamplerFolder();
+            String shldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
             IOUtils.createFolder(shldaFolder);
             sampler.initialize();
             sampler.iterate();

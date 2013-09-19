@@ -6,6 +6,7 @@ package data;
 
 import core.AbstractDataset;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.Set;
@@ -29,7 +30,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     public static final String docTextExt = ".text";
     public static final String docInfoExt = ".docinfo";
     protected String folder; // main folder of the dataset
-    protected String formatFolder = "format/";
+//    protected String formatFolder = "format/";
     protected Set<String> stopwords;
     protected Tokenizer tokenizer;
     protected CorpusProcessor corpProc;
@@ -88,14 +89,14 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     }
 
     public String getDatasetFolderPath() {
-        return this.folder + getName() + "/";
+        return new File(this.folder, getName()).getAbsolutePath();
     }
 
-    public String getFormatPath() {
-        return this.getDatasetFolderPath() + formatFolder;
-    }
+//    public String getFormatPath() {
+//        return new File(this.getDatasetFolderPath(), formatFolder).getAbsolutePath();
+//    }
 
-    public void setFormatFolder(String ff) {
-        this.formatFolder = ff;
-    }
+//    public void setFormatFolder(String ff) {
+//        this.formatFolder = ff;
+//    }
 }

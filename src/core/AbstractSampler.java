@@ -5,6 +5,7 @@
 package core;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -109,6 +110,10 @@ public abstract class AbstractSampler {
     public String getSamplerFolder() {
         return this.getSamplerName() + "/";
     }
+    
+    public String getSamplerFolderPath() {
+        return new File(folder, name).getAbsolutePath();
+    }
 
     public String getFormatNumberString(double value) {
         if (value > 0.001) {
@@ -139,7 +144,8 @@ public abstract class AbstractSampler {
 
         try {
             if (paramOptimized && log) {
-                this.outputSampledHyperparameters(this.folder + this.getSamplerFolder() + "hyperparameters.txt");
+                this.outputSampledHyperparameters(
+                        new File(getSamplerFolderPath(), "hyperparameters.txt").getAbsolutePath());
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -169,8 +175,7 @@ public abstract class AbstractSampler {
 
     public void openLogger() {
         try {
-            this.logger = IOUtils.getBufferedWriter(this.folder
-                    + this.getSamplerName() + "/" + "log.txt");
+            this.logger = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "log.txt"));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

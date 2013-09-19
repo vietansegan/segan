@@ -9,6 +9,7 @@ import core.crossvalidation.Fold;
 import core.crossvalidation.RegressionDocumentInstance;
 import data.SingleResponseTextDataset;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -53,6 +54,12 @@ public class CreateCrossValidationFolds {
                     .hasArg()
                     .withArgName("Output folder")
                     .create());
+            
+            options.addOption(OptionBuilder.withLongOpt("format-folder")
+                    .withDescription("Folder holding formatted data")
+                    .hasArg()
+                    .withArgName("Response file")
+                    .create());
 
             options.addOption(OptionBuilder.withLongOpt("num-classes")
                     .withDescription("Number of classes that the response "
@@ -93,8 +100,9 @@ public class CreateCrossValidationFolds {
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("folder");
+            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
             SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder);
-            dataset.loadFormattedData();
+            dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
             for (int d = 0; d < dataset.getDocIds().length; d++) {

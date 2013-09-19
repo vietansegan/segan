@@ -113,30 +113,30 @@ public class TextDataset extends AbstractTokenizeDataset {
      */
     public void format(String outputFolder) throws Exception {
         logln("--- Processing data ...");
+        IOUtils.createFolder(outputFolder);
+
         String[] rawTexts = textList.toArray(new String[textList.size()]);
         corpProc.setRawTexts(rawTexts);
         corpProc.process();
 
         // output the data into format used by samplers
-        logln("--- Outputing word vocab ... " + outputFolder + name + wordVocabExt);
-        IOUtils.createFolder(outputFolder);
-        DataUtils.outputVocab(outputFolder + name + wordVocabExt, corpProc.getVocab());
+        File wordVocFile = new File(outputFolder, name + wordVocabExt);
+        logln("--- Outputing word vocab ... " + wordVocFile.getAbsolutePath());
+        DataUtils.outputVocab(wordVocFile.getAbsolutePath(),
+                corpProc.getVocab());
 
-        logln("--- Outputing main numeric data ... " + outputFolder + name + numDocDataExt);
-        this.outputTextData(outputFolder);
-
-        logln("--- Outputing document info ... " + outputFolder + name + docInfoExt);
+        outputTextData(outputFolder);
         outputInfo(outputFolder);
-
-        logln("--- Outputing sentence data ... " + outputFolder + name + numSentDataExt);
         outputSentTextData(outputFolder);
     }
 
     protected void outputTextData(String outputFolder) throws Exception {
+        File outputFile = new File(outputFolder, name + numDocDataExt);
+        logln("--- Outputing main numeric data ... " + outputFile);
+
         // output main numeric
         int[][] numDocs = corpProc.getNumerics();
-
-        BufferedWriter dataWriter = IOUtils.getBufferedWriter(outputFolder + name + numDocDataExt);
+        BufferedWriter dataWriter = IOUtils.getBufferedWriter(outputFile);
         for (int d = 0; d < numDocs.length; d++) {
             HashMap<Integer, Integer> typeCounts = new HashMap<Integer, Integer>();
             for (int j = 0; j < numDocs[d].length; j++) {
@@ -167,8 +167,11 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     protected void outputSentTextData(String outputFolder) throws Exception {
+        File outputFile = new File(outputFolder, name + numSentDataExt);
+        logln("--- Outputing sentence data ... " + outputFile);
+
         int[][][] numSents = corpProc.getNumericSentences();
-        BufferedWriter sentWriter = IOUtils.getBufferedWriter(outputFolder + name + numSentDataExt);
+        BufferedWriter sentWriter = IOUtils.getBufferedWriter(outputFile);
         for (int d : this.processedDocIndices) {
             StringBuilder docStr = new StringBuilder();
             for (int s = 0; s < numSents[d].length; s++) {
@@ -196,7 +199,10 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     protected void outputInfo(String outputFolder) throws Exception {
-        BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFolder + name + docInfoExt);
+        File outputFile = new File(outputFolder, name + docInfoExt);
+        logln("--- Outputing document info ... " + outputFile.getAbsolutePath());
+
+        BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
         for (int docIndex : this.processedDocIndices) {
             infoWriter.write(this.docIdList.get(docIndex) + "\n");
         }
@@ -211,23 +217,22 @@ public class TextDataset extends AbstractTokenizeDataset {
         return this.words;
     }
 
-    public void loadFormattedData() {
-        String fFolder = this.getFormatPath();
-        logln("--- Loading formatted data ...");
+    public void loadFormattedData(String fFolder) {
+        logln("--- Loading formatted data from " + fFolder);
         try {
-            inputWordVocab(fFolder + name + wordVocabExt);
-            inputTextData(fFolder + name + numDocDataExt);
-            inputDocumentInfo(fFolder + name + docInfoExt);
-            inputSentenceTextData(fFolder + name + numSentDataExt);
+            inputWordVocab(new File(fFolder, name + wordVocabExt));
+            inputTextData(new File(fFolder, name + numDocDataExt));
+            inputDocumentInfo(new File(fFolder, name + docInfoExt));
+            inputSentenceTextData(new File(fFolder, name + numSentDataExt));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
     }
 
-    protected void inputWordVocab(String filepath) throws Exception {
+    protected void inputWordVocab(File file) throws Exception {
         wordVocab = new ArrayList<String>();
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
+        BufferedReader reader = IOUtils.getBufferedReader(file);
         String line;
         while ((line = reader.readLine()) != null) {
             wordVocab.add(line);
@@ -235,10 +240,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         reader.close();
     }
 
-    protected void inputTextData(String filepath) throws Exception {
-        logln("--- Reading text data from " + filepath);
+    protected void inputTextData(File file) throws Exception {
+        logln("--- Reading text data from " + file);
 
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
+        BufferedReader reader = IOUtils.getBufferedReader(file);
 
         ArrayList<int[]> wordList = new ArrayList<int[]>();
         String line;
@@ -273,10 +278,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         reader.close();
     }
 
-    protected void inputSentenceTextData(String filepath) throws Exception {
-        logln("--- Reading sentence text data from " + filepath);
+    protected void inputSentenceTextData(File file) throws Exception {
+        logln("--- Reading sentence text data from " + file);
 
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
+        BufferedReader reader = IOUtils.getBufferedReader(file);
         ArrayList<int[][]> sentWordList = new ArrayList<int[][]>();
         String line;
         String[] sline;
@@ -315,10 +320,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
     }
 
-    protected void inputDocumentInfo(String filepath) throws Exception {
-        logln("--- Reading document info from " + filepath);
+    protected void inputDocumentInfo(File file) throws Exception {
+        logln("--- Reading document info from " + file);
 
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
+        BufferedReader reader = IOUtils.getBufferedReader(file);
         String line;
         ArrayList<String> dIdList = new ArrayList<String>();
 
