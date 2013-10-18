@@ -1,11 +1,12 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
-package sampler.supervised;
+package sampler.supervised.regression;
 
 import core.AbstractSampler;
 import core.AbstractSampler.InitialState;
+import core.crossvalidation.CrossValidation;
+import core.crossvalidation.Fold;
+import core.crossvalidation.Instance;
+import core.crossvalidation.RegressionDocumentInstance;
+import data.SingleResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -19,13 +20,16 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
+import main.CLIUtils;
 import optimization.GurobiMultipleLinearRegression;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -34,13 +38,15 @@ import util.StatisticsUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
+import util.normalizer.ZNormalizer;
 
 /**
  *
  * @author vietan
  */
-public class LexicalMSHLDASampler extends AbstractSampler {
+public class SHLDA extends AbstractSampler {
 
+    public static final String IterPredictionFolder = "iter-predictions/";
     public static final int PSEUDO_TABLE_INDEX = -1;
     public static final int PSEUDO_NODE_INDEX = -1;
     public static final int ALPHA = 0;
@@ -233,12 +239,12 @@ public class LexicalMSHLDASampler extends AbstractSampler {
 
             logln("--- folder\t" + folder);
             logln("--- max level:\t" + L);
-            logln("--- GEM mean:\t" + hyperparams.get(ALPHA));
-            logln("--- GEM scale:\t" + hyperparams.get(RHO));
-            logln("--- GEM scale:\t" + hyperparams.get(GEM_MEAN));
+            logln("--- alpha:\t" + hyperparams.get(ALPHA));
+            logln("--- rho:\t" + hyperparams.get(RHO));
+            logln("--- GEM mean:\t" + hyperparams.get(GEM_MEAN));
             logln("--- GEM scale:\t" + hyperparams.get(GEM_SCALE));
-            logln("--- GEM scale:\t" + hyperparams.get(TAU_MEAN));
-            logln("--- GEM scale:\t" + hyperparams.get(TAU_SCALE));
+            logln("--- tau mean:\t" + hyperparams.get(TAU_MEAN));
+            logln("--- tau scale:\t" + hyperparams.get(TAU_SCALE));
 
             logln("--- betas:\t" + MiscUtils.arrayToString(betas));
             logln("--- gammas:\t" + MiscUtils.arrayToString(gammas));
@@ -295,6 +301,10 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         // compute tf-idf's
         HashMap<Integer, Integer> tfs = new HashMap<Integer, Integer>();
         HashMap<Integer, Integer> dfs = new HashMap<Integer, Integer>();
+        for (int v = 0; v < V; v++) {
+            tfs.put(v, 0);
+            dfs.put(v, 0);
+        }
         for (int d = 0; d < D; d++) {
             Set<Integer> docUniqueTerms = new HashSet<Integer>();
             for (int n = 0; n < docWords[d].size(); n++) {
@@ -302,20 +312,12 @@ public class LexicalMSHLDASampler extends AbstractSampler {
                 docUniqueTerms.add(token);
 
                 Integer tf = tfs.get(token);
-                if (tf == null) {
-                    tfs.put(token, 1);
-                } else {
-                    tfs.put(token, tf + 1);
-                }
+                tfs.put(token, tf + 1);
             }
 
             for (int token : docUniqueTerms) {
                 Integer df = dfs.get(token);
-                if (df == null) {
-                    dfs.put(token, 1);
-                } else {
-                    dfs.put(token, df + 1);
-                }
+                dfs.put(token, df + 1);
             }
         }
 
@@ -329,7 +331,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         ArrayList<RankingItem<Integer>> rankWords = new ArrayList<RankingItem<Integer>>();
         for (int v = 0; v < V; v++) {
             double tf = 0.5 + 0.5 * tfs.get(v) / maxTf;
-            double idf = Math.log(D) - Math.log(dfs.get(v));
+            double idf = Math.log(D) - Math.log(dfs.get(v) + 1);
             double tf_idf = tf * idf;
 
             rankWords.add(new RankingItem<Integer>(v, tf_idf));
@@ -360,7 +362,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         if (verbose) {
             logln("--- Start running gurobi ...");
         }
-        GurobiMultipleLinearRegression lasso = new GurobiMultipleLinearRegression(designMatrix, responses, lambda);
+        GurobiMultipleLinearRegression lasso = new GurobiMultipleLinearRegression(
+                designMatrix, responses, lambda);
         double[] weights = lasso.solve();
         for (int ii = 0; ii < weights.length; ii++) {
             int v = lexicalIndices.get(ii);
@@ -501,7 +504,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
 
         this.docLevelDists = new TruncatedStickBreaking[D];
         for (int d = 0; d < D; d++) {
-            this.docLevelDists[d] = new TruncatedStickBreaking(L, hyperparams.get(GEM_MEAN), hyperparams.get(GEM_SCALE));
+            this.docLevelDists[d] = new TruncatedStickBreaking(L,
+                    hyperparams.get(GEM_MEAN), hyperparams.get(GEM_SCALE));
         }
 
         this.sentLevelCounts = new SparseCount[D][];
@@ -584,9 +588,10 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         this.logLikelihoods = new ArrayList<Double>();
         this.lexicalWeightsOverTime = new ArrayList<double[]>();
 
+        File repFolderPath = new File(getSamplerFolderPath(), ReportFolder);
         try {
-            if (report) {
-                IOUtils.createFolder(this.folder + this.getSamplerFolder() + ReportFolder);
+            if (!repFolderPath.exists()) {
+                IOUtils.createFolder(repFolderPath);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -690,10 +695,11 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             System.out.println();
 
             // store model
-            if (report && iter >= BURN_IN && iter % LAG == 0) {
-                outputState(this.folder + this.getSamplerFolder() + ReportFolder + "iter-" + iter + ".zip");
+            if (iter >= BURN_IN && iter % LAG == 0) {
+                outputState(new File(repFolderPath, "iter-" + iter + ".zip"));
                 try {
-                    outputTopicTopWords(this.folder + this.getSamplerFolder() + ReportFolder + "iter-" + iter + "-top-words.txt", 15);
+                    outputTopicTopWords(new File(repFolderPath,
+                            "iter-" + iter + "-top-words.txt"), 15);
                 } catch (Exception e) {
                     e.printStackTrace();
                     System.exit(1);
@@ -701,13 +707,12 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             }
         }
 
+        // output final model
+        outputState(new File(repFolderPath, "iter-" + iter + ".zip"));
+
         if (verbose) {
             logln(printGlobalTreeSummary());
             logln(printLocalRestaurantSummary());
-        }
-
-        if (report) {
-            outputState(this.folder + this.getSamplerFolder() + "final.zip");
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -719,10 +724,11 @@ public class LexicalMSHLDASampler extends AbstractSampler {
 
         try {
             if (paramOptimized && log) {
-                this.outputSampledHyperparameters(this.folder + this.getSamplerFolder() + "hyperparameters.txt");
+                this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
+                        "hyperparameters.txt").getAbsolutePath());
             }
 
-            BufferedWriter writer = IOUtils.getBufferedWriter(this.folder + this.getSamplerFolder() + "weights.txt");
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "weights.txt"));
             for (int v = 0; v < V; v++) {
                 writer.write(v + "\t" + wordVocab.get(v));
                 for (int i = 0; i < this.lexicalWeightsOverTime.size(); i++) {
@@ -969,7 +975,11 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             {
                 dataLlhNewTopic[l] = emptyModels[l - 1].getLogLikelihood(sentObsCountPerLevel[l]);
             }
-            computePathWordLogLikelihood(pathWordLlhs, globalTreeRoot, sentObsCountPerLevel, dataLlhNewTopic, 0.0);
+            computePathWordLogLikelihood(pathWordLlhs,
+                    globalTreeRoot,
+                    sentObsCountPerLevel,
+                    dataLlhNewTopic,
+                    0.0);
 
             // debug
             if (pathLogPriors.size() != pathWordLlhs.size()) {
@@ -1063,7 +1073,9 @@ public class LexicalMSHLDASampler extends AbstractSampler {
      * @param add Whether the new assignment should be added
      * @param observed Whether the response variable is observed
      */
-    private void sampleLevelForToken(int d, int s, int n, boolean remove, boolean add, boolean observed) {
+    private void sampleLevelForToken(int d, int s, int n,
+            boolean remove, boolean add,
+            boolean observed) {
         STable curTable = c[d][s];
         SNode[] curPath = getPathFromNode(curTable.getContent());
 
@@ -1083,7 +1095,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             double wordLlh = curPath[l].getContent().getLogLikelihood(words[d][s][n]);
             double resLlh = 0.0;
             if (observed) {
-                double sum = docTopicWeights[d] + docLexicalWeights[d] + curPath[l].getRegressionParameter();
+                double sum = docTopicWeights[d] + docLexicalWeights[d]
+                        + curPath[l].getRegressionParameter();
                 double mean = sum / docTokenCounts[d];
                 resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
             }
@@ -1146,7 +1159,9 @@ public class LexicalMSHLDASampler extends AbstractSampler {
      * @param observed Whether the response variable is observed
      * @param extend Whether the global tree is extendable
      */
-    private void samplePathForTable(int d, STable table, boolean remove, boolean add, boolean observed, boolean extend) {
+    private void samplePathForTable(int d, STable table,
+            boolean remove, boolean add,
+            boolean observed, boolean extend) {
         SNode curLeaf = table.getContent();
 
         // observations of sentences currently being assign to this table
@@ -1315,7 +1330,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             System.arraycopy(docLexicalDesignMatrix[d], 0, designMatrix[d], numTopicParams, numLexParams);
         }
 
-        GurobiMultipleLinearRegression mlr = new GurobiMultipleLinearRegression(designMatrix, responses, lambdas);
+        GurobiMultipleLinearRegression mlr =
+                new GurobiMultipleLinearRegression(designMatrix, responses, lambdas);
         double[] weights = mlr.solve();
 
         // update
@@ -1366,7 +1382,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             responseVector[d] = responses[d] - docLexicalWeights[d] / docTokenCounts[d];
         }
 
-        GurobiMultipleLinearRegression mlr = new GurobiMultipleLinearRegression(designMatrix, responseVector, lambdas);
+        GurobiMultipleLinearRegression mlr =
+                new GurobiMultipleLinearRegression(designMatrix, responseVector, lambdas);
         double[] weights = mlr.solve();
 
         // update
@@ -1912,7 +1929,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         return str.toString();
     }
 
-    public void outputTopicTopWords(String outputFile, int numWords)
+    public void outputTopicTopWords(File outputFile, int numWords)
             throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1962,17 +1979,17 @@ public class LexicalMSHLDASampler extends AbstractSampler {
     }
 
     public void outputTopicCoherence(
-            String filepath,
+            File file,
             MimnoTopicCoherence topicCoherence) throws Exception {
         if (verbose) {
-            logln("Outputing topic coherence to file " + filepath);
+            logln("Outputing topic coherence to file " + file);
         }
 
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
 
         Stack<SNode> stack = new Stack<SNode>();
         stack.add(globalTreeRoot);
@@ -1999,7 +2016,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    public void outputLexicalWeights(String filepath) throws Exception {
+    public void outputLexicalWeights(File file) throws Exception {
         ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
         for (int v = 0; v < V; v++) {
             if (lexicalWeights[v] != 0) {
@@ -2008,7 +2025,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         }
         Collections.sort(rankItems);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int ii = 0; ii < rankItems.size(); ii++) {
             RankingItem<Integer> item = rankItems.get(ii);
             writer.write(item.getObject() + "\t" + item.getPrimaryValue() + "\n");
@@ -2016,8 +2033,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    public void outputTopicWordDistributions(String filepath) throws Exception {
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+    public void outputTopicWordDistributions(File file) throws Exception {
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         Stack<SNode> stack = new Stack<SNode>();
         stack.add(globalTreeRoot);
 
@@ -2039,8 +2056,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    public void outputDocPathAssignments(String filepath) throws Exception {
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+    public void outputDocPathAssignments(File file) throws Exception {
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int d = 0; d < D; d++) {
             writer.append(Integer.toString(d));
             for (int s = 0; s < this.c[d].length; s++) {
@@ -2246,7 +2263,8 @@ public class LexicalMSHLDASampler extends AbstractSampler {
 
         ZipFile zipFile = new ZipFile(zipFilepath);
         ZipEntry modelEntry = zipFile.getEntry(filename + AssignmentFileExt);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(modelEntry), "UTF-8"));
+        BufferedReader reader = new BufferedReader(
+                new InputStreamReader(zipFile.getInputStream(modelEntry), "UTF-8"));
         String[] sline;
 
         for (int d = 0; d < D; d++) {
@@ -2354,107 +2372,48 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         return finalPredResponses;
     }
 
-    /**
-     * Perform regression on test documents in the same groups as in the
-     * training data.
-     */
-    public double[] regressNewDocuments(
-            int[][][] newWords, double[] newResponses,
-            String predFilepath) throws Exception {
-        String reportFolderpath = this.folder + this.getSamplerFolder() + ReportFolder;
-        File reportFolder = new File(reportFolderpath);
+    public void testSampler(int[][][] newWords) {
+        if (verbose) {
+            logln("Test sampling ...");
+        }
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
         if (!reportFolder.exists()) {
             throw new RuntimeException("Report folder does not exist");
         }
         String[] filenames = reportFolder.list();
 
-        ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
-        ArrayList<String> modelList = new ArrayList<String>();
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        IOUtils.createFolder(iterPredFolder);
 
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-            if (!filename.contains("zip")) {
-                continue;
-            }
-
-            double[] predResponses = regressNewDocuments(
-                    reportFolderpath + filename,
-                    newWords,
-                    reportFolderpath + IOUtils.removeExtension(filename) + ".diagnose");
-            predResponsesList.add(predResponses);
-            modelList.add(filename);
-
-            if (verbose) { // for debugging only
-                logln("state file: " + filename
-                        + ". iter = " + iter);
-                RegressionEvaluation eval = new RegressionEvaluation(
-                        newResponses, predResponses);
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-                for (Measurement measurement : measurements) {
-                    logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
                 }
-                System.out.println();
+
+                File partialResultFile = new File(iterPredFolder, IOUtils.removeExtension(filename) + ".txt");
+                sampleNewDocuments(
+                        new File(reportFolder, filename),
+                        newWords,
+                        partialResultFile.getAbsolutePath());
             }
-
-            break;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
         }
-
-        // final model
-        String filename = this.folder + getSamplerFolder() + "final.zip";
-        double[] predResponses = regressNewDocuments(
-                reportFolderpath + filename,
-                newWords,
-                reportFolderpath + IOUtils.removeExtension(filename) + ".diagnose");
-        predResponsesList.add(predResponses);
-        modelList.add(filename);
-
-        // write prediction values
-        BufferedWriter writer = IOUtils.getBufferedWriter(predFilepath);
-        for (String model : modelList) // header
-        {
-            writer.write(model + "\t");
-        }
-        writer.write("\n");
-
-        for (int r = 0; r < newWords.length; r++) {
-            for (int m = 0; m < predResponsesList.size(); m++) {
-                writer.write(predResponsesList.get(m)[r] + "\t");
-            }
-            writer.write("\n");
-        }
-        writer.close();
-
-        // average predicted response over different models
-        double[] finalPredResponses = new double[D];
-        for (int d = 0; d < D; d++) {
-            double sum = 0.0;
-            for (int i = 0; i < predResponsesList.size(); i++) {
-                sum += predResponsesList.get(i)[d];
-            }
-            finalPredResponses[d] = sum / predResponsesList.size();
-        }
-        return finalPredResponses;
     }
 
-    /**
-     * Regressing new data using a specific model stored in a given model file
-     *
-     * @param stateFile File containing a stored state
-     * @param newWords New words
-     */
-    private double[] regressNewDocuments(
-            String stateFile,
+    private void sampleNewDocuments(
+            File stateFile,
             int[][][] newWords,
-            String diagnoseFile) throws Exception {
+            String outputResultFile) throws Exception {
         if (verbose) {
             logln("\nPerform regression using model from " + stateFile);
         }
 
         try {
-            inputModel(stateFile);
+            inputModel(stateFile.getAbsolutePath());
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
@@ -2531,50 +2490,210 @@ public class LexicalMSHLDASampler extends AbstractSampler {
             }
         }
 
-        // debug
-        if (diagnoseFile != null) {
-            diagnose(diagnoseFile);
-        }
-
-        // averaging prediction responses over time
-        double[] finalPredResponses = new double[D];
+        // output result during test time 
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputResultFile);
         for (int d = 0; d < D; d++) {
-            double sum = 0.0;
-            for (int i = 0; i < predResponsesList.size(); i++) {
-                sum += predResponsesList.get(i)[d];
-            }
-            finalPredResponses[d] = sum / predResponsesList.size();
-        }
-        return finalPredResponses;
-    }
+            writer.write(Integer.toString(d));
 
-    public void diagnose(String filepath) throws Exception {
-        logln(">>> Output diagnosing file to " + filepath);
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-        double[] predVals = getRegressionValues();
-        for (int d = 0; d < D; d++) {
-            for (int s = 0; s < words[d].length; s++) {
-                SNode[] path = getPathFromNode(c[d][s].getContent());
-                writer.write(d
-                        + "\t" + s
-                        + "\t" + MiscUtils.formatDouble(docLexicalWeights[d])
-                        + "\t" + MiscUtils.formatDouble(predVals[d])
-                        + ":");
-                for (int l = 0; l < L; l++) {
-                    writer.write("\t(" + path[l].getPathString() + "-" + path[l].getRegressionParameter() + ")");
-                }
-                writer.write("\n");
-
-                for (int n = 0; n < words[d][s].length; n++) {
-                    writer.write(wordVocab.get(words[d][s][n])
-                            + "; " + z[d][s][n]
-                            + "\t");
-                }
-                writer.write("\n");
+            for (int ii = 0; ii < predResponsesList.size(); ii++) {
+                writer.write("\t" + predResponsesList.get(ii)[d]);
             }
             writer.write("\n");
         }
+        writer.close();
+    }
+
+    private double[][] loadSingleIterationPredictions(String filepath, int numDocs) throws Exception {
+        double[][] preds = new double[numDocs][];
+        BufferedReader reader = IOUtils.getBufferedReader(filepath);
+        String line;
+        String[] sline;
+        int count = 0;
+        while ((line = reader.readLine()) != null) {
+            sline = line.split("\t");
+            double[] ps = new double[sline.length - 1];
+            for (int ii = 0; ii < ps.length; ii++) {
+                ps[ii] = Double.parseDouble(sline[ii + 1]);
+            }
+            preds[count] = ps;
+            count++;
+        }
+        reader.close();
+        return preds;
+    }
+
+    public void computeSingleFinal(File outputFolder, double[] trueResponses) throws Exception {
+        File outputFile = new File(outputFolder, "single-final.txt");
+        if (verbose) {
+            logln("Computing single-final result. " + outputFile);
+        }
+
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        if (!iterPredFolder.exists()) {
+            throw new RuntimeException("Prediction folder does not exist");
+        }
+        String[] filenames = iterPredFolder.list();
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int i = 0; i < filenames.length; i++) {
+            String filename = filenames[i];
+
+            double[][] predictions = loadSingleIterationPredictions(
+                    new File(iterPredFolder, filename).getAbsolutePath(),
+                    trueResponses.length);
+
+            // get the predictions at the final iterations during test time
+            double[] finalPred = new double[predictions.length];
+            for (int d = 0; d < finalPred.length; d++) {
+                finalPred[d] = predictions[d][predictions[0].length - 1];
+            }
+            RegressionEvaluation eval = new RegressionEvaluation(
+                    trueResponses, finalPred);
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeRSquared();
+
+            writer.write(filename);
+            ArrayList<Measurement> measurements = eval.getMeasurements();
+            for (Measurement measurement : measurements) {
+                writer.write("\t" + measurement.getValue());
+            }
+            writer.write("\n");
+        }
+        writer.close();
+    }
+
+    public void computeSingleAverage(File outputFolder, double[] trueResponses) throws Exception {
+        File outputFile = new File(outputFolder, "single-avg.txt");
+        if (verbose) {
+            logln("Computing single-average result. " + outputFile);
+        }
+
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        if (!iterPredFolder.exists()) {
+            throw new RuntimeException("Prediction folder does not exist");
+        }
+        String[] filenames = iterPredFolder.list();
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int i = 0; i < filenames.length; i++) {
+            String filename = filenames[i];
+
+            double[][] predictions = loadSingleIterationPredictions(
+                    new File(iterPredFolder, filename).getAbsolutePath(),
+                    trueResponses.length);
+
+            // compute the prediction values as the average values
+            double[] avgPred = new double[predictions.length];
+            for (int d = 0; d < avgPred.length; d++) {
+                avgPred[d] = StatisticsUtils.mean(predictions[d]);
+            }
+
+            RegressionEvaluation eval = new RegressionEvaluation(
+                    trueResponses, avgPred);
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeRSquared();
+
+            writer.write(filename);
+            ArrayList<Measurement> measurements = eval.getMeasurements();
+            for (Measurement measurement : measurements) {
+                writer.write("\t" + measurement.getValue());
+            }
+            writer.write("\n");
+        }
+        writer.close();
+    }
+
+    public void computeMultipleFinal(File outputFolder, double[] trueResponses) throws Exception {
+        File outputFile = new File(outputFolder, "multiple-final.txt");
+        if (verbose) {
+            logln("Computing multiple-final result. " + outputFile);
+        }
+
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        if (!iterPredFolder.exists()) {
+            throw new RuntimeException("Prediction folder does not exist");
+        }
+        String[] filenames = iterPredFolder.list();
+
+        double[] predResponses = new double[trueResponses.length];
+        int numModels = filenames.length;
+
+        for (int i = 0; i < filenames.length; i++) {
+            String filename = filenames[i];
+
+            double[][] predictions = loadSingleIterationPredictions(
+                    new File(iterPredFolder, filename).getAbsolutePath(),
+                    trueResponses.length);
+
+            for (int d = 0; d < trueResponses.length; d++) {
+                predResponses[d] += predictions[d][predictions[0].length - 1];
+            }
+        }
+
+        for (int d = 0; d < predResponses.length; d++) {
+            predResponses[d] /= numModels;
+        }
+
+        RegressionEvaluation eval = new RegressionEvaluation(
+                trueResponses, predResponses);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeRSquared();
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            writer.write("\t" + measurement.getValue());
+        }
+        writer.write("\n");
+        writer.close();
+    }
+
+    public void computeMultipleAverage(File outputFolder, double[] trueResponses) throws Exception {
+        File outputFile = new File(outputFolder, "multiple-avg.txt");
+        if (verbose) {
+            logln("Computing multiple-avg result. " + outputFile);
+        }
+
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        if (!iterPredFolder.exists()) {
+            throw new RuntimeException("Prediction folder does not exist");
+        }
+        String[] filenames = iterPredFolder.list();
+
+        double[] predResponses = new double[trueResponses.length];
+        int numModels = filenames.length;
+
+        for (int i = 0; i < filenames.length; i++) {
+            String filename = filenames[i];
+
+            double[][] predictions = loadSingleIterationPredictions(
+                    new File(iterPredFolder, filename).getAbsolutePath(),
+                    trueResponses.length);
+
+            for (int d = 0; d < trueResponses.length; d++) {
+                predResponses[d] += StatisticsUtils.mean(predictions[d]);
+            }
+        }
+
+        for (int d = 0; d < predResponses.length; d++) {
+            predResponses[d] /= numModels;
+        }
+
+        RegressionEvaluation eval = new RegressionEvaluation(
+                trueResponses, predResponses);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeRSquared();
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            writer.write("\t" + measurement.getValue());
+        }
+        writer.write("\n");
         writer.close();
     }
 
@@ -2613,7 +2732,7 @@ public class LexicalMSHLDASampler extends AbstractSampler {
         }
     }
 
-    class SNode extends Node<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
 
         private final int born;
         private int numCustomers;
@@ -2756,6 +2875,265 @@ public class LexicalMSHLDASampler extends AbstractSampler {
                     .append("]")
                     .append(" >> ").append(getContent() == null ? "null" : getContent().toString());
             return str.toString();
+        }
+    }
+
+    public static void main(String[] args) {
+        run(args);
+    }
+
+    public static void run(String[] args) {
+        try {
+            // create the command line parser
+            parser = new BasicParser();
+
+            // create the Options
+            options = new Options();
+
+            addOption("output", "Output folder");
+            addOption("dataset", "Dataset");
+            addOption("data-folder", "Processed data folder");
+            addOption("format-folder", "Folder holding formatted data");
+            addOption("burnIn", "Burn-in");
+            addOption("maxIter", "Maximum number of iterations");
+            addOption("sampleLag", "Sample lag");
+            addOption("report", "Report interval.");
+            addOption("gem-mean", "GEM mean. [0.5]");
+            addOption("gem-scale", "GEM scale. [50]");
+            addOption("betas", "Dirichlet hyperparameter for topic distributions."
+                    + " [1, 0.5, 0.25] for a 3-level tree.");
+            addOption("gammas", "DP hyperparameters. [1.0, 1.0] for a 3-level tree");
+            addOption("mus", "Prior means for topic regression parameters."
+                    + " [0.0, 0.0, 0.0] for a 3-level tree and standardized"
+                    + " response variable.");
+            addOption("sigmas", "Prior variances for topic regression parameters."
+                    + " [0.0001, 0.5, 1.0] for a 3-level tree and stadardized"
+                    + " response variable.");
+            addOption("rho", "Prior variance for response variable. [1.0]");
+            addOption("tau-mean", "Prior mean of lexical regression parameters. [0.0]");
+            addOption("tau-scale", "Prior scale of lexical regression parameters. [1.0]");
+            addOption("num-lex-items", "Number of non-zero lexical regression parameters."
+                    + " Defaule: vocabulary size.");
+
+            addOption("cv-folder", "Cross validation folder");
+            addOption("num-folds", "Number of folds");
+            addOption("run-mode", "Running mode");
+            addOption("fold", "The cross-validation fold to run");
+
+            options.addOption("paramOpt", false, "Whether hyperparameter "
+                    + "optimization using slice sampling is performed");
+            options.addOption("v", false, "verbose");
+            options.addOption("d", false, "debug");
+            options.addOption("z", false, "whether standardize (z-score normalization)");
+            options.addOption("help", false, "Help");
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' "
+                        + "main.RunLexicalSHLDA -help", options);
+                return;
+            }
+
+            if (cmd.hasOption("cv-folder")) {
+                runCrossValidation();
+            } else {
+//                runModel();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SHLDA -help", options);
+            System.exit(1);
+        }
+    }
+
+    public static void runCrossValidation() throws Exception {
+        String datasetName = cmd.getOptionValue("dataset");
+        String datasetFolder = cmd.getOptionValue("data-folder");
+        String resultFolder = cmd.getOptionValue("output");
+        String formatFolder = cmd.getOptionValue("format-folder");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        boolean verbose = cmd.hasOption("v");
+        boolean debug = cmd.hasOption("d");
+        InitialState initState = InitialState.RANDOM;
+
+        String cvFolder = cmd.getOptionValue("cv-folder");
+        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
+        String runMode = cmd.getOptionValue("run-mode");
+
+        if (resultFolder == null) {
+            throw new RuntimeException("Result folder (--output) is not set.");
+        }
+
+        if (verbose) {
+            System.out.println("\nLoading formatted data ...");
+        }
+        SingleResponseTextDataset data = new SingleResponseTextDataset(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
+        data.prepareTopicCoherence(numTopWords);
+
+        int V = data.getWordVocab().size();
+        int L = CLIUtils.getIntegerArgument(cmd, "tree-height", 3);
+        double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
+        double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
+
+        double[] defaultBetas = new double[L];
+        defaultBetas[0] = 1;
+        for (int i = 1; i < L; i++) {
+            defaultBetas[i] = 1.0 / (i + 1);
+        }
+        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
+        for (int i = 0; i < betas.length; i++) {
+            betas[i] = betas[i] * V;
+        }
+
+        double[] defaultGammas = new double[L - 1];
+        for (int i = 0; i < defaultGammas.length; i++) {
+            defaultGammas[i] = 1.0;
+        }
+
+        double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
+
+        double[] responses = data.getResponses();
+        if (cmd.hasOption("z")) {
+            ZNormalizer zNorm = new ZNormalizer(responses);
+            for (int i = 0; i < responses.length; i++) {
+                responses[i] = zNorm.normalize(responses[i]);
+            }
+        }
+
+        double meanResponse = StatisticsUtils.mean(responses);
+        double[] defaultMus = new double[L];
+        for (int i = 0; i < L; i++) {
+            defaultMus[i] = meanResponse;
+        }
+        double[] mus = CLIUtils.getDoubleArrayArgument(cmd, "mus", defaultMus, ",");
+
+        double[] defaultSigmas = new double[L];
+        defaultSigmas[0] = 0.0001; // root node
+        for (int l = 1; l < L; l++) {
+            defaultSigmas[l] = 0.5 * l;
+        }
+        double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
+
+        double tau_mean = CLIUtils.getDoubleArgument(cmd, "tau-mean", 0.0);
+        double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
+        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+        int numLexicalItems = CLIUtils.getIntegerArgument(cmd, "num-lex-items", V);
+
+        ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
+        for (int i = 0; i < data.getDocIds().length; i++) {
+            instanceList.add(new RegressionDocumentInstance(
+                    data.getDocIds()[i],
+                    data.getWords()[i],
+                    data.getResponses()[i]));
+        }
+
+        if (verbose) {
+            System.out.println("\nLoading cross validation info from " + cvFolder);
+        }
+        String cvName = "";
+        CrossValidation<String, RegressionDocumentInstance> crossValidation =
+                new CrossValidation<String, RegressionDocumentInstance>(
+                cvFolder,
+                cvName,
+                instanceList);
+        crossValidation.inputFolds(numFolds);
+        int foldIndex = -1;
+        if (cmd.hasOption("fold")) {
+            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+        }
+
+        for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
+            if (foldIndex != -1 && fold.getIndex() != foldIndex) {
+                continue;
+            }
+            if (verbose) {
+                System.out.println("\nRunning fold " + foldIndex);
+            }
+
+            File foldFolder = new File(resultFolder, fold.getFoldFolder());
+
+            SHLDA sampler = new SHLDA();
+            sampler.setVerbose(verbose);
+            sampler.setDebug(debug);
+            sampler.setLog(true);
+            sampler.setReport(true);
+            sampler.setWordVocab(data.getWordVocab());
+
+            // training data
+            ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
+            int[][][] trRevWords = data.getDocSentWords(trInstIndices);
+            double[] trResponses = data.getResponses(trInstIndices);
+
+            // test data
+            ArrayList<Integer> teInstIndices = fold.getTestingInstances();
+            int[][][] teRevWords = data.getDocSentWords(teInstIndices);
+            double[] teResponses = data.getResponses(teInstIndices);
+
+            sampler.configure(foldFolder.getAbsolutePath(),
+                    trRevWords, trResponses,
+                    V, L,
+                    alpha,
+                    rho,
+                    gem_mean, gem_scale,
+                    tau_mean, tau_scale,
+                    betas, gammas,
+                    mus, sigmas,
+                    null, numLexicalItems,
+                    initState, paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+
+            File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+            IOUtils.createFolder(samplerFolder);
+
+            if (runMode.equals("train")) {
+                sampler.initialize();
+                sampler.iterate();
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+                sampler.outputTopicCoherence(new File(samplerFolder, TopicCoherenceFile), data.getTopicCoherence());
+
+                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
+                sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
+                sampler.outputDocPathAssignments(new File(samplerFolder, "doc-topic.txt"));
+            } else if (runMode.equals("test")) {
+                sampler.testSampler(teRevWords);
+                File teResultFolder = new File(samplerFolder, "te-results");
+                IOUtils.createFolder(teResultFolder);
+                sampler.computeSingleFinal(teResultFolder, teResponses);
+                sampler.computeSingleAverage(teResultFolder, teResponses);
+                sampler.computeMultipleFinal(teResultFolder, teResponses);
+                sampler.computeMultipleAverage(teResultFolder, teResponses);
+            } else if (runMode.equals("train-test")) {
+                // train
+                sampler.initialize();
+                sampler.iterate();
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+                sampler.outputTopicCoherence(new File(samplerFolder, TopicCoherenceFile), data.getTopicCoherence());
+                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
+                sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
+                sampler.outputDocPathAssignments(new File(samplerFolder, "doc-topic.txt"));
+
+                // test
+                sampler.testSampler(teRevWords);
+                File teResultFolder = new File(samplerFolder, "te-results");
+                IOUtils.createFolder(teResultFolder);
+                sampler.computeSingleFinal(teResultFolder, teResponses);
+                sampler.computeSingleAverage(teResultFolder, teResponses);
+                sampler.computeMultipleFinal(teResultFolder, teResponses);
+                sampler.computeMultipleAverage(teResultFolder, teResponses);
+            } else {
+                throw new RuntimeException("Run mode " + runMode + " not supported");
+            }
         }
     }
 }

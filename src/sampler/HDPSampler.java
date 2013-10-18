@@ -167,7 +167,7 @@ public class HDPSampler extends AbstractSampler {
         int lda_burnin = 10;
         int lda_maxiter = 100;
         int lda_samplelag = 10;
-        LDASampler lda = new LDASampler();
+        LDA lda = new LDA();
         lda.setDebug(debug);
         lda.setVerbose(verbose);
         lda.setLog(false);

@@ -5,15 +5,14 @@
 package main;
 
 import core.AbstractExperiment;
+import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
-import data.MultiLabelTextData;
+import data.LabelTextData;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.labeled.LabeledLDASampler;
+import sampler.labeled.LabeledLDA;
 import util.IOUtils;
 import util.evaluation.MimnoTopicCoherence;
 
@@ -21,15 +20,12 @@ import util.evaluation.MimnoTopicCoherence;
  *
  * @author vietan
  */
-public class RunLLDA {
-    private static CommandLineParser parser;
-    private static Options options;
-    private static CommandLine cmd;
-    
-    private static MultiLabelTextData data;
+public class RunLLDA extends AbstractRunner {
+
+    private static LabelTextData data;
     private static MimnoTopicCoherence topicCoherence;
     private static int numTopWords;
-    
+
     public static void main(String[] args) {
         try {
             // create the command line parser
@@ -55,7 +51,7 @@ public class RunLLDA {
                     .hasArg()
                     .withArgName("Folder directory")
                     .create());
-            
+
             options.addOption(OptionBuilder.withLongOpt("format-folder")
                     .withDescription("Folder containing formatted data")
                     .hasArg()
@@ -92,6 +88,18 @@ public class RunLLDA {
                     .withArgName("")
                     .create());
 
+            options.addOption(OptionBuilder.withLongOpt("run-mode")
+                    .withDescription("Report interval")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
+            options.addOption(OptionBuilder.withLongOpt("min-label-freq")
+                    .withDescription("Minimum label frequency")
+                    .hasArg()
+                    .withArgName("")
+                    .create());
+
             options.addOption("paramOpt", false, "Whether hyperparameter optimization using slice sampling is performed");
             options.addOption("v", false, "verbose");
             options.addOption("d", false, "debug");
@@ -103,72 +111,67 @@ public class RunLLDA {
                 CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
                 return;
             }
-            
-            runModels();
 
+            verbose = true;
+            debug = true;
+
+            String runMode = CLIUtils.getStringArgument(cmd, "run-mode", "run");
+            if (runMode.equals("run")) {
+                runModels();
+            } else {
+                throw new RuntimeException("Run mode " + runMode + " is not supported.");
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
+            CLIUtils.printHelp("java -cp dist/segan.jar main.RunLLDA -help", options);
             System.exit(1);
         }
     }
-    
-    public static void runModels() {
-        try{
+
+    public static void runModels() throws Exception {
+        if (verbose) {
             System.out.println("\nLoading formatted data ...");
-            String datasetName = cmd.getOptionValue("dataset");
-            String datasetFolder = cmd.getOptionValue("folder");
-            String outputFolder = cmd.getOptionValue("output");
-            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-            data = new MultiLabelTextData(datasetName, datasetFolder);
-            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-            
-            numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-            topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
-            topicCoherence.prepare();
-
-            int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-            int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-            int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-            int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-            
-            int K = data.getLabelVocab().size();
-            int V = data.getWordVocab().size();
-            double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-            double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1) * V;
-            double eta = CLIUtils.getDoubleArgument(cmd, "eta", 100.0);
-            
-            boolean paramOpt = cmd.hasOption("paramOpt");
-            boolean verbose = cmd.hasOption("v");
-            boolean debug = cmd.hasOption("d");
-            
-            verbose = true;
-            debug = true;
-            
-            Experiment expt = new Experiment(data);
-            expt.configure(burnIn, maxIters, sampleLag, repInterval, numTopWords);
-            expt.setup();
-
-            expt.runSampler(outputFolder, data.getWords(), data.getLabels(),
-                    K, alpha, beta, eta,
-                    paramOpt, verbose, debug);
         }
-        catch(Exception e){
-            e.printStackTrace();
-            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.RunLLDA -help", options);
-            throw new RuntimeException("Exception while running model");
-        }
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "folder", "L:/Dropbox/github/data");
+        String outputFolder = CLIUtils.getStringArgument(cmd, "output", "L:/Dropbox/github/data/112/hllda");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
+        int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 50);
+        
+        numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
+        topicCoherence.prepare();
+
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 100);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 200);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        data = new LabelTextData(datasetName, datasetFolder);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+        data.filterLabels(minLabelFreq);
+
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        Experiment expt = new Experiment(data);
+        expt.configure(burnIn, maxIters, sampleLag, repInterval, numTopWords);
+        expt.setup();
+        expt.runSampler(outputFolder,
+                alpha, beta,
+                paramOpt, verbose, debug);
     }
-    
-    static class Experiment extends AbstractExperiment<MultiLabelTextData> {
+
+    static class Experiment extends AbstractExperiment<LabelTextData> {
+
         protected static int reportInterval;
         protected static int numTopWords;
         protected static MimnoTopicCoherence topicCoherence;
 
-        public Experiment(MultiLabelTextData d) {
+        public Experiment(LabelTextData d) {
             this.data = d;
         }
-        
+
         public void configure(int burnIn, int maxIters, int sampleLag, int repInt, int nTopwords) {
             burn_in = burnIn;
             max_iters = maxIters;
@@ -176,47 +179,42 @@ public class RunLLDA {
             reportInterval = repInt;
             numTopWords = nTopwords;
         }
-        
+
         @Override
         public void setup() {
             topicCoherence = new MimnoTopicCoherence(
-                    data.getWords(), 
-                    data.getWordVocab().size(), 
+                    data.getWords(),
+                    data.getWordVocab().size(),
                     numTopWords);
             topicCoherence.prepare();
         }
-        
+
         public void runSampler(
                 String resultFolder,
-                int[][] words,
-                int[][] labels,
-                int K,
                 double alpha,
                 double beta,
-                double eta,
                 boolean paramOpt,
                 boolean verbose,
                 boolean debug) throws Exception {
             int V = data.getWordVocab().size();
             InitialState initState = InitialState.RANDOM;
 
-            LabeledLDASampler sampler = new LabeledLDASampler();
+            LabeledLDA sampler = new LabeledLDA();
             sampler.setVerbose(verbose);
             sampler.setDebug(debug);
             sampler.setWordVocab(data.getWordVocab());
+            sampler.setLabelVocab(data.getLabelVocab());
 
-            sampler.configure(resultFolder, words, labels,
-                    V, K, alpha, beta, eta, initState, paramOpt,
+            sampler.configure(resultFolder, data.getWords(), data.getLabels(),
+                    V, data.getLabelVocab().size(), alpha, beta, initState, paramOpt,
                     burn_in, max_iters, sample_lag, reportInterval);
 
-            String sldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
-            IOUtils.createFolder(sldaFolder);
+            File lldaFolder = new File(resultFolder, sampler.getSamplerFolder());
+            IOUtils.createFolder(lldaFolder);
             sampler.sample();
-            sampler.outputTopicTopWords(sldaFolder + TopWordFile, numTopWords);
-//            sampler.outputTopicCoherence(sldaFolder + TopicCoherenceFile, topicCoherence);
-//            sampler.outputDocTopicDistributions(sldaFolder + "doc-topic.txt");
-//            sampler.outputTopicWordDistributions(sldaFolder + "topic-word.txt");
-//            sampler.outputTopicRegressionParameters(sldaFolder + "topic-reg-params.txt");
+            sampler.outputTopicTopWords(
+                    new File(lldaFolder, TopWordFile),
+                    numTopWords);
         }
 
         @Override

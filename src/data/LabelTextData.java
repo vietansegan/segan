@@ -18,21 +18,30 @@ import util.RankingItem;
  *
  * @author vietan
  */
-public class MultiLabelTextData extends TextDataset {
+public class LabelTextData extends TextDataset {
 
     public static final String labelVocabExt = ".lvoc";
-    public static final int ALL_LABELS = -1;
     protected ArrayList<String>[] labelList;
     protected ArrayList<String> labelVocab;
     protected int[][] labels;
+    protected int maxLabelVocSize = Integer.MAX_VALUE;
+    protected int minLabelDocFreq = 1;
 
-    public MultiLabelTextData(String name, String folder) {
+    public LabelTextData(String name, String folder) {
         super(name, folder);
     }
 
-    public MultiLabelTextData(String name, String folder,
+    public LabelTextData(String name, String folder,
             CorpusProcessor corpProc) {
         super(name, folder, corpProc);
+    }
+
+    public void setMaxLabelVocabSize(int L) {
+        this.maxLabelVocSize = L;
+    }
+
+    public void setMinLabelDocFreq(int f) {
+        this.minLabelDocFreq = f;
     }
 
     public int[][] getLabels() {
@@ -41,6 +50,65 @@ public class MultiLabelTextData extends TextDataset {
 
     public ArrayList<String> getLabelVocab() {
         return this.labelVocab;
+    }
+
+    public void setLabelVocab(ArrayList<String> lVoc) {
+        this.labelVocab = lVoc;
+    }
+
+    /**
+     * Filter labels that do not meet the minimum frequency requirement.
+     *
+     * @param minLabelFreq Minimum frequency
+     */
+    public void filterLabels(int minLabelFreq) {
+        int D = words.length;
+        int L = labelVocab.size();
+        int[] labelFreqs = new int[L];
+        for (int dd = 0; dd < D; dd++) {
+            for (int ii = 0; ii < labels[dd].length; ii++) {
+                labelFreqs[labels[dd][ii]]++;
+            }
+        }
+
+        ArrayList<String> filterLabelVocab = new ArrayList<String>();
+        for (int ll = 0; ll < L; ll++) {
+            if (labelFreqs[ll] > minLabelFreq) {
+                filterLabelVocab.add(labelVocab.get(ll));
+            }
+        }
+        Collections.sort(filterLabelVocab);
+
+        int[][] filterLabels = new int[D][];
+        for (int d = 0; d < D; d++) {
+            ArrayList<Integer> docFilterLabels = new ArrayList<Integer>();
+            for (int ii = 0; ii < labels[d].length; ii++) {
+                String label = labelVocab.get(labels[d][ii]);
+                int filterLabelIndex = filterLabelVocab.indexOf(label);
+                if (filterLabelIndex >= 0) {
+                    docFilterLabels.add(filterLabelIndex);
+                }
+            }
+
+            filterLabels[d] = new int[docFilterLabels.size()];
+            for (int ii = 0; ii < docFilterLabels.size(); ii++) {
+                filterLabels[d][ii] = docFilterLabels.get(ii);
+            }
+        }
+
+        this.labels = filterLabels;
+        this.labelVocab = filterLabelVocab;
+    }
+
+    public void filterDocumentWithoutLabels() {
+        System.out.println("--- --- Filtering out documents without labels");
+        int count = 0;
+        for (int d = 0; d < labels.length; d++) {
+            if (labels[d].length == 0) {
+                count++;
+            }
+        }
+        System.out.println("--- --- ---- # documents without labels: " + count);
     }
 
     public void loadLabels(String labelFile) throws Exception {
@@ -76,10 +144,15 @@ public class MultiLabelTextData extends TextDataset {
     public void format(String outputFolder) throws Exception {
         IOUtils.createFolder(outputFolder);
 
-        logln("--- Creating label vocab ...");
-        createLabelVocab();
+        if (formatFilename == null) {
+            formatFilename = name;
+        }
 
-        File labelVocFile = new File(outputFolder, name + labelVocabExt);
+        if (this.labelVocab == null) {
+            createLabelVocab();
+        }
+
+        File labelVocFile = new File(outputFolder, formatFilename + labelVocabExt);
         logln("--- Outputing label vocab ... " + labelVocFile.getAbsolutePath());
         DataUtils.outputVocab(labelVocFile.getAbsolutePath(),
                 this.labelVocab);
@@ -87,10 +160,17 @@ public class MultiLabelTextData extends TextDataset {
         // get label indices
         this.labels = new int[this.labelList.length][];
         for (int ii = 0; ii < labels.length; ii++) {
-            this.labels[ii] = new int[labelList[ii].size()];
+            ArrayList<Integer> docLabels = new ArrayList<Integer>();
+            for (int jj = 0; jj < labelList[ii].size(); jj++) {
+                int labelIndex = labelVocab.indexOf(labelList[ii].get(jj));
+                if (labelIndex >= 0) { // filter out labels not in label vocab
+                    docLabels.add(labelIndex);
+                }
+            }
+
+            this.labels[ii] = new int[docLabels.size()];
             for (int jj = 0; jj < labels[ii].length; jj++) {
-                int labelIndex = Collections.binarySearch(labelVocab, labelList[ii].get(jj));
-                this.labels[ii][jj] = labelIndex;
+                this.labels[ii][jj] = docLabels.get(jj);
             }
         }
 
@@ -99,10 +179,11 @@ public class MultiLabelTextData extends TextDataset {
     }
 
     public void createLabelVocab() throws Exception {
-        createLabelVocabByFrequency(ALL_LABELS);
+        logln("--- Creating label vocab ...");
+        createLabelVocabByFrequency();
     }
 
-    private void createLabelVocabByFrequency(int topK) throws Exception {
+    protected void createLabelVocabByFrequency() throws Exception {
         HashMap<String, Integer> labelFreqs = new HashMap<String, Integer>();
         for (int ii = 0; ii < this.labelList.length; ii++) {
             for (String label : this.labelList[ii]) {
@@ -117,15 +198,15 @@ public class MultiLabelTextData extends TextDataset {
 
         ArrayList<RankingItem<String>> rankLabels = new ArrayList<RankingItem<String>>();
         for (String label : labelFreqs.keySet()) {
-            rankLabels.add(new RankingItem<String>(label, labelFreqs.get(label)));
+            int freq = labelFreqs.get(label);
+            if (freq >= this.minLabelDocFreq) {
+                rankLabels.add(new RankingItem<String>(label, labelFreqs.get(label)));
+            }
         }
         Collections.sort(rankLabels);
 
-        if (topK == ALL_LABELS) {
-            topK = rankLabels.size();
-        }
         this.labelVocab = new ArrayList<String>();
-        for (int k = 0; k < Math.min(topK, rankLabels.size()); k++) {
+        for (int k = 0; k < Math.min(this.maxLabelVocSize, rankLabels.size()); k++) {
             this.labelVocab.add(rankLabels.get(k).getObject());
         }
         Collections.sort(this.labelVocab);
@@ -141,7 +222,7 @@ public class MultiLabelTextData extends TextDataset {
 
     @Override
     protected void outputInfo(String outputFolder) throws Exception {
-        File outputFile = new File(outputFolder, name + docInfoExt);
+        File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile);
 
         BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
@@ -186,7 +267,7 @@ public class MultiLabelTextData extends TextDataset {
     public void loadFormattedData(String fFolder) {
         try {
             super.loadFormattedData(fFolder);
-            this.inputLabelVocab(new File(fFolder, name + labelVocabExt));
+            this.inputLabelVocab(new File(fFolder, formatFilename + labelVocabExt));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

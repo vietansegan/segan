@@ -9,22 +9,16 @@ import core.AbstractSampler;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
-import sampling.likelihood.DirichletMultinomialModel;
-import sampling.util.Node;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -218,7 +212,7 @@ public class RCRPSampler extends AbstractSampler {
         int lda_burnin = 10;
         int lda_maxiter = 100;
         int lda_samplelag = 10;
-        LDASampler lda = new LDASampler();
+        LDA lda = new LDA();
         lda.setDebug(debug);
         lda.setVerbose(verbose);
         lda.setLog(false);
@@ -243,7 +237,7 @@ public class RCRPSampler extends AbstractSampler {
                 ldaZ = lda.getZ();
                 outputLDAInitialization(ldaFile, ldaZ);
                 lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(this.folder + "lda-topwords-" + K + ".txt", 15);
+                lda.outputTopicTopWords(new File(this.folder, "lda-topwords-" + K + ".txt"), 15);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -1621,7 +1615,7 @@ public class RCRPSampler extends AbstractSampler {
     }
 }
 
-class RCRPNode extends Node<RCRPNode, SparseCount> {
+class RCRPNode extends TreeNode<RCRPNode, SparseCount> {
 
     ArrayList<RCRPTable> customers;
     int numPathCustomers; // number of customers on the path from root to this node (including customers in the subtree)

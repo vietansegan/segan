@@ -8,6 +8,8 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 //import sampling.likelihood.DirichletMultinomialModel;
@@ -17,64 +19,10 @@ import java.util.zip.ZipOutputStream;
  * @author Segan Kings
  */
 public class IOUtils {
-//    public static DirichletMultinomialModel[] inputDirichletMultinomials(String filepath) throws Exception{
-//        ArrayList<DirichletMultinomialModel> dmmList = new ArrayList<DirichletMultinomialModel>();
-//        BufferedReader reader = IOUtils.getBufferedReader(filepath);
-//        String line; String[] sline;
-//        while((line = reader.readLine()) != null){
-//            int dim = Integer.parseInt(line);
-//            boolean isShortRep = Boolean.parseBoolean(reader.readLine());
-//            double scale = Double.parseDouble(reader.readLine());
-//            DirichletMultinomialModel dmm;
-//            if(isShortRep){
-//                double centerElement = Double.parseDouble(reader.readLine());
-//                dmm = new DirichletMultinomialModel(dim, scale, centerElement);
-//            }
-//            else{
-//                double[] centerVector = new double[dim];
-//                sline = reader.readLine().split("\t");
-//                for(int i=0; i<dim; i++)
-//                    centerVector[i] = Double.parseDouble(sline[i]);
-//                dmm = new DirichletMultinomialModel(dim, scale, centerVector);
-//            }
-//            
-//            // add observation counts
-//            sline = reader.readLine().split(" ");
-//            for(int i=0; i<sline.length; i++){
-//                int type = Integer.parseInt(sline[i].split(":")[0]);
-//                int count = Integer.parseInt(sline[i].split(":")[1]);
-//                dmm.changeCount(type, count);
-//            }
-//            dmmList.add(dmm);
-//        }
-//        reader.close();        
-//        return dmmList.toArray(new DirichletMultinomialModel[dmmList.size()]);
-//    }
-//    
-//    public static void outputDirichletMultinomials(DirichletMultinomialModel[] dmms, String filepath) throws Exception{
-//        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-//        for(int i=0; i<dmms.length; i++){
-//            DirichletMultinomialModel d = dmms[i];
-//            writer.write(d.getDimension() + "\n");
-//            writer.write(d.isShortRepresented() + "\n");
-//            writer.write(MiscUtils.formatDouble(d.getConcentration()) + "\n");
-//            if(d.isShortRepresented())
-//                writer.write(MiscUtils.formatDouble(d.getCenterElement(0)) + "\n");
-//            else{
-//                for(int j=0; j<d.getDimension(); j++)
-//                    writer.write(MiscUtils.formatDouble(d.getCenterElement(j)) + "\t");
-//                writer.write("\n");
-//            }
-//            
-//            // output observation counts
-//            double[] empDist = d.getDistribution();
-//            for(int j=0; j<d.getDimension(); j++){
-//                writer.write(j + ":" + d.getCount(j) + " (" + MiscUtils.formatDouble(empDist[j]) + ") ");
-//            }
-//            writer.write("\n\n");
-//        }
-//        writer.close();
-//    }
+
+    public static String getAbsolutePath(File folder, String filename) {
+        return new File(folder, filename).getAbsolutePath();
+    }
 
     public static ArrayList<String> loadVocab(String filepath) throws Exception {
         ArrayList<String> voc = new ArrayList<String>();
@@ -141,11 +89,23 @@ public class IOUtils {
         BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(filepath), "UTF-8"));
         return in;
     }
-    
+
     public static BufferedReader getBufferedReader(File file)
             throws FileNotFoundException, UnsupportedEncodingException {
         BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
         return in;
+    }
+
+    public static BufferedReader getBufferedReader(String zipFilePath, String zipEntry) throws Exception {
+        ZipFile zipFile = new ZipFile(zipFilePath);
+        ZipEntry modelEntry = zipFile.getEntry(zipEntry);
+        return getBufferedReader(zipFile, modelEntry);
+    }
+
+    public static BufferedReader getBufferedReader(ZipFile zipFile, ZipEntry modelEntry)
+            throws FileNotFoundException, IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(modelEntry), "UTF-8"));
+        return reader;
     }
 
     public static BufferedWriter getBufferedWriter(String filepath)
@@ -153,7 +113,7 @@ public class IOUtils {
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filepath), "UTF-8"));
         return out;
     }
-    
+
     public static BufferedWriter getBufferedWriter(File file)
             throws FileNotFoundException, UnsupportedEncodingException {
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
@@ -277,7 +237,11 @@ public class IOUtils {
      */
     public static String removeExtension(String oriFilename) {
         int dotAt = oriFilename.lastIndexOf(".");
-        return oriFilename.substring(0, dotAt);
+        if (dotAt > 0) {
+            return oriFilename.substring(0, dotAt);
+        } else {
+            return oriFilename;
+        }
     }
 
     /**
@@ -324,10 +288,27 @@ public class IOUtils {
      * @param topicWordDistr 2D array containing topical word distributions
      * @param vocab List of tokens in the vocabulary
      * @param numTopWord Number of top words to output
+     * @param file The output file
+     */
+    public static void outputTopWords(double[][] topicWordDistr,
+            ArrayList<String> vocab,
+            int numTopWord,
+            File file) throws Exception {
+        outputTopWords(topicWordDistr, vocab, numTopWord, file.getAbsolutePath());
+    }
+
+    /**
+     * Output top words for each topic
+     *
+     * @param topicWordDistr 2D array containing topical word distributions
+     * @param vocab List of tokens in the vocabulary
+     * @param numTopWord Number of top words to output
      * @param filepath Path to the output file
      */
-    public static void outputTopWords(double[][] topicWordDistr, ArrayList<String> vocab,
-            int numTopWord, String filepath) throws Exception {
+    public static void outputTopWords(double[][] topicWordDistr,
+            ArrayList<String> vocab,
+            int numTopWord,
+            String filepath) throws Exception {
 
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
         for (int t = 0; t < topicWordDistr.length; t++) {

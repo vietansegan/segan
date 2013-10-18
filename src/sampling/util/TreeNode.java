@@ -14,7 +14,7 @@ import java.util.TreeSet;
  *
  * @author vietan
  */
-public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
+public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C>> {
 
     public static final int ROOT_PARENT_INDEX = -1;
     protected int index;
@@ -24,7 +24,7 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
     protected SortedSet<Integer> inactiveChildren; // indices for reuse
     protected HashMap<Integer, N> children;
 
-    public Node(int index, int level, C content, N parent) {
+    public TreeNode(int index, int level, C content, N parent) {
         this.index = index;
         this.level = level;
         this.content = content;
@@ -39,7 +39,7 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
      */
     public void fillInactiveChildIndices() {
         int maxChildIndex = -1;
-        for (Node child : this.getChildren()) {
+        for (TreeNode child : this.getChildren()) {
             if (child.getIndex() > maxChildIndex) {
                 maxChildIndex = child.getIndex();
             }
@@ -120,7 +120,7 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
         return pathIndex;
     }
 
-    private void getPathIndex(Node<N, C> curNode, int[] pathIndex) {
+    private void getPathIndex(TreeNode<N, C> curNode, int[] pathIndex) {
         if (curNode == null) {
             return;
         }
@@ -130,6 +130,10 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
 
     public boolean isRoot() {
         return this.parent == null;
+    }
+    
+    public boolean isLeaf() {
+        return this.children.isEmpty();
     }
 
     public boolean isChild(int childIndex) {
@@ -174,10 +178,10 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
     public String printSubtreeStructure() {
         HashMap<Integer, Integer> levelNodeCounts = new HashMap<Integer, Integer>();
         int maxLevel = 0;
-        Stack<Node<N, C>> stack = new Stack<Node<N, C>>();
+        Stack<TreeNode<N, C>> stack = new Stack<TreeNode<N, C>>();
         stack.add(this);
         while (!stack.isEmpty()) {
-            Node<N, C> node = stack.pop();
+            TreeNode<N, C> node = stack.pop();
             int nodeLevel = node.getLevel();
             if (nodeLevel > maxLevel) {
                 maxLevel = nodeLevel;
@@ -216,7 +220,7 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
         if ((obj == null) || (this.getClass() != obj.getClass())) {
             return false;
         }
-        Node<N, C> r = (Node<N, C>) (obj);
+        TreeNode<N, C> r = (TreeNode<N, C>) (obj);
 
         return r.index == this.index
                 && r.level == this.level
@@ -224,7 +228,7 @@ public class Node<N extends Node, C> implements Comparable<Node<N, C>> {
     }
 
     @Override
-    public int compareTo(Node<N, C> r) {
+    public int compareTo(TreeNode<N, C> r) {
         if (this.level == r.level) {
             if (this.parent.equals(r.parent)) {
                 return this.index - r.index;

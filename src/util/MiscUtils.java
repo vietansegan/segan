@@ -6,6 +6,7 @@ package util;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -15,7 +16,30 @@ import java.util.List;
 public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
+    
+    public static void incrementMap(HashMap<Integer, Integer> map, Integer key) {
+        Integer count = map.get(key);
+        if (count == null) {
+            map.put(key, 1);
+        } else {
+            map.put(key, count + 1);
+        }
+    }
+    
+    public static void incrementMap(HashMap<String, Integer> map, String key) {
+        Integer count = map.get(key);
+        if (count == null) {
+            map.put(key, 1);
+        } else {
+            map.put(key, count + 1);
+        }
+    }
 
+    public static int getRoundStepSize(int total, int numSteps) {
+        int stepSize = (int) Math.pow(10, (int)Math.log10(total / numSteps));
+        return stepSize;
+    }
+    
     public static double[] flatten2DArray(double[][] array) {
         int length = 0;
         for (int i = 0; i < array.length; i++) {
@@ -65,6 +89,8 @@ public class MiscUtils {
     }
 
     public static String arrayToString(int[] array) {
+        if(array.length == 0)
+            return "";
         StringBuilder str = new StringBuilder();
         str.append("[").append(formatDouble(array[0]));
         for (int i = 1; i < array.length; i++) {

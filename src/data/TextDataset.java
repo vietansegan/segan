@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import util.DataUtils;
 import util.IOUtils;
+import util.evaluation.MimnoTopicCoherence;
 
 /**
  * A set of documents
@@ -26,6 +27,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected String[] docIds;
     protected int[][] words;
     protected int[][][] sentWords;
+    protected MimnoTopicCoherence topicCoherence;
 
     public TextDataset(
             String name,
@@ -48,12 +50,39 @@ public class TextDataset extends AbstractTokenizeDataset {
         this.processedDocIndices = new ArrayList<Integer>();
     }
 
+    public void prepareTopicCoherence(int numTopWords) {
+        this.topicCoherence = new MimnoTopicCoherence(words, wordVocab.size(), numTopWords);
+        this.topicCoherence.prepare();
+    }
+
+    public MimnoTopicCoherence getTopicCoherence() {
+        return this.topicCoherence;
+    }
+
     public int[][][] getSentenceWords() {
         return this.sentWords;
     }
 
     public ArrayList<String> getWordVocab() {
         return this.wordVocab;
+    }
+    
+    public int[][][] getDocSentWords(ArrayList<Integer> instances) {
+        int[][][] revSentWords = new int[instances.size()][][];
+        for (int i = 0; i < revSentWords.length; i++) {
+            int idx = instances.get(i);
+            revSentWords[i] = this.sentWords[idx];
+        }
+        return revSentWords;
+    }
+    
+    public int[][] getDocWords(ArrayList<Integer> instances) {
+        int[][] revWords = new int[instances.size()][];
+        for (int i = 0; i < revWords.length; i++) {
+            int idx = instances.get(i);
+            revWords[i] = this.words[idx];
+        }
+        return revWords;
     }
 
     /**
@@ -119,8 +148,12 @@ public class TextDataset extends AbstractTokenizeDataset {
         corpProc.setRawTexts(rawTexts);
         corpProc.process();
 
+        if (formatFilename == null) {
+            formatFilename = name;
+        }
+
         // output the data into format used by samplers
-        File wordVocFile = new File(outputFolder, name + wordVocabExt);
+        File wordVocFile = new File(outputFolder, formatFilename + wordVocabExt);
         logln("--- Outputing word vocab ... " + wordVocFile.getAbsolutePath());
         DataUtils.outputVocab(wordVocFile.getAbsolutePath(),
                 corpProc.getVocab());
@@ -130,8 +163,13 @@ public class TextDataset extends AbstractTokenizeDataset {
         outputSentTextData(outputFolder);
     }
 
+    /**
+     * Output the formatted document data.
+     *
+     * @param outputFolder Output folder
+     */
     protected void outputTextData(String outputFolder) throws Exception {
-        File outputFile = new File(outputFolder, name + numDocDataExt);
+        File outputFile = new File(outputFolder, formatFilename + numDocDataExt);
         logln("--- Outputing main numeric data ... " + outputFile);
 
         // output main numeric
@@ -166,8 +204,13 @@ public class TextDataset extends AbstractTokenizeDataset {
         dataWriter.close();
     }
 
+    /**
+     * Output the formatted data.
+     *
+     * @param outputFolder Output folder
+     */
     protected void outputSentTextData(String outputFolder) throws Exception {
-        File outputFile = new File(outputFolder, name + numSentDataExt);
+        File outputFile = new File(outputFolder, formatFilename + numSentDataExt);
         logln("--- Outputing sentence data ... " + outputFile);
 
         int[][][] numSents = corpProc.getNumericSentences();
@@ -199,7 +242,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     protected void outputInfo(String outputFolder) throws Exception {
-        File outputFile = new File(outputFolder, name + docInfoExt);
+        File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile.getAbsolutePath());
 
         BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
@@ -217,13 +260,20 @@ public class TextDataset extends AbstractTokenizeDataset {
         return this.words;
     }
 
+    public void loadFormattedData(File fFolder) {
+        this.loadFormattedData(fFolder.getAbsolutePath());
+    }
+
     public void loadFormattedData(String fFolder) {
+        if (formatFilename == null) {
+            formatFilename = name;
+        }
         logln("--- Loading formatted data from " + fFolder);
         try {
-            inputWordVocab(new File(fFolder, name + wordVocabExt));
-            inputTextData(new File(fFolder, name + numDocDataExt));
-            inputDocumentInfo(new File(fFolder, name + docInfoExt));
-            inputSentenceTextData(new File(fFolder, name + numSentDataExt));
+            inputWordVocab(new File(fFolder, formatFilename + wordVocabExt));
+            inputTextData(new File(fFolder, formatFilename + numDocDataExt));
+            inputDocumentInfo(new File(fFolder, formatFilename + docInfoExt));
+            inputSentenceTextData(new File(fFolder, formatFilename + numSentDataExt));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

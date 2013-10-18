@@ -4,26 +4,21 @@
  */
 package main;
 
+import core.AbstractRunner;
 import data.CorpusProcessor;
-import data.MultiLabelTextData;
+import data.LabelSingleResponseTextDataset;
+import data.LabelTextData;
 import data.SingleResponseTextDataset;
 import data.TextDataset;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 
 /**
  *
  * @author vietan
  */
-public class ProcessData {
-
-    private static CommandLineParser parser;
-    private static Options options;
-    private static CommandLine cmd;
+public class ProcessData extends AbstractRunner {
 
     public static void main(String[] args) {
         try {
@@ -33,95 +28,26 @@ public class ProcessData {
             // create the Options
             options = new Options();
 
-            options.addOption(OptionBuilder.withLongOpt("dataset")
-                    .withDescription("Dataset name")
-                    .hasArg()
-                    .withArgName("Dataset")
-                    .create());
+            addOption("dataset", "Dataset");
+            addOption("data-folder", "Folder that stores the processed data");
+            addOption("text-data", "Directory of the text data");
+            addOption("response-file", "Directory of the response file");
+            addOption("label-file", "Directory of the label file");
+            addOption("format-folder", "Folder that stores formatted data");
+            addOption("format-file", "Formatted file name");
 
-            options.addOption(OptionBuilder.withLongOpt("output-folder")
-                    .withDescription("Folder that stores the processed data")
-                    .hasArg()
-                    .withArgName("Folder directory")
-                    .create());
+            addOption("u", "The minimum count of raw unigrams");
+            addOption("b", "The minimum count of raw bigrams");
+            addOption("bs", "The minimum score of bigrams");
+            addOption("V", "Maximum vocab size");
+            addOption("min-tf", "Term frequency minimum cutoff");
+            addOption("max-tf", "Term frequency maximum cutoff");
+            addOption("min-df", "Document frequency minimum cutoff");
+            addOption("max-df", "Document frequency maximum cutoff");
+            addOption("min-doc-length", "Document minimum length");
 
-            options.addOption(OptionBuilder.withLongOpt("text-data")
-                    .withDescription("Directory of the text data")
-                    .hasArg()
-                    .withArgName("Text data")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("response-file")
-                    .withDescription("Directory of the response file")
-                    .hasArg()
-                    .withArgName("Response file")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("label-file")
-                    .withDescription("Directory of the label file")
-                    .hasArg()
-                    .withArgName("Response file")
-                    .create());
-            
-            options.addOption(OptionBuilder.withLongOpt("format-folder")
-                    .withDescription("Folder holding formatted data")
-                    .hasArg()
-                    .withArgName("Response file")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("u")
-                    .withDescription("The minimum count of raw unigrams")
-                    .hasArg()
-                    .withArgName("Unigram count cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("b")
-                    .withDescription("The minimum count of raw bigrams")
-                    .hasArg()
-                    .withArgName("Bigram count cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("bs")
-                    .withDescription("The minimum score of bigrams")
-                    .hasArg()
-                    .withArgName("Bigram score cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("V")
-                    .withDescription("The maximum vocab size")
-                    .hasArg()
-                    .withArgName("Maximum vocab size")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("min-tf")
-                    .withDescription("The minimum term frequency")
-                    .hasArg()
-                    .withArgName("Term frequency minimum cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("max-tf")
-                    .withDescription("The maximum term frequency")
-                    .hasArg()
-                    .withArgName("Term frequency maximum cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("min-df")
-                    .withDescription("The minimum document frequency")
-                    .hasArg()
-                    .withArgName("Document frequency minimum cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("max-df")
-                    .withDescription("The maximum documnet frequency")
-                    .hasArg()
-                    .withArgName("Document frequency maximum cutoff")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("min-doc-length")
-                    .withDescription("The minimum document length")
-                    .hasArg()
-                    .withArgName("Document minimum length")
-                    .create());
+            addOption("L", "Maximum label vocab size");
+            addOption("min-label-df", "Minimum count of raw labels");
 
             options.addOption("s", false, "Whether stopwords are filtered");
             options.addOption("l", false, "Whether lemmatization is performed");
@@ -146,9 +72,10 @@ public class ProcessData {
 
         try {
             String datasetName = cmd.getOptionValue("dataset");
-            String datasetFolder = cmd.getOptionValue("output-folder");
+            String datasetFolder = cmd.getOptionValue("data-folder");
             String textInputData = cmd.getOptionValue("text-data");
-            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
+            String formatFolder = cmd.getOptionValue("format-folder");
+            String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
             int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);
             int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 0);
@@ -176,9 +103,34 @@ public class ProcessData {
                     stopwordFilter,
                     lemmatization);
 
-            if (cmd.hasOption("response-file")) {
+            if (cmd.hasOption("response-file") && cmd.hasOption("label-file")) {
+                String responseFile = cmd.getOptionValue("response-file");
+                String labelFile = cmd.getOptionValue("label-file");
+                LabelSingleResponseTextDataset dataset =
+                        new LabelSingleResponseTextDataset(datasetName, datasetFolder, corpProc);
+                dataset.setFormatFilename(formatFile);
+                
+                if (cmd.hasOption("L")) {
+                    dataset.setMaxLabelVocabSize(Integer.parseInt(cmd.getOptionValue("L")));
+                }
+                if (cmd.hasOption("min-label-df")) {
+                    dataset.setMinLabelDocFreq(Integer.parseInt(cmd.getOptionValue("min-label-df")));
+                }
+
+                // load text data
+                if (cmd.hasOption("file")) {
+                    dataset.loadTextDataFromFile(textInputData);
+                } else {
+                    dataset.loadTextDataFromFolder(textInputData);
+                }
+
+                dataset.loadResponses(responseFile); // load response data
+                dataset.loadLabels(labelFile); // load labels
+                dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+            } else if (cmd.hasOption("response-file")) {
                 String responseFile = cmd.getOptionValue("response-file");
                 SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder, corpProc);
+                dataset.setFormatFilename(formatFile);
 
                 // load text data
                 if (cmd.hasOption("file")) {
@@ -190,7 +142,14 @@ public class ProcessData {
                 dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             } else if (cmd.hasOption("label-file")) {
                 String labelFile = cmd.getOptionValue("label-file");
-                MultiLabelTextData dataset = new MultiLabelTextData(datasetName, datasetFolder, corpProc);
+                LabelTextData dataset = new LabelTextData(datasetName, datasetFolder, corpProc);
+                dataset.setFormatFilename(formatFile);
+                if (cmd.hasOption("L")) {
+                    dataset.setMaxLabelVocabSize(Integer.parseInt(cmd.getOptionValue("L")));
+                }
+                if (cmd.hasOption("min-label-df")) {
+                    dataset.setMinLabelDocFreq(Integer.parseInt(cmd.getOptionValue("min-label-df")));
+                }
 
                 // load text data
                 if (cmd.hasOption("file")) {
@@ -202,6 +161,7 @@ public class ProcessData {
                 dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             } else {
                 TextDataset dataset = new TextDataset(datasetName, datasetFolder, corpProc);
+                dataset.setFormatFilename(formatFile);
 
                 if (cmd.hasOption("file")) {
                     dataset.loadTextDataFromFile(textInputData);

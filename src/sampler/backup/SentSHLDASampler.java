@@ -22,7 +22,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
+import sampling.util.TreeNode;
 import sampling.util.SparseCount;
 import util.IOUtils;
 import util.MiscUtils;
@@ -1695,7 +1695,7 @@ public class SentSHLDASampler extends AbstractSampler {
     }
 }
 
-class SentSHLDANode extends Node<SentSHLDANode, DirichletMultinomialModel> {
+class SentSHLDANode extends TreeNode<SentSHLDANode, DirichletMultinomialModel> {
 
     private final int born;
     private int numCustomers;

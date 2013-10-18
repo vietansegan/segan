@@ -30,10 +30,10 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     public static final String docTextExt = ".text";
     public static final String docInfoExt = ".docinfo";
     protected String folder; // main folder of the dataset
-//    protected String formatFolder = "format/";
     protected Set<String> stopwords;
     protected Tokenizer tokenizer;
     protected CorpusProcessor corpProc;
+    protected String formatFilename;
 
     public AbstractTokenizeDataset(
             String name,
@@ -54,8 +54,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     public AbstractTokenizeDataset(
             String name, // dataset name
             String folder, // dataset folder
-            CorpusProcessor corpProc// corpus processor
-            ) {
+            CorpusProcessor corpProc) {
         super(name);
         this.folder = folder;
 
@@ -77,6 +76,14 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         writer.write(this.corpProc.getSettings() + "\n");
         writer.close();
     }
+    
+    public void setFormatFilename(String fn) {
+        this.formatFilename = fn;
+    }
+    
+    public String getFormatFilename() {
+        return this.formatFilename;
+    }
 
     @Override
     public String getName() {
@@ -91,12 +98,4 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     public String getDatasetFolderPath() {
         return new File(this.folder, getName()).getAbsolutePath();
     }
-
-//    public String getFormatPath() {
-//        return new File(this.getDatasetFolderPath(), formatFolder).getAbsolutePath();
-//    }
-
-//    public void setFormatFolder(String ff) {
-//        this.formatFolder = ff;
-//    }
 }

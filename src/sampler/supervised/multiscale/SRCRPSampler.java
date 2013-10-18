@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampler.supervised.multiscale;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
@@ -20,13 +16,13 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import sampler.LDASampler;
+import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirichletMultinomialModel;
-import sampling.util.Node;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -288,7 +284,7 @@ public class SRCRPSampler extends AbstractSampler {
         int lda_burnin = 10;
         int lda_maxiter = 100;
         int lda_samplelag = 10;
-        LDASampler lda = new LDASampler();
+        LDA lda = new LDA();
         lda.setDebug(debug);
         lda.setVerbose(verbose);
         lda.setLog(false);
@@ -329,7 +325,7 @@ public class SRCRPSampler extends AbstractSampler {
                 ldaZ = lda.getZ();
                 outputLDAInitialization(ldaFile, ldaZ);
                 lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(this.folder + "lda-topwords-" + K + ".txt", 15);
+                lda.outputTopicTopWords(new File(this.folder, "lda-topwords-" + K + ".txt"), 15);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -2266,7 +2262,7 @@ public class SRCRPSampler extends AbstractSampler {
     }
 }
 
-class SRCRPNode extends Node<SRCRPNode, DirichletMultinomialModel> {
+class SRCRPNode extends TreeNode<SRCRPNode, DirichletMultinomialModel> {
 
     ArrayList<SRCRPTable> customers;
     int numPathCustomers; // number of customers on the path from root to this node (including customers in the subtree)

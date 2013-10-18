@@ -1,9 +1,6 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package main;
 
+import core.AbstractRunner;
 import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
 import core.crossvalidation.RegressionDocumentInstance;
@@ -12,9 +9,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import util.IOUtils;
 import util.StatisticsUtils;
@@ -23,11 +17,7 @@ import util.StatisticsUtils;
  *
  * @author vietan
  */
-public class CreateCrossValidationFolds {
-
-    private static CommandLineParser parser;
-    private static Options options;
-    private static CommandLine cmd;
+public class CreateCrossValidationFolds extends AbstractRunner {
 
     public static void main(String[] args) {
         try {
@@ -36,55 +26,21 @@ public class CreateCrossValidationFolds {
 
             // create the Options
             options = new Options();
-
-            options.addOption(OptionBuilder.withLongOpt("dataset")
-                    .withDescription("Dataset name")
-                    .hasArg()
-                    .withArgName("Dataset")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("folder")
-                    .withDescription("Folder that stores the processed data")
-                    .hasArg()
-                    .withArgName("Folder directory")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("output")
-                    .withDescription("Output folder")
-                    .hasArg()
-                    .withArgName("Output folder")
-                    .create());
             
-            options.addOption(OptionBuilder.withLongOpt("format-folder")
-                    .withDescription("Folder holding formatted data")
-                    .hasArg()
-                    .withArgName("Response file")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("num-classes")
-                    .withDescription("Number of classes that the response "
-                    + "variables are discretized into to perform stratified sampling. "
-                    + "Default 1.")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("num-folds")
-                    .withDescription("Number of folds. Default 5.")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
-            options.addOption(OptionBuilder.withLongOpt("tr2dev-ratio")
-                    .withDescription("Training-to-development ratio. "
-                    + "Default 0.8.")
-                    .hasArg()
-                    .withArgName("")
-                    .create());
-
+            addOption("dataset", "Dataset name");
+            addOption("data-folder", "Processed data folder");
+            addOption("output", "Output folder");
+            addOption("format-folder", "Formatted data folder");
+            addOption("num-classes", "Number of classes that the response"
+                    + " variable are discretized into to perform stratified"
+                    + " sampling. Default 1.");
+            addOption("num-folds", "Number of folds. Default 5.");
+            addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
+            
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds -help", options);
+                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' "
+                        + "main.CreateCrossValidationFolds -help", options);
                 return;
             }
 
@@ -99,8 +55,8 @@ public class CreateCrossValidationFolds {
         try {
             System.out.println("\nLoading formatted data ...");
             String datasetName = cmd.getOptionValue("dataset");
-            String datasetFolder = cmd.getOptionValue("folder");
-            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
+            String datasetFolder = cmd.getOptionValue("data-folder");
+            String formatFolder = cmd.getOptionValue("format-folder");
             SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder);
             dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
@@ -142,23 +98,27 @@ public class CreateCrossValidationFolds {
         }
     }
 
-    private static void outputLexicalSVMLightData(Fold<String, RegressionDocumentInstance> fold) throws Exception {
+    private static void outputLexicalSVMLightData(
+            Fold<String, RegressionDocumentInstance> fold) throws Exception {
         String featureType = "lexical";
-        BufferedWriter writer = IOUtils.getBufferedWriter(fold.getFolder() + "fold-" + fold.getIndex() + "-" + featureType + Fold.TrainingExt);
+        BufferedWriter writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+                "fold-" + fold.getIndex() + "-" + featureType + Fold.TrainingExt).getAbsoluteFile());
         for (int idx : fold.getTrainingInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);
             writer.write(inst.getFullVocabSVMLigthString() + "\n");
         }
         writer.close();
 
-        writer = IOUtils.getBufferedWriter(fold.getFolder() + "fold-" + fold.getIndex() + "-" + featureType + Fold.DevelopExt);
+        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+                "fold-" + fold.getIndex() + "-" + featureType + Fold.DevelopExt).getAbsoluteFile());
         for (int idx : fold.getDevelopmentInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);
             writer.write(inst.getFullVocabSVMLigthString() + "\n");
         }
         writer.close();
 
-        writer = IOUtils.getBufferedWriter(fold.getFolder() + "fold-" + fold.getIndex() + "-" + featureType + Fold.TestExt);
+        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+                "fold-" + fold.getIndex() + "-" + featureType + Fold.TestExt).getAbsoluteFile());
         for (int idx : fold.getTestingInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);
             writer.write(inst.getFullVocabSVMLigthString() + "\n");

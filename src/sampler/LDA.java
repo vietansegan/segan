@@ -1,18 +1,18 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampler;
 
 import core.AbstractSampler;
+import data.TextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.InputStreamReader;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
+import main.CLIUtils;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import sampling.likelihood.DirichletMultinomialModel;
 import util.IOUtils;
 import util.MiscUtils;
@@ -20,10 +20,11 @@ import util.SamplerUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
+ * Implementation of a Gibbs sampler for LDA.
  *
  * @author vietan
  */
-public class LDASampler extends AbstractSampler {
+public class LDA extends AbstractSampler {
 
     public static final int ALPHA = 0;
     public static final int BETA = 1;
@@ -44,6 +45,9 @@ public class LDASampler extends AbstractSampler {
             AbstractSampler.InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
+        if (verbose) {
+            logln("Configuring ...");
+        }
         this.folder = folder;
         this.words = words;
 
@@ -66,6 +70,19 @@ public class LDASampler extends AbstractSampler {
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.setName();
+
+        if (verbose) {
+            logln("--- folder\t" + folder);
+            logln("--- # topics:\t" + K);
+            logln("--- vocab size:\t" + V);
+            logln("--- alpha:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA)));
+            logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
+            logln("--- burn-in:\t" + BURN_IN);
+            logln("--- max iter:\t" + MAX_ITER);
+            logln("--- sample lag:\t" + LAG);
+            logln("--- paramopt:\t" + paramOptimized);
+            logln("--- initialize:\t" + initState);
+        }
     }
 
     protected void setName() {
@@ -121,16 +138,15 @@ public class LDASampler extends AbstractSampler {
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
+                double changeRatio = (double) numTokensChanged / numTokens;
+                String str = "Iter " + iter
+                        + ". llh = " + MiscUtils.formatDouble(loglikelihood)
+                        + ". numTokensChanged = " + numTokensChanged
+                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
                 if (iter < BURN_IN) {
-                    logln("--- Burning in. Iter " + iter
-                            + ". llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + ". numTokensChanged = " + numTokensChanged
-                            + ". change ratio = " + MiscUtils.formatDouble((double) numTokensChanged / numTokens));
+                    logln("--- Burning in. " + str);
                 } else {
-                    logln("--- Sampling. Iter " + iter
-                            + ". llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + ". numTokensChanged = " + numTokensChanged
-                            + ". change ratio = " + MiscUtils.formatDouble((double) numTokensChanged / numTokens));
+                    logln("--- Sampling. " + str);
                 }
             }
         }
@@ -212,16 +228,15 @@ public class LDASampler extends AbstractSampler {
             logLikelihoods.add(loglikelihood);
 
             if (verbose && iter % REP_INTERVAL == 0) {
+                double changeRatio = (double) numTokensChanged / numTokens;
+                String str = "Iter " + iter
+                        + ". llh = " + MiscUtils.formatDouble(loglikelihood)
+                        + ". numTokensChanged = " + numTokensChanged
+                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
                 if (iter < BURN_IN) {
-                    logln("--- Burning in. Iter " + iter
-                            + ". llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + ". numTokensChanged = " + numTokensChanged
-                            + ". change ratio = " + MiscUtils.formatDouble((double) numTokensChanged / numTokens));
+                    logln("--- Burning in. " + str);
                 } else {
-                    logln("--- Sampling. Iter " + iter
-                            + ". llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + ". numTokensChanged = " + numTokensChanged
-                            + ". change ratio = " + MiscUtils.formatDouble((double) numTokensChanged / numTokens));
+                    logln("--- Sampling. " + str);
                 }
             }
         }
@@ -310,20 +325,20 @@ public class LDASampler extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(String filepath, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
 
         if (verbose) {
-            System.out.println("Outputing topics to file " + filepath);
+            System.out.println("Outputing topics to file " + file);
         }
 
         double[][] distrs = new double[K][];
         for (int k = 0; k < K; k++) {
             distrs[k] = topic_words[k].getDistribution();
         }
-        IOUtils.outputTopWords(distrs, wordVocab, numTopWords, filepath);
+        IOUtils.outputTopWords(distrs, wordVocab, numTopWords, file);
     }
 
     public void outputTopicTopWordsCummProbs(String filepath, int numTopWords) throws Exception {
@@ -436,7 +451,7 @@ public class LDASampler extends AbstractSampler {
 
             // read in model
             ZipEntry modelEntry = entries.nextElement();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(modelEntry), "UTF-8"));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFile, modelEntry);
             for (int k = 0; k < K; k++) {
                 reader.readLine();
                 double concentration = Double.parseDouble(reader.readLine());
@@ -454,7 +469,7 @@ public class LDASampler extends AbstractSampler {
 
             // read in assignment
             ZipEntry assignEntry = entries.nextElement();
-            reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(assignEntry), "UTF-8"));
+            reader = IOUtils.getBufferedReader(zipFile, assignEntry);
             for (int d = 0; d < D; d++) {
                 reader.readLine();
                 double concentration = Double.parseDouble(reader.readLine());
@@ -494,18 +509,24 @@ public class LDASampler extends AbstractSampler {
         }
     }
 
+    /**
+     * Output topic coherence
+     *
+     * @param file Output file
+     * @param topicCoherence Topic coherence
+     */
     public void outputTopicCoherence(
-            String filepath,
+            File file,
             MimnoTopicCoherence topicCoherence) throws Exception {
         if (verbose) {
-            System.out.println("Outputing topic coherence to file " + filepath);
+            System.out.println("Outputing topic coherence to file " + file);
         }
 
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < K; k++) {
             double[] distribution = this.topic_words[k].getDistribution();
             int[] topic = SamplerUtils.getSortedTopic(distribution);
@@ -529,12 +550,12 @@ public class LDASampler extends AbstractSampler {
         return docEmpDists;
     }
 
-    public void outputDocTopicDistributions(String filepath) throws Exception {
+    public void outputDocTopicDistributions(File file) throws Exception {
         if (verbose) {
-            logln("Outputing per-document topic distribution to " + filepath);
+            logln("Outputing per-document topic distribution to " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int d = 0; d < D; d++) {
             writer.write(Integer.toString(d));
             double[] docTopicDist = this.doc_topics[d].getDistribution();
@@ -546,12 +567,12 @@ public class LDASampler extends AbstractSampler {
         writer.close();
     }
 
-    public void outputTopicWordDistributions(String filepath) throws Exception {
+    public void outputTopicWordDistributions(File file) throws Exception {
         if (verbose) {
-            logln("Outputing per-topic word distribution to " + filepath);
+            logln("Outputing per-topic word distribution to " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < K; k++) {
             writer.write(Integer.toString(k));
             double[] topicWordDist = this.topic_words[k].getDistribution();
@@ -561,5 +582,109 @@ public class LDASampler extends AbstractSampler {
             writer.write("\n");
         }
         writer.close();
+    }
+
+    public static void main(String[] args) {
+        run(args);
+    }
+
+    public static void run(String[] args) {
+        try {
+            // create the command line parser
+            parser = new BasicParser();
+
+            // create the Options
+            options = new Options();
+
+            // directories
+            addOption("dataset", "Dataset");
+            addOption("output", "Output folder");
+            addOption("folder", "Processed data folder");
+            addOption("format-folder", "Folder holding formatted data");
+            addOption("format-file", "Format file name");
+
+            // sampling configurations
+            addOption("burnIn", "Burn-in");
+            addOption("maxIter", "Maximum number of iterations");
+            addOption("sampleLag", "Sample lag");
+            addOption("report", "Report interval.");
+
+            // model parameters
+            addOption("K", "Number of topics");
+            addOption("numTopwords", "Number of top words per topic");
+
+            // model hyperparameters
+            addOption("alpha", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for topic distributions");
+            addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for word distributions");
+
+            options.addOption("paramOpt", false, "Whether hyperparameter "
+                    + "optimization using slice sampling is performed");
+            options.addOption("v", false, "verbose");
+            options.addOption("d", false, "debug");
+            options.addOption("help", false, "Help");
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp("java -cp dist/segan.jar main.RunLDA -help", options);
+                return;
+            }
+
+            // data 
+            String datasetName = cmd.getOptionValue("dataset");
+            String datasetFolder = cmd.getOptionValue("folder");
+            String outputFolder = cmd.getOptionValue("output");
+            String formatFolder = cmd.getOptionValue("format-folder");
+            int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+            String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+
+            // sampler
+            int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+            int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+            int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+            int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+            int K = CLIUtils.getIntegerArgument(cmd, "K", 25);
+            double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+            double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+            boolean paramOpt = cmd.hasOption("paramOpt");
+            boolean verbose = cmd.hasOption("v");
+            boolean debug = cmd.hasOption("d");
+
+            if (verbose) {
+                System.out.println("Loading data ...");
+            }
+            TextDataset dataset = new TextDataset(datasetName, datasetFolder);
+            dataset.setFormatFilename(formatFile);
+            dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder));
+            dataset.prepareTopicCoherence(numTopWords);
+
+            int V = dataset.getWordVocab().size();
+            InitialState initState = InitialState.RANDOM;
+
+            if (verbose) {
+                System.out.println("Running LDA ...");
+            }
+            LDA sampler = new LDA();
+            sampler.setVerbose(verbose);
+            sampler.setDebug(debug);
+            sampler.setWordVocab(dataset.getWordVocab());
+
+            sampler.configure(outputFolder, dataset.getWords(),
+                    V, K, alpha, beta, initState, paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+
+            File ldaFolder = new File(outputFolder, sampler.getSamplerFolder());
+            IOUtils.createFolder(ldaFolder);
+            sampler.sample();
+            sampler.outputTopicTopWords(new File(ldaFolder, TopWordFile), numTopWords);
+            sampler.outputTopicCoherence(new File(ldaFolder, TopicCoherenceFile), dataset.getTopicCoherence());
+            sampler.outputDocTopicDistributions(new File(ldaFolder, "doc-topic.txt"));
+            sampler.outputTopicWordDistributions(new File(ldaFolder, "topic-word.txt"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            CLIUtils.printHelp("java -cp '<path>/segan.jar' sampler.LDA -help", options);
+            System.exit(1);
+        }
     }
 }

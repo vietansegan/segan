@@ -4,15 +4,12 @@
  */
 package sampler.backup;
 
-import sampler.supervised.objective.GaussianHierLinearRegObjective;
-import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,13 +17,15 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import sampler.LDASampler;
+import sampler.LDA;
+import sampler.supervised.objective.GaussianHierLinearRegObjective;
+import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -344,7 +343,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         int lda_burnin = 10;
         int lda_maxiter = 100;
         int lda_samplelag = 10;
-        LDASampler lda = new LDASampler();
+        LDA lda = new LDA();
         lda.setDebug(debug);
         lda.setVerbose(verbose);
         lda.setLog(false);
@@ -376,7 +375,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
                 ldaZ = lda.getZ();
                 outputLDAInitialization(ldaFile, ldaZ);
                 lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(this.folder + "lda-topwords.txt", 15);
+                lda.outputTopicTopWords(new File(this.folder, "lda-topwords.txt"), 15);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -3014,7 +3013,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         }
     }
 
-    class SNode extends Node<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
 
         private final int born;
         private int numCustomers;

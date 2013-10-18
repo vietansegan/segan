@@ -6,14 +6,14 @@ package sampler.dynamic;
 
 import java.util.HashMap;
 import sampling.likelihood.LogisticNormalModel;
-import sampling.util.Node;
+import sampling.util.TreeNode;
 import util.MiscUtils;
 
 /**
  *
  * @author vietan
  */
-public class DNCRPNode extends Node<DNCRPNode, LogisticNormalModel> {
+public class DNCRPNode extends TreeNode<DNCRPNode, LogisticNormalModel> {
 
     public static final int PSEUDO_CHILD_INDEX = -1;
     public static final String EMPTY_NODE_PATH = "*";

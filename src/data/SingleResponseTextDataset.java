@@ -30,6 +30,19 @@ public class SingleResponseTextDataset extends TextDataset {
         return this.responses;
     }
 
+    public void setResponses(double[] responses) {
+        this.responses = responses;
+    }
+    
+    public double[] getResponses(ArrayList<Integer> instances) {
+        double[] res = new double[instances.size()];
+        for (int i = 0; i < res.length; i++) {
+            int idx = instances.get(i);
+            res[i] = responses[idx];
+        }
+        return res;
+    }
+    
     public void loadResponses(String responseFilepath) throws Exception {
         logln("--- Loading response from file " + responseFilepath);
 
@@ -52,7 +65,7 @@ public class SingleResponseTextDataset extends TextDataset {
 
     @Override
     protected void outputInfo(String outputFolder) throws Exception {
-        File outputFile = new File(outputFolder, name + docInfoExt);
+        File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile);
         
         BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);

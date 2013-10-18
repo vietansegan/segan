@@ -20,10 +20,10 @@ import java.util.zip.ZipOutputStream;
 import optimization.GurobiMultipleLinearRegression;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -2343,7 +2343,7 @@ public class BackgroundLexicalMSHLDASampler extends AbstractSampler {
         }
     }
 
-    class SNode extends Node<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
 
         private final int born;
         private int numCustomers;

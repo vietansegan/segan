@@ -32,7 +32,7 @@ public class StateObjective implements Optimizable.ByGradientValue {
     public double getValue() {
         double value = 0.0;
 
-        for (int obs : counts.getUniqueObservations()) {
+        for (int obs : counts.getIndices()) {
             value += counts.getCount(obs) * parameters[obs];
         }
 

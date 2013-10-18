@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package core;
 
 import java.io.BufferedWriter;
@@ -10,6 +6,12 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -19,7 +21,8 @@ import util.RankingItem;
  * @author vietan
  */
 public abstract class AbstractSampler {
-
+    public static final String TopWordFile = AbstractExperiment.TopWordFile;
+    public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
     public static final String ReportFolder = "report/";
     public static final String AssignmentFileExt = ".assignment";
     public static final String ModelFileExt = ".model";
@@ -60,6 +63,18 @@ public abstract class AbstractSampler {
     protected boolean log = true;
     protected boolean report = false;
     protected BufferedWriter logger;
+    
+    protected static CommandLineParser parser;
+    protected static Options options;
+    protected static CommandLine cmd;
+    
+    protected static void addOption(String optName, String optDesc){
+        options.addOption(OptionBuilder.withLongOpt(optName)
+                    .withDescription(optDesc)
+                    .hasArg()
+                    .withArgName(optName)
+                    .create());
+    }
 
     public void setSamplerConfiguration(int burn_in, int max_iter, int lag, int repInt) {
         BURN_IN = burn_in;
@@ -82,13 +97,52 @@ public abstract class AbstractSampler {
 
     public abstract void updateHyperparameters(ArrayList<Double> newParams);
 
-    public abstract String getCurrentState();
-
     public abstract void validate(String msg);
 
     public abstract void outputState(String filepath);
 
     public abstract void inputState(String filepath);
+    
+    public String getCurrentState() {
+        StringBuilder str = new StringBuilder();
+        return str.toString();
+    }
+
+    public void outputState(File file) {
+        if (verbose) {
+            logln("Outputing model state to " + file);
+        }
+        this.outputState(file.getAbsolutePath());
+    }
+
+    public void inputState(File file) {
+        if (verbose) {
+            logln("Inputing model state from " + file);
+        }
+        this.inputState(file.getAbsolutePath());
+    }
+
+    protected void outputZipFile(
+            String filepath,
+            String modelStr,
+            String assignStr) throws Exception {
+        String filename = IOUtils.removeExtension(IOUtils.getFilename(filepath));
+        ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
+
+        ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
+        writer.putNextEntry(modelEntry);
+        byte[] data = modelStr.getBytes();
+        writer.write(data, 0, data.length);
+        writer.closeEntry();
+
+        ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
+        writer.putNextEntry(assignEntry);
+        data = assignStr.getBytes();
+        writer.write(data, 0, data.length);
+        writer.closeEntry();
+
+        writer.close();
+    }
 
     public void setWordVocab(ArrayList<String> vocab) {
         this.wordVocab = vocab;
@@ -110,7 +164,7 @@ public abstract class AbstractSampler {
     public String getSamplerFolder() {
         return this.getSamplerName() + "/";
     }
-    
+
     public String getSamplerFolderPath() {
         return new File(folder, name).getAbsolutePath();
     }
@@ -229,6 +283,10 @@ public abstract class AbstractSampler {
 
     public void setParamsOptimized(boolean po) {
         this.paramOptimized = po;
+    }
+
+    public void outputSampledHyperparameters(File file) throws Exception {
+        this.outputSampledHyperparameters(file.getAbsoluteFile());
     }
 
     public void outputSampledHyperparameters(String filepath) throws Exception {

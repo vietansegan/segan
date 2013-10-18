@@ -13,7 +13,7 @@ import java.util.Queue;
 import java.util.Stack;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -833,7 +833,7 @@ public class HLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    class HLDANode extends Node<HLDANode, DirichletMultinomialModel> {
+    class HLDANode extends TreeNode<HLDANode, DirichletMultinomialModel> {
 
         private final int born;
         int numCustomers;

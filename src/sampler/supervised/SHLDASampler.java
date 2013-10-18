@@ -22,7 +22,7 @@ import java.util.zip.ZipOutputStream;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -2312,7 +2312,7 @@ public class SHLDASampler extends AbstractSampler {
 //        }
     }
 
-    class SHLDANode extends Node<SHLDANode, DirichletMultinomialModel> {
+    class SHLDANode extends TreeNode<SHLDANode, DirichletMultinomialModel> {
 
         private final int born;
         private int numCustomers;

@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampler.backup;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
@@ -21,7 +17,7 @@ import java.util.zip.ZipOutputStream;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.likelihood.TruncatedStickBreaking;
-import sampling.util.Node;
+import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -1367,7 +1363,7 @@ public class SHLDASampler extends AbstractSampler {
     }
 }
 
-class SHLDANode extends Node<SHLDANode, DirichletMultinomialModel> {
+class SHLDANode extends TreeNode<SHLDANode, DirichletMultinomialModel> {
 
     private int numCustomers;
     private SHLDANode pseudoChild;

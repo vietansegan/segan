@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package data;
 
 import java.io.BufferedWriter;
@@ -24,12 +20,13 @@ import opennlp.tools.tokenize.TokenizerME;
 import opennlp.tools.tokenize.TokenizerModel;
 import org.apache.commons.math3.stat.inference.ChiSquareTest;
 import util.IOUtils;
+import util.MiscUtils;
 import util.RankingItem;
 import util.Stemmer;
 import util.StopwordRemoval;
-import weka.core.stemmers.SnowballStemmer;
 
 /**
+ * Process text data
  *
  * @author vietan
  */
@@ -67,13 +64,13 @@ public class CorpusProcessor {
     private ArrayList<String> vocabulary;
     private int[][] numericDocs;
     private int[][][] numericSentences;
-    private String[][] rawSentences;
+//    private String[][] rawSentences;
     private Pattern p = Pattern.compile("\\p{Punct}");
 
     public CorpusProcessor(
-            int unigramCountCutoff, // 
-            int bigramCountCutoff, // 
-            double bigramScoreCutoff, //
+            int unigramCountCutoff,
+            int bigramCountCutoff,
+            double bigramScoreCutoff,
             int maxVocabSize,
             int vocTermFreqMinCutoff,
             int vocTermFreqMaxCutoff,
@@ -182,11 +179,66 @@ public class CorpusProcessor {
         return this.numericSentences;
     }
 
-    public String[][] getRawSentences() {
-        return this.rawSentences;
+    /**
+     * Segment sentences
+     */
+    private String[][] segmentSentences(String[] rawDocuments) {
+        if (verbose) {
+            System.out.println("Segmenting sentences ...");
+        }
+        if (sentenceDetector == null) {
+            throw new RuntimeException("Sentence detector is not initialized.");
+        }
+        int D = rawDocuments.length;
+        String[][] rawSentences = new String[D][];
+        int step = MiscUtils.getRoundStepSize(D, 10);
+        for (int d = 0; d < D; d++) {
+            if (verbose && d % step == 0) {
+                System.out.println("--- Segmenting sentences " + d + " / " + D);
+            }
+
+            rawSentences[d] = sentenceDetector.sentDetect(rawDocuments[d]);
+        }
+        return rawSentences;
     }
 
-    public void process() {
+    /**
+     * Tokenize sentences and filter tokens
+     *
+     * @param rawSentences
+     */
+    private String[][][] normalizeTokens(String[][] rawSentences) {
+        if (verbose) {
+            System.out.println("Normalizing tokens ...");
+        }
+
+        String[][][] normTexts = new String[rawTexts.length][][];
+        int D = rawSentences.length;
+        int step = MiscUtils.getRoundStepSize(D, 10);
+        for (int d = 0; d < D; d++) {
+            if (verbose && d % step == 0) {
+                System.out.println("--- Normalizing tokens d = " + d + " / " + D);
+            }
+            normTexts[d] = new String[rawSentences[d].length][];
+            for (int s = 0; s < rawSentences[d].length; s++) {
+                String[] sentTokens = tokenizer.tokenize(rawSentences[d][s].toLowerCase());
+                normTexts[d][s] = new String[sentTokens.length];
+                for (int t = 0; t < sentTokens.length; t++) {
+                    String normToken = normalize(sentTokens[t]);
+                    normTexts[d][s][t] = normToken;
+                }
+            }
+        }
+
+        return normTexts;
+    }
+
+    /**
+     * Process a set of documents with an existing vocabulary
+     *
+     * @param voc An existing vocabulary
+     */
+    public void process(ArrayList<String> voc) {
         if (rawTexts == null) {
             throw new RuntimeException("Raw texts have not been initialized yet");
         }
@@ -195,24 +247,110 @@ public class CorpusProcessor {
         if (verbose) {
             System.out.println("Tokenizing and counting ...");
         }
-        String[][][] normTexts = new String[rawTexts.length][][];
-        this.rawSentences = new String[rawTexts.length][];
-        this.numericSentences = new int[rawTexts.length][][];
 
+        // segment sentences
+        String[][] rawSentences = this.segmentSentences(this.rawTexts);
+
+        // tokenize sentences and normalize tokens
+        String[][][] normTexts = this.normalizeTokens(rawSentences);
+
+        // keep only unigrams and bigrams in the given vocab
+        for (int d = 0; d < normTexts.length; d++) {
+            for (int s = 0; s < normTexts[d].length; s++) {
+                ArrayList<String> tokens = new ArrayList<String>();
+                for (int i = 0; i < normTexts[d][s].length; i++) {
+                    String curToken = normTexts[d][s][i];
+                    if (curToken.isEmpty()) {
+                        continue;
+                    }
+
+                    if (i + 1 < normTexts[d][s].length
+                            && !normTexts[d][s][i + 1].isEmpty()) {
+                        String bigram = getBigramString(normTexts[d][s][i], normTexts[d][s][i + 1]);
+                        if (!voc.contains(bigram)) {
+                            continue;
+                        }
+                        tokens.add(bigram);
+                        i++;
+                    } else {
+                        if (voc.contains(curToken)) {
+                            tokens.add(curToken);
+                        }
+                    }
+                    normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
+                }
+            }
+
+
+            this.numericSentences = new int[rawTexts.length][][];
+        }
+
+        this.vocabulary = voc;
+        this.numericDocs = new int[rawTexts.length][];
+        this.numericSentences = new int[rawTexts.length][][];
+        for (int d = 0; d < this.numericDocs.length; d++) { // for each document
+            ArrayList<Integer> numericDoc = new ArrayList<Integer>();
+            this.numericSentences[d] = new int[normTexts[d].length][];
+            for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
+                ArrayList<Integer> numericSent = new ArrayList<Integer>();
+                for (int w = 0; w < normTexts[d][s].length; w++) {
+                    int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                    if (numericTerm < 0) // this term is out-of-vocab
+                    {
+                        continue;
+                    }
+                    numericDoc.add(numericTerm);
+                    numericSent.add(numericTerm);
+                }
+
+                this.numericSentences[d][s] = new int[numericSent.size()];
+                for (int i = 0; i < numericSent.size(); i++) {
+                    this.numericSentences[d][s][i] = numericSent.get(i);
+                }
+            }
+            this.numericDocs[d] = new int[numericDoc.size()];
+            for (int i = 0; i < numericDoc.size(); i++) {
+                this.numericDocs[d][i] = numericDoc.get(i);
+            }
+        }
+    }
+
+    /**
+     * Process a set of documents
+     */
+    public void process() {
+        if (rawTexts == null) {
+            throw new RuntimeException("Raw texts have not been initialized yet");
+        }
+
+        if (vocabulary != null) {
+            if (verbose) {
+                System.out.println("Using exisitng vocabulary ...");
+            }
+            this.process(vocabulary);
+            return;
+        }
+
+        // tokenize and normalize texts
+        if (verbose) {
+            System.out.println("Tokenizing and counting ...");
+        }
+        String[][][] normTexts = new String[rawTexts.length][][];
+        String[][] rawSentences = new String[rawTexts.length][];
+        int stepsize = MiscUtils.getRoundStepSize(rawTexts.length, 10);
         for (int d = 0; d < rawTexts.length; d++) {
-            if (verbose && d % 500 == 0) {
+            if (verbose && d % stepsize == 0) {
                 System.out.println("--- Tokenizing doc # " + d + " / " + rawTexts.length);
             }
 
             Set<String> uniqueDocTokens = new HashSet<String>();
-
             String rawText = rawTexts[d];
-            this.rawSentences[d] = sentenceDetector.sentDetect(rawText);
+            rawSentences[d] = sentenceDetector.sentDetect(rawText);
 
-            normTexts[d] = new String[this.rawSentences[d].length][];
+            normTexts[d] = new String[rawSentences[d].length][];
 
-            for (int s = 0; s < this.rawSentences[d].length; s++) {
-                String[] sentTokens = tokenizer.tokenize(this.rawSentences[d][s].toLowerCase());
+            for (int s = 0; s < rawSentences[d].length; s++) {
+                String[] sentTokens = tokenizer.tokenize(rawSentences[d][s].toLowerCase());
                 normTexts[d][s] = new String[sentTokens.length];
 
                 for (int t = 0; t < sentTokens.length; t++) {
@@ -220,14 +358,14 @@ public class CorpusProcessor {
                     normTexts[d][s][t] = normToken;
 
                     if (!normToken.isEmpty()) {
-                        incrementMap(termFreq, normToken);
+                        MiscUtils.incrementMap(termFreq, normToken);
                         uniqueDocTokens.add(normToken);
 
                         if (t - 1 >= 0 && !normTexts[d][s][t - 1].isEmpty()) {
                             String preToken = normTexts[d][s][t - 1];
-                            incrementMap(leftFreq, preToken);
-                            incrementMap(rightFreq, normToken);
-                            incrementMap(bigramFreq, getBigramString(preToken, normToken));
+                            MiscUtils.incrementMap(leftFreq, preToken);
+                            MiscUtils.incrementMap(rightFreq, normToken);
+                            MiscUtils.incrementMap(bigramFreq, getBigramString(preToken, normToken));
                             totalBigram++;
                         }
                     }
@@ -235,15 +373,18 @@ public class CorpusProcessor {
             }
 
             for (String uniToken : uniqueDocTokens) {
-                incrementMap(docFreq, uniToken);
+                MiscUtils.incrementMap(docFreq, uniToken);
             }
         }
 
         // debug
         if (verbose) {
-            System.out.println("--- # raw unique unigrams: " + termFreq.size() + ". " + docFreq.size());
+            System.out.println("--- # raw unique unigrams: " + termFreq.size() 
+                    + ". " + docFreq.size());
             System.out.println("--- # raw unique bigrams: " + bigramFreq.size());
-            System.out.println("--- # left: " + leftFreq.size() + ". # right: " + rightFreq.size() + ". total: " + totalBigram);
+            System.out.println("--- # left: " + leftFreq.size() 
+                    + ". # right: " + rightFreq.size() 
+                    + ". total: " + totalBigram);
         }
 
         // score bigrams
@@ -273,11 +414,11 @@ public class CorpusProcessor {
         if (verbose) {
             System.out.println("Merging unigrams to create bigram ...");
         }
-
         HashMap<String, Integer> finalTermFreq = new HashMap<String, Integer>();
         HashMap<String, Integer> finalDocFreq = new HashMap<String, Integer>();
 
         for (int d = 0; d < normTexts.length; d++) {
+            Set<String> docUniqueTerms = new HashSet<String>();
             for (int s = 0; s < normTexts[d].length; s++) {
                 ArrayList<String> tokens = new ArrayList<String>();
                 for (int i = 0; i < normTexts[d][s].length; i++) {
@@ -293,7 +434,7 @@ public class CorpusProcessor {
                             continue;
                         }
                         tokens.add(bigram);
-                        incrementMap(finalTermFreq, bigram);
+                        MiscUtils.incrementMap(finalTermFreq, bigram);
                         i++;
                     } else {
                         if (termFreq.get(curToken) < this.unigramCountCutoff) {
@@ -301,36 +442,44 @@ public class CorpusProcessor {
                         }
                         tokens.add(curToken);
                         vocab.add(curToken);
-
-                        incrementMap(finalTermFreq, curToken);
+                        MiscUtils.incrementMap(finalTermFreq, curToken);
                     }
                 }
                 normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
 
-                Set<String> uniqueTerms = new HashSet<String>();
-                uniqueTerms.addAll(Arrays.asList(normTexts[d][s]));
-                for (String ut : uniqueTerms) {
-                    incrementMap(finalDocFreq, ut);
-                }
+                // union
+                docUniqueTerms.addAll(Arrays.asList(normTexts[d][s]));
+            }
+            
+            // update document frequencies
+            for (String ut : docUniqueTerms) {
+                MiscUtils.incrementMap(finalDocFreq, ut);
             }
         }
 
         // finalize
         ArrayList<RankingItem<String>> rankVocab = new ArrayList<RankingItem<String>>();
         for (String term : finalTermFreq.keySet()) {
-            int tf = finalTermFreq.get(term);
+            int rawTf = finalTermFreq.get(term);
             int df = finalDocFreq.get(term);
 
-            if (tf < this.vocabTermFreqMinCutoff
-                    || tf > this.vocabTermFreqMaxCutoff
+            if (rawTf < this.vocabTermFreqMinCutoff
+                    || rawTf > this.vocabTermFreqMaxCutoff
                     || df < this.vocabDocFreqMinCutoff
                     || df > this.vocabDocFreqMaxCutoff) {
                 continue;
             }
-            double tfidf = finalTermFreq.get(term) * (Math.log(rawTexts.length) - Math.log(finalDocFreq.get(term)));
+            
+            double tf = Math.log(rawTf + 1);
+            double idf = Math.log(rawTexts.length) - Math.log(df);
+            double tfidf = tf * idf;
             rankVocab.add(new RankingItem<String>(term, tfidf));
         }
         Collections.sort(rankVocab);
+
+        if (verbose) {
+            System.out.println("Raw vocab size: " + rankVocab.size());
+        }
 
         int vocabSize = Math.min(maxVocabSize, rankVocab.size());
         this.vocabulary = new ArrayList<String>();
@@ -340,15 +489,16 @@ public class CorpusProcessor {
         Collections.sort(this.vocabulary);
 
         this.numericDocs = new int[rawTexts.length][];
+        this.numericSentences = new int[rawTexts.length][][];
         for (int d = 0; d < this.numericDocs.length; d++) { // for each document
             ArrayList<Integer> numericDoc = new ArrayList<Integer>();
             this.numericSentences[d] = new int[normTexts[d].length][];
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
-                    if (numericTerm < 0) // this term is out-of-vocab
-                    {
+                    int numericTerm = 
+                            Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                    if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
                     numericDoc.add(numericTerm);
@@ -379,17 +529,15 @@ public class CorpusProcessor {
         counts[0][1] = this.rightFreq.get(right) - counts[0][0];
         counts[1][1] = this.totalBigram - counts[0][0] - counts[0][1] - counts[1][0];
         double chisquareValue = this.chiSquareTest.chiSquare(counts);
-
-        // debug
-//        System.out.println(counts[0][0] + ". " + counts[0][1] + ". " + counts[1][0] + ". " + counts[1][1] 
-//                + " ---> " + chisquareValue
-//                + ". " + this.chiSquareTest.chiSquareTest(counts));
-
         return chisquareValue;
     }
 
     public void outputDetailedBigrams(String filepath) throws Exception {
+        if (verbose) {
+            System.out.println("--- Outputing detailed bigrams to " + filepath);
+        }
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        writer.write("bigram-score-cutoff:\t" + this.bigramCountCutoff + "\n");
         for (String bigram : bigramFreq.keySet()) {
             String[] bigramTokens = getTokensFromBigram(bigram);
             String left = bigramTokens[0];
@@ -410,8 +558,8 @@ public class CorpusProcessor {
                     + "\t" + counts[0][1]
                     + "\t" + counts[1][0]
                     + "\t" + counts[1][1]
-                    + "\t" + chisquareValue
-                    + "\t" + pValue);
+                    + "\t" + MiscUtils.formatDouble(chisquareValue)
+                    + "\t" + MiscUtils.formatDouble(pValue));
 
             if (chisquareValue >= this.bigramScoreCutoff) {
                 writer.write("\t1\n");
@@ -423,6 +571,10 @@ public class CorpusProcessor {
     }
 
     public void outputDetailedVocab(String filepath) throws Exception {
+        if (verbose) {
+            System.out.println("--- Outputing detailed vocab to " + filepath);
+        }
+
         HashMap<Integer, Integer> numericTermFreq = new HashMap<Integer, Integer>();
         HashMap<Integer, Integer> numericDocFreq = new HashMap<Integer, Integer>();
         for (int d = 0; d < this.numericDocs.length; d++) {
@@ -430,39 +582,51 @@ public class CorpusProcessor {
             for (int i = 0; i < this.numericDocs[d].length; i++) {
                 int term = this.numericDocs[d][i];
                 docTerms.add(term);
-
-                Integer count = numericTermFreq.get(term);
-                if (count == null) {
-                    numericTermFreq.put(term, 1);
-                } else {
-                    numericTermFreq.put(term, count + 1);
-                }
+                MiscUtils.incrementMap(numericTermFreq, term);
             }
 
             for (int term : docTerms) {
-                Integer count = numericDocFreq.get(term);
-                if (count == null) {
-                    numericDocFreq.put(term, 1);
-                } else {
-                    numericDocFreq.put(term, count + 1);
-                }
+                MiscUtils.incrementMap(numericDocFreq, term);
             }
         }
-
 
         // debug
         for (int i = 0; i < vocabulary.size(); i++) {
             if (numericTermFreq.get(i) == null) {
-                System.out.println(i + "\t" + vocabulary.get(i));
+                System.out.println(i + "\t" + vocabulary.get(i)
+                        + "\tnull");
             }
         }
 
+        // sort terms according to TF-IDF
+        ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
+        for (int ii = 0; ii < this.vocabulary.size(); ii++) {
+            int rawTf = numericTermFreq.get(ii);
+            double tf = Math.log(rawTf + 1);
+            int df = numericDocFreq.get(ii);
+            double idf = (Math.log(numericDocs.length) - Math.log(df));
+            double tfidf = tf * idf;
+            rankItems.add(new RankingItem<Integer>(ii, tfidf));
+        }
+        Collections.sort(rankItems);
+
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        writer.write("Type\tRawTF\tTF\tDF\tIDF\tTFIDF\n");
         for (int i = 0; i < this.vocabulary.size(); i++) {
-            int tf = numericTermFreq.get(i);
-            int df = numericDocFreq.get(i);
-            double tfidf = tf * (Math.log(numericDocs.length) - Math.log(df));
-            writer.write(vocabulary.get(i) + "\t" + tf + "\t" + df + "\t" + tfidf + "\n");
+            RankingItem<Integer> item = rankItems.get(i);
+            int rawTf = numericTermFreq.get(item.getObject());
+            double tf = Math.log(rawTf + 1);
+            int df = numericDocFreq.get(item.getObject());
+            double idf = (Math.log(numericDocs.length) - Math.log(df));
+            double tfidf = tf * idf;
+            writer.write(vocabulary.get(item.getObject())
+                    + "\t" + rawTf
+                    + "\t" + MiscUtils.formatDouble(tf)
+                    + "\t" + df
+                    + "\t" + MiscUtils.formatDouble(idf)
+                    + "\t" + MiscUtils.formatDouble(tfidf)
+                    + " = " + MiscUtils.formatDouble(item.getPrimaryValue())
+                    + "\n");
         }
         writer.close();
     }
@@ -509,57 +673,5 @@ public class CorpusProcessor {
             return "";
         }
         return reduced;
-    }
-
-    private static void incrementMap(HashMap<String, Integer> map, String key) {
-        Integer count = map.get(key);
-        if (count == null) {
-            map.put(key, 1);
-        } else {
-            map.put(key, count + 1);
-        }
-    }
-
-    public static void main(String[] args) {
-        long[][] array = new long[2][2];
-        array[0][0] = 20;
-        array[0][1] = 20;
-        array[1][0] = 0;
-        array[1][1] = 0;
-        ChiSquareTest cst = new ChiSquareTest();
-        double stat = cst.chiSquare(array);
-        double p = cst.chiSquareTest(array);
-        System.out.println(p);
-        System.out.println(stat);
-//        
-//        try{
-//            String folder = "L:/temp/";
-//            File file = new File(folder);
-//            String[] filenames = file.list();
-//            String[] rawTexts = new String[filenames.length];
-//            for(int i=0; i<filenames.length; i++){
-//                StringBuilder str = new StringBuilder();
-//                
-//                BufferedReader reader = IOUtils.getBufferedReader(folder + filenames[i]);
-//                String line = reader.readLine();
-//                str.append(line);
-//                while((line = reader.readLine()) != null)
-//                    str.append(" ").append(line);
-//                reader.close();
-//                
-//                rawTexts[i] = str.toString();
-//            }
-//            
-//            CorpusProcessor cp = new CorpusProcessor(rawTexts);
-//            cp.count();
-//        }
-//        catch(Exception e){
-//            e.printStackTrace();
-//            System.exit(1);
-//        }
-
-        SnowballStemmer stemmer = new SnowballStemmer();
-        System.out.println(stemmer.stem("companies"));
-        System.out.println(stemmer.stem("computers"));
     }
 }

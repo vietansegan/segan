@@ -4,6 +4,8 @@
  */
 package sampling.util;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -40,13 +42,22 @@ public class SparseCount implements Cloneable {
         this.counts.put(observation, count);
         this.countSum += count - curCount;
     }
-
-    public Set<Integer> getUniqueObservations() {
-        return this.counts.keySet();
-    }
     
+    public ArrayList<Integer> getSortedIndices() {
+        ArrayList<Integer> sortedIndices = new ArrayList<Integer>();
+        for(int ii : getIndices()){
+            sortedIndices.add(ii);
+        }
+        Collections.sort(sortedIndices);
+        return sortedIndices;
+    }
+
     public Set<Integer> getIndices() {
         return this.counts.keySet();
+    }
+
+    public boolean containsIndex(int idx) {
+        return this.counts.containsKey(idx);
     }
 
     public int getCountSum() {
@@ -108,7 +119,7 @@ public class SparseCount implements Cloneable {
     @Override
     public String toString() {
         StringBuilder str = new StringBuilder();
-        for (int obs : this.getUniqueObservations()) {
+        for (int obs : this.getIndices()) {
             str.append(obs).append(":").append(getCount(obs)).append(" ");
         }
         return str.toString();
@@ -126,6 +137,20 @@ public class SparseCount implements Cloneable {
         if (totalCount != this.countSum) {
             throw new RuntimeException(msg + ". Total counts mismatched. " + totalCount + " vs. " + countSum);
         }
+    }
+
+    public static SparseCount add(SparseCount sc1, SparseCount sc2) {
+        SparseCount sc = new SparseCount();
+        for (int key1 : sc1.getIndices()) {
+            sc.changeCount(key1, sc1.getCount(key1) + sc2.getCount(key1));
+        }
+        for (int key2 : sc2.getIndices()) {
+            if (sc1.containsIndex(key2)) {
+                continue;
+            }
+            sc.changeCount(key2, sc1.getCount(key2) + sc2.getCount(key2));
+        }
+        return sc;
     }
 
     public static String output(SparseCount sc) {
@@ -148,5 +173,22 @@ public class SparseCount implements Cloneable {
             }
         }
         return sp;
+    }
+    
+    public static void main(String[] args) {
+        SparseCount sc1 = new SparseCount();
+        sc1.changeCount(0, 1);
+        sc1.changeCount(1, 2);
+        sc1.changeCount(2, 3);
+        SparseCount sc2 = new SparseCount();
+        sc2.changeCount(1, 1);
+        sc2.changeCount(2, 2);
+        sc2.changeCount(3, 3);
+        
+        System.out.println(sc1.toString());
+        System.out.println(sc2.toString());
+        
+        SparseCount sc3 = SparseCount.add(sc1, sc2);
+        System.out.println(sc3.toString());
     }
 }

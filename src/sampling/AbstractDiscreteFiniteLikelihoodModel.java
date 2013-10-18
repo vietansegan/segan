@@ -1,13 +1,9 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampling;
 
-import sampling.util.SparseCount;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Set;
+import sampling.util.SparseCount;
 
 /**
  * An abstract likelihood model of generating countable finite observations.
@@ -68,12 +64,12 @@ public abstract class AbstractDiscreteFiniteLikelihoodModel implements Cloneable
     }
 
     public Set<Integer> getUniqueObservations() {
-        return this.sparseCounts.getUniqueObservations();
+        return this.sparseCounts.getIndices();
     }
 
     public int[] getCounts() {
         int[] counts = new int[this.dimension];
-        for (int obs : this.sparseCounts.getUniqueObservations()) {
+        for (int obs : this.sparseCounts.getIndices()) {
             counts[obs] = this.sparseCounts.getCount(obs);
         }
         return counts;

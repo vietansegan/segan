@@ -8,11 +8,9 @@ import core.AbstractSampler;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.util.SparseCount;
@@ -24,9 +22,9 @@ import util.SamplerUtils;
  *
  * @author vietan
  */
-public class LabeledLDASampler extends AbstractSampler {
+public class PriorLDA extends AbstractSampler {
     public static final int ALPHA = 0;
-    public static final int BETA = 1;
+    public static final int BETA = 1; // 0.1
     public static final int ETA = 2;
     protected int[][] words; // [D] x [N_d]
     protected int[][] topics; // [D] x [T_d] observed topics; for some doc, this can be partially or totally unobserved
@@ -150,7 +148,7 @@ public class LabeledLDASampler extends AbstractSampler {
     private void initializeModelStructure() {
         this.topic_word_dists = new DirichletMultinomialModel[K];
         for (int kk = 0; kk < K; kk++) {
-            this.topic_word_dists[kk] = new DirichletMultinomialModel(V, hyperparams.get(BETA), 1.0 / V);
+            this.topic_word_dists[kk] = new DirichletMultinomialModel(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
     }
 
@@ -371,7 +369,7 @@ public class LabeledLDASampler extends AbstractSampler {
         }
 
         for (int k = 0; k < K; k++) {
-            val += this.topic_word_dists[k].getLogLikelihood(newParams.get(BETA), 1.0 / V);
+            val += this.topic_word_dists[k].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
         }
 
         return val;
@@ -390,7 +388,7 @@ public class LabeledLDASampler extends AbstractSampler {
         }
 
         for (int kk = 0; kk < K; kk++) {
-            this.topic_word_dists[kk].setConcentration(this.hyperparams.get(BETA));
+            this.topic_word_dists[kk].setConcentration(this.hyperparams.get(BETA) * V);
         }
     }
 
@@ -489,10 +487,7 @@ public class LabeledLDASampler extends AbstractSampler {
             logln("--- Loading model from " + zipFilepath);
         }
         String filename = IOUtils.removeExtension(new File(zipFilepath).getName());
-
-        ZipFile zipFile = new ZipFile(zipFilepath);
-        ZipEntry modelEntry = zipFile.getEntry(filename + ModelFileExt);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(modelEntry), "UTF-8"));
+        BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
         K = Integer.parseInt(reader.readLine().split("\t")[1]);
         V = Integer.parseInt(reader.readLine().split("\t")[1]);
         double alpha = Double.parseDouble(reader.readLine().split("\t")[1]);
@@ -529,11 +524,6 @@ public class LabeledLDASampler extends AbstractSampler {
 //    public void outputPredictor(File predictorFile) {
 //        this.outputState(predictorFile.getAbsolutePath());
 //    }
-
-    @Override
-    public String getCurrentState() {
-        return "---";
-    }
 
 //    @Override
 //    public double[] predict(Page page) {
@@ -653,7 +643,7 @@ public class LabeledLDASampler extends AbstractSampler {
         return topicScores;
     }
     
-    public void outputTopicTopWords(String filepath, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -663,10 +653,10 @@ public class LabeledLDASampler extends AbstractSampler {
         }
 
         if (verbose) {
-            logln("Outputing per-topic top words to " + filepath);
+            logln("Outputing per-topic top words to " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < K; k++) {
             double[] distrs = topic_word_dists[k].getDistribution();
             String[] topWords = getTopWords(distrs, numTopWords);
