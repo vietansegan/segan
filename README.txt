@@ -1,144 +1,85 @@
-1. Compile
-   cd <SEGAN_PATH>
-   ant jar
-   cp -r lib dist/
+=== COMPILE ===
+    cd <SEGAN_PATH>
+    ant jar
+    cp -r lib dist/
 
-2. Process data
-To process data from multiple files from a folder
-   cd <SEGAN_PATH>
-   java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset <dataset-name> --text-data <input-text-folder> --response-file <response-file> --otput-folder <output-folder>
+=== PROCESS DATA ===
+The main kind of data that segan deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both.
 
-where
-- <dataset-name>	The name of the dataset
-- <input-text-folder>	The folder that contains input text data, in which each file is one document
-- <response-file>	The file contains the response variable, one line for each document
-- <output-folder>	The folder where the processed data will be stored
+The texts can be stored in either a big file (each line is a document) or a folder (each file is a document).
 
-To process data from a single file, each line is a document with the following format: <doc_id>\t<doc_content>\n
-   cd <SEGAN_PATH>
-   java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset <dataset-name> -file --text-data <input-text-file> --response-file <response-file> --otput-folder <output-folder>
+1. Processing text-only data from multiple files from a folder. The filename will be the document id.
+   java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder>
 
-where
-- <dataset-name>        The name of the dataset
-- <input-text-file>	The file that contains input text data, in which each line is one document
-- <response-file>       The file contains the response variable, one line for each document
-- <output-folder>	The folder where the processed data will be stored
+   - <dataset-name>:	The name of the dataset
+   - <input-text-folder>:	The folder that contains input text data, in which each file is one document
+   - <data-folder>:	The folder where the processed data will be stored
+   - <format-folder>:	The subfolder that the processed data will be stored. More specifically, after running this, the processed data will be stored in "<output-folder>/<dataset-name>/<format-folder>"
 
-For unsupervised models like LDA or HDP, we do not need <response-file>.
+2. Processing text-only data from a single file, in which each line is a document with the following format: <doc_id>\t<doc_content>\n
 
-For more options for processing data
-    java -cp dist/segan.jar main.ProcessData -help
+   java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder>
 
-Examples
-- To process the toydata (from multiple files in a folder)
-    java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset toydata --text-data toydata/text/ --response-file toydata/response.txt --output-folder toydata/processed-data/
+   Other options:
+   --format-file:	By default, all processed data files will be named <dataset-name>.<extension>, e.g., <dataset-name>.dat, <dataset-name>.wvoc etc. If you want to rename the formatted file, use this option.
 
-*** Note
-- If you see the following, they are expected
-Trying to add database driver (JDBC): RmiJdbc.RJDriver - Error, not in CLASSPATH?
-Trying to add database driver (JDBC): jdbc.idbDriver - Error, not in CLASSPATH?
-Trying to add database driver (JDBC): org.gjt.mm.mysql.Driver - Error, not in CLASSPATH?
-Trying to add database driver (JDBC): com.mckoi.JDBCDriver - Error, not in CLASSPATH?
-Trying to add database driver (JDBC): org.hsqldb.jdbcDriver - Error, not in CLASSPATH?
+3. Processing data with continuous response variable. Each document is associated with a single continuous value.
 
-- If you have java.lang.OutOfMemoryError: Java heap space, try to increase the memory allocated for Java by using -Xmx and -Xms options (e.g., -Xmx4096M -Xms4096M to use 4G of RAM)
+   As (1) and (2) but with an additional argument:
+      --response-file <response-file>
+   where <response-file> has the following format: <docid>\t<response_value>\n
 
-3. Run LDA
-To run LDA Gibbs sampler with the default hyperparameter setting
-   java -cp 'dist/segan.jar:dist/lib/*' main.runLDA --dataset <dataset-name> --folder <processed-data-folder> --K <number-of-topics> --output <output-folder>
+4. Processing data with discrete label. Each document is associated with a set of discrete labels.
 
-where
-- <dataset-name>		The name of the dataset
-- <processed-data-folder>	The folder storing the processed data (i.e., the output folder of main.ProcessData above)
-- <number-of-topics>		    Number of topics
-- <output-folder> 		    	   The output folder
+   As (1) and (2) but with an additional argument:
+      --label-file <label-file>
+   where <label-file> has the following format: <docid>\t<label_1>\t<label_2>\t...<\n>
+   
+   Other arguments:
+   --L: Maximum label vocab size
+   --min-label-df: Minimum label frequency
 
-For more options for running LDA
-    java -cp 'dist/segan.jar:dist/lib/*' main.RunLDA -help
+5. Create cross validation data (currently only support data with continuous responses)
 
-Example to run LDA on the processed toydata
-    java -cp 'dist/segan.jar:dist/lib/*' main.RunLDA --dataset toydata --folder toydata/processed-data/ --K 10 --output toydata/lda/ -v -report 20
+   java -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development ratio> --num-classes <number-of-discretized-classes>
 
-4. Run SLDA
-To run SLDA Gibbs sampler with the default hyperparameter setting
-   java -cp 'dist/segan.jar:dist/lib/*' main.runSLDA --dataset <dataset-name> --folder <processed-data-folder> --K <number-of-topics> --output <output-folder>
+   *** Note: --num-classes is the number of classes that the response variable is discretized into, which is used for stratified sampling. For example, if --num-classes = 3, the response variables are discretized into 3 classes, and CreateCrossValidationFolds will try to preserve the distributions of these 3 classes in training, development and test sets. Default, --num-classes = 1.
 
-For more options for running SLDA
-   java -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --help
+=== Run SLDA ===
+1. Run SLDA Gibbs sampler with the default setting
+   java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --K <number-of-topics> -z
 
-Examples
-- To run SLDA on the processed toydata
-   java -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset toydata --folder toydata/processed-data/ --K 10 --output toydata/slda/ -v -report 20
+2. Run SLDA Gibbs sampler for cross validation
+   a) To train on training data
+   
+   java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --K <number-of-topics> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --run-mode train -z
 
-5. Run SHLDA
-To run SHLDA Gibbs sampler with the default settings
-   java -cp 'dist/segan.jar:dist/lib/*' main.runSHLDA --dataset <dataset-name> --folder <processed-data-folder> --output <output-folder>
+   b) To test, use "--run-mode test" instead of "--run-mode train"
 
-For more options for running SHLDA
-    java -cp 'dist/segan.jar:dist/lib/*' main.RunSHLDA --help
+   c) To do both training and test, use "--run-mode train-test" instead
 
-Examples
-- To run SHLDA on the processed toydata
-   java -cp 'dist/segan.jar:dist/lib/*' main.RunSHLDA --dataset toydata --folder toydata/processed-data/ --output toydata/shlda/ -v
+   *** Notes:
+   + --fold: to specify a single fold that you want to run on
+   + -z: to perform z-normalization on the response variable
+   + -v: verbose
+   + -d: debug
 
-6. Create cross validation data
-   java -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds --dataset <dataset-name> --folder <processed-data-folder> --output <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development ratio> --num-classes <number-of-discretized-classes>
+=== Run SHLDA ===
+1. Run SHLDA
+   java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -z
 
-*** Note: --num-classes is the number of classes that the response variable is discretized into, which is used for stratified sampling. For example, if --num-classes = 3, the response variables are discretized into 3 classes, and CreateCrossValidationFolds will try to preserve the distributions of these 3 classes in training, development and test sets. Default, --num-classes = 1.
+2. Run SHLDA for cross validation
+   java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --run-mode <run-mode> -z
 
-Example:
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds --dataset amazon-data --folder amazon-data/processed-data/ --num-folds 5 --tr2dev-ratio 0.8 --num-classes 3 --output amazon-data/crossvalidation-5-0.8/
+=== Examples to process and run models with the accompanied amazon data ===
+* Process data
+  java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset amazon-data -file --text-data demo/amazon-data/raw/text.txt --response-file demo/amazon-data/raw/response.txt --data-folder demo --format-folder format-response --u 5 --b 3 --bs 5 -s -l --V 5000
 
-7. Run SLDA with cross validation data
-7a. To train on training data of all folds
-   java -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset <dataset-name> --folder <processed-data-folder> --K <number-of-topics> --output <output-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --run-mode train
+* Create cross validation
+  java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds --dataset amazon-data --data-folder demo --format-folder format-response --num-folds 5 --tr2dev-ratio 0.8 --num-classes 3 --output demo/amazon-data/format-response/crossvalidation-5-0.8/
 
-Example:
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 250 --maxIter 500 --sampleLag 25 -s -v -d --cv-folder amazon-data/crossvalidation-5-0.8/ --num-folds 5 --run-mode train
+* Run SLDA on the cross validation data
+  java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset amazon-data --data-folder demo --format-folder format-response --output demo/amazon-data/format-response/model --K 25 --cv-folder demo/amazon-data/format-response/crossvalidation-5-0.8 --num-folds 5 --run-mode train-test -v -z
 
-7b. To test on test data of all folds after training: use the same command line except for using 'test' --run-mode
-
-Example:
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 50 --maxIter 100 --sampleLag 10 -s -v -d --cv-folder amazon-data/crossvalidation-5-0.8/ --num-folds 5 --run-mode test
-
-*** Note:
-A) During test time, multiple models outputted during training time (in fold ~/report) will be used, each will run for --maxIter iterations. Thus, if --maxIter is big, this will take a while :).
-
-B) Running test will output various result files which corresponds to different ways of using the Gibbs samples for prediction. The evaluation measurements are Pearson's Correlation Coefficient, Mean Squared Error and R-squared. The result files are:
-- single-final.txt: Using the final predicted values of each individual model to predict
-- single-avg.txt: Using the average predicted values of each individual model to predict
-- multiple-final.txt: Using the final predicted values of each individual model, and average over them to predict
-- multiple-avg.txt: Using the average predicted values of each individual model, and average over them to predict
-More details to come, but if you don't really care about various ways to do prediction, just use the result in 'multiple-avg.txt', which usually gives the best performance.
-
-C) To run on a particular fold, use the "--fold" option. For example, "--fold 0" to run only on fold 0. If no "--fold" option is available, all available folds will be used.
-
-7c. To run both train and test, use 'train-test' --run-mode
-
-Example
-    java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 10 --maxIter 20 --sampleLag 5 -s -v -d --cv-folder amazon-data/crossvalidation-5-0.8/ --num-folds 5 --run-mode train-test
-
-8. To run Lexical SHLDA:
-   - Set up gurobi (see HOWTO.txt)
-   - Use main.RunLexicalSHLDA
-   - Include gurobi.jar in the classpath
-
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' main.RunLexicalSHLDA --dataset 112 --folder /fs/clip-political/vietan/data/govtrack/ --output /fs/clip-political/vietan/data/govtrack/model/lex-shlda -v -report 1 --burnIn 100 --maxIter 200 --sampleLag 5 -s -v -d
-
-*** Example of a pipeline to run SLDA on the amazon reviews
-# compile
-cd <SEGAN_PATH>
-ant jar
-cp -r lib dist/
-
-# process data
-java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.ProcessData --dataset amazon-data -file --text-data amazon-data/text.txt --response-file amazon-data/response.txt --output-folder amazon-data/processed-data/ --u 5 --b 3 --bs 5 -s -l --V 5000
-
-# run SLDA (with z-normalization on the response variable)
-java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 250 --maxIter 500 --sampleLag 25 -s
-
-# create cross validation data
-java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.CreateCrossValidationFolds --dataset amazon-data --folder amazon-data/processed-data/ --num-folds 5 --tr2dev-ratio 0.8 --num-classes 3 --output amazon-data/crossvalidation-5-0.8/
-
-# train and test using SLDA on only fold 0
-java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*' main.RunSLDA --dataset amazon-data --folder amazon-data/processed-data/ --K 25 --output amazon-data/slda/ -v -report 1 --burnIn 250 --maxIter 500 --sampleLag 25 -s -v -d --cv-folder amazon-data/crossvalidation-5-0.8/ --num-folds 5 --run-mode train-test --fold 0
+* Run SHLDA on the cross validation data
+  java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset amazon-data --data-folder demo --format-folder format-response --output demo/amazon-data/format-response/model --cv-folder demo/amazon-data/format-response/crossvalidation-5-0.8 --num-folds 5 --run-mode train-test -v -z
