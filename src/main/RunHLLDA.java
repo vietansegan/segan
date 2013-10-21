@@ -1,5 +1,6 @@
 package main;
 
+import util.CLIUtils;
 import core.AbstractExperiment;
 import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
@@ -8,7 +9,7 @@ import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.labeled.HierarchicalLabeledLDABackup;
+import sampler.backup.HierarchicalLabeledLDABackup;
 import util.IOUtils;
 import util.evaluation.MimnoTopicCoherence;
 

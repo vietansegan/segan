@@ -1,4 +1,4 @@
-package sampler.labeled;
+package sampler.labeled.hierarchy;
 
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;
@@ -22,9 +22,10 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
-import main.CLIUtils;
+import util.CLIUtils;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampler.labeled.LabeledLDA;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
@@ -1717,12 +1718,5 @@ public class L2H extends AbstractSampler {
 
     public static void main(String[] args) {
         run(args);
-
-//        TIntIntHashMap obs = new TIntIntHashMap();
-//        obs.adjustOrPutValue(1, 3, 3);
-//        System.out.println(obs.size());
-//        for (int o : obs.keys()) {
-//            System.out.println(o + "\t" + obs.get(o));
-//        }
     }
 }

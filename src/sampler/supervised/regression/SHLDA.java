@@ -20,7 +20,6 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import main.CLIUtils;
 import optimization.GurobiMultipleLinearRegression;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
@@ -30,6 +29,7 @@ import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.Table;
 import sampling.util.TreeNode;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -3030,16 +3030,15 @@ public class SHLDA extends AbstractSampler {
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
         int numLexicalItems = CLIUtils.getIntegerArgument(cmd, "num-lex-items", V);
 
+        if (verbose) {
+            System.out.println("\nLoading cross validation info from " + cvFolder);
+        }
         ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
         for (int i = 0; i < data.getDocIds().length; i++) {
             instanceList.add(new RegressionDocumentInstance(
                     data.getDocIds()[i],
                     data.getWords()[i],
                     data.getResponses()[i]));
-        }
-
-        if (verbose) {
-            System.out.println("\nLoading cross validation info from " + cvFolder);
         }
         String cvName = "";
         CrossValidation<String, RegressionDocumentInstance> crossValidation =

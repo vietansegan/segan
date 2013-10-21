@@ -283,7 +283,7 @@ public class LabeledLDA extends AbstractSampler {
                 writer.close();
 
                 if (paramOptimized) {
-                    this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
+                    outputSampledHyperparameters(new File(getSamplerFolderPath(),
                             "hyperparameters.txt"));
                 }
             }

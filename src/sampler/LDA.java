@@ -10,10 +10,10 @@ import java.util.Enumeration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import main.CLIUtils;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.likelihood.DirichletMultinomialModel;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -71,9 +71,16 @@ public class LDA extends AbstractSampler {
         this.prefix += initState.toString();
         this.setName();
 
+        this.numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+        }
+
         if (verbose) {
             logln("--- folder\t" + folder);
+            logln("--- # documents:\t" + D);
             logln("--- # topics:\t" + K);
+            logln("--- # tokens:\t" + numTokens);
             logln("--- vocab size:\t" + V);
             logln("--- alpha:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA)));
             logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
@@ -172,11 +179,9 @@ public class LDA extends AbstractSampler {
             logln("--- Initializing topic hierarchy ...");
         }
 
-        numTokens = 0;
         doc_topics = new DirichletMultinomialModel[D];
         for (int d = 0; d < D; d++) {
             doc_topics[d] = new DirichletMultinomialModel(K, hyperparams.get(ALPHA) * K, 1.0 / K);
-            numTokens += words[d].length;
         }
 
         topic_words = new DirichletMultinomialModel[K];
@@ -599,7 +604,7 @@ public class LDA extends AbstractSampler {
             // directories
             addOption("dataset", "Dataset");
             addOption("output", "Output folder");
-            addOption("folder", "Processed data folder");
+            addOption("data-folder", "Processed data folder");
             addOption("format-folder", "Folder holding formatted data");
             addOption("format-file", "Format file name");
 
@@ -633,7 +638,7 @@ public class LDA extends AbstractSampler {
 
             // data 
             String datasetName = cmd.getOptionValue("dataset");
-            String datasetFolder = cmd.getOptionValue("folder");
+            String datasetFolder = cmd.getOptionValue("data-folder");
             String outputFolder = cmd.getOptionValue("output");
             String formatFolder = cmd.getOptionValue("format-folder");
             int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);

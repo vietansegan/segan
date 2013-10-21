@@ -4,6 +4,7 @@
  */
 package main;
 
+import util.CLIUtils;
 import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
 import data.TextDataset;

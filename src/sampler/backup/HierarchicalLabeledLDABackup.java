@@ -1,4 +1,4 @@
-package sampler.labeled;
+package sampler.backup;
 
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;
@@ -22,9 +22,10 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.LinkedBlockingDeque;
-import main.CLIUtils;
+import util.CLIUtils;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampler.labeled.LabeledLDA;
 import sampling.likelihood.DirichletMultinomialModel;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;

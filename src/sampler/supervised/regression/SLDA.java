@@ -11,13 +11,8 @@ import data.SingleResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
-import main.CLIUtils;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
@@ -25,6 +20,7 @@ import sampler.LDA;
 import sampler.supervised.SupervisedSampler;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirichletMultinomialModel;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -355,7 +351,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while creating report folder."
+                    + " " + reportFolderPath);
         }
 
         if (log && !isLogging()) {
@@ -541,7 +538,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
         }
-        
+
         this.optimizable = new GaussianIndLinearRegObjective(
                 regParams, designMatrix, responses,
                 (hyperparams.get(RHO)),
@@ -591,16 +588,16 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
             double mean = StatisticsUtils.dotProduct(regParams, empDist);
             responseLlh += StatisticsUtils.logNormalProbability(
-                    responses[d], 
-                    mean, 
+                    responses[d],
+                    mean,
                     Math.sqrt(hyperparams.get(RHO)));
         }
 
         double regParamLlh = 0.0;
         for (int k = 0; k < K; k++) {
             regParamLlh += StatisticsUtils.logNormalProbability(
-                    regParams[k], 
-                    hyperparams.get(MU), 
+                    regParams[k],
+                    hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
         }
 
@@ -711,22 +708,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             }
 
             // output to a compressed file
-            String filename = IOUtils.removeExtension(IOUtils.getFilename(filepath));
-            ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
-
-            ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
-            writer.putNextEntry(modelEntry);
-            byte[] data = modelStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
-            writer.putNextEntry(assignEntry);
-            data = assignStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            writer.close();
+            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
@@ -981,6 +963,10 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         return finalPredResponses;
     }
 
+    public File getIterationPredictionFolder() {
+        return new File(getSamplerFolderPath(), IterPredictionFolder);
+    }
+
     @Override
     public void testSampler(int[][] newWords) {
         if (verbose) {
@@ -993,7 +979,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         }
         String[] filenames = reportFolder.list();
 
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        File iterPredFolder = getIterationPredictionFolder();
         IOUtils.createFolder(iterPredFolder);
 
         try {
@@ -1129,211 +1115,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             logln("\t--- topicWords: " + topicWords.length + ". " + topicWordCount);
         }
 
-        // output result during test time 
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputResultFile);
-        for (int d = 0; d < D; d++) {
-            writer.write(Integer.toString(d));
-
-            for (int ii = 0; ii < predResponsesList.size(); ii++) {
-                writer.write("\t" + predResponsesList.get(ii)[d]);
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    private double[][] loadSingleIterationPredictions(String filepath, int numDocs) throws Exception {
-        double[][] preds = new double[numDocs][];
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
-        String line;
-        String[] sline;
-        int count = 0;
-        while ((line = reader.readLine()) != null) {
-            sline = line.split("\t");
-            double[] ps = new double[sline.length - 1];
-            for (int ii = 0; ii < ps.length; ii++) {
-                ps[ii] = Double.parseDouble(sline[ii + 1]);
-            }
-            preds[count] = ps;
-            count++;
-        }
-        reader.close();
-        return preds;
-    }
-
-    public void computeSingleFinal(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "single-final.txt");
-        if (verbose) {
-            logln("Computing single-final result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            // get the predictions at the final iterations during test time
-            double[] finalPred = new double[predictions.length];
-            for (int d = 0; d < finalPred.length; d++) {
-                finalPred[d] = predictions[d][predictions[0].length - 1];
-            }
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, finalPred);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            writer.write(filename);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void computeSingleAverage(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "single-avg.txt");
-        if (verbose) {
-            logln("Computing single-average result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            // compute the prediction values as the average values
-            double[] avgPred = new double[predictions.length];
-            for (int d = 0; d < avgPred.length; d++) {
-                avgPred[d] = StatisticsUtils.mean(predictions[d]);
-            }
-
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, avgPred);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            writer.write(filename);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void computeMultipleFinal(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "multiple-final.txt");
-        if (verbose) {
-            logln("Computing multiple-final result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        double[] predResponses = new double[trueResponses.length];
-        int numModels = filenames.length;
-
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            for (int d = 0; d < trueResponses.length; d++) {
-                predResponses[d] += predictions[d][predictions[0].length - 1];
-            }
-        }
-
-        for (int d = 0; d < predResponses.length; d++) {
-            predResponses[d] /= numModels;
-        }
-
-        RegressionEvaluation eval = new RegressionEvaluation(
-                trueResponses, predResponses);
-        eval.computeCorrelationCoefficient();
-        eval.computeMeanSquareError();
-        eval.computeRSquared();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
-            writer.write("\t" + measurement.getValue());
-        }
-        writer.write("\n");
-        writer.close();
-    }
-
-    public void computeMultipleAverage(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "multiple-avg.txt");
-        if (verbose) {
-            logln("Computing multiple-avg result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        double[] predResponses = new double[trueResponses.length];
-        int numModels = filenames.length;
-
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            for (int d = 0; d < trueResponses.length; d++) {
-                predResponses[d] += StatisticsUtils.mean(predictions[d]);
-            }
-        }
-
-        for (int d = 0; d < predResponses.length; d++) {
-            predResponses[d] /= numModels;
-        }
-
-        RegressionEvaluation eval = new RegressionEvaluation(
-                trueResponses, predResponses);
-        eval.computeCorrelationCoefficient();
-        eval.computeMeanSquareError();
-        eval.computeRSquared();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
-            writer.write("\t" + measurement.getValue());
-        }
-        writer.write("\n");
-        writer.close();
+        // output result during test time
+        GibbsRegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
     }
     // End prediction ----------------------------------------------------------
 
@@ -1517,9 +1300,10 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         String cvFolder = cmd.getOptionValue("cv-folder");
         int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
         String runMode = cmd.getOptionValue("run-mode");
-        
-        if(resultFolder == null)
+
+        if (resultFolder == null) {
             throw new RuntimeException("Result folder (--output) is not set.");
+        }
 
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
@@ -1602,6 +1386,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
                     burnIn, maxIters, sampleLag, repInterval);
 
             File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+            File iterPredFolder = sampler.getIterationPredictionFolder();
             IOUtils.createFolder(samplerFolder);
 
             if (runMode.equals("train")) {
@@ -1618,10 +1403,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
 
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                sampler.computeSingleFinal(teResultFolder, teResponses);
-                sampler.computeSingleAverage(teResultFolder, teResponses);
-                sampler.computeMultipleFinal(teResultFolder, teResponses);
-                sampler.computeMultipleAverage(teResultFolder, teResponses);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
 
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("train-test")) {
@@ -1638,11 +1420,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
                 sampler.testSampler(teRevWords);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                sampler.computeSingleFinal(teResultFolder, teResponses);
-                sampler.computeSingleAverage(teResultFolder, teResponses);
-                sampler.computeMultipleFinal(teResultFolder, teResponses);
-                sampler.computeMultipleAverage(teResultFolder, teResponses);
-
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else {
                 throw new RuntimeException("Run mode " + runMode + " not supported");

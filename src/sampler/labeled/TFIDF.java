@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.labeled;
 
 import java.util.HashSet;
 import java.util.Set;
