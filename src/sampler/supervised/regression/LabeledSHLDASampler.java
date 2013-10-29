@@ -14,11 +14,11 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import optimization.GurobiMultipleLinearRegression;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
+import sampling.util.FullTable;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
 import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
@@ -93,7 +93,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
     private ArrayList<double[]> lexicalWeightsOverTime;
     // auxiliary
     private double[] uniform;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private int numTokenAssignmentsChange;
     private int numSentAssignmentsChange;
     private int numTableAssignmentsChange;
@@ -532,7 +532,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
         }
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double regParam = 0.0;
         this.globalTreeRoot = new SNode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
@@ -544,9 +544,9 @@ public class LabeledSHLDASampler extends AbstractSampler {
             }
         }
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
     }
 
@@ -944,7 +944,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
     private SNode createNode(SNode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmm = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmm = new DirMult(V, betas[level], uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SNode child = new SNode(iter, nextChildIndex, level, dmm, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -2085,7 +2085,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("   ");
             }
-            if(node.getLevel() == 1) {
+            if (node.getLevel() == 1) {
                 str.append(labelVocab.get(node.getIndex()))
                         .append("\n");
                 for (int i = 0; i < node.getLevel(); i++) {
@@ -2224,7 +2224,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
                 modelStr.append(node.getIterationCreated()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\n");
                 modelStr.append(node.getRegressionParameter()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SNode child : node.getChildren()) {
                     stack.add(child);
@@ -2332,7 +2332,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
             int iterCreated = Integer.parseInt(reader.readLine());
             int numCustomers = Integer.parseInt(reader.readLine());
             double regParam = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -2441,14 +2441,14 @@ public class LabeledSHLDASampler extends AbstractSampler {
         reader.close();
     }
 
-    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirMult> {
 
         private final int born;
         private int numCustomers;
         private double regression;
 
         SNode(int iter, int index, int level,
-                DirichletMultinomialModel content,
+                DirMult content,
                 double regParam,
                 SNode parent) {
             super(index, level, content, parent);
@@ -2529,7 +2529,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
         }
     }
 
-    class STable extends Table<Integer, SNode> {
+    class STable extends FullTable<Integer, SNode> {
 
         private final int born;
         private final int restIndex;

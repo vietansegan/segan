@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package util;
 
 import java.util.ArrayList;
@@ -170,17 +166,11 @@ public class SamplerUtils {
         double val = 0.0;
 
         val += SamplerUtils.logGammaStirling(prior_sum);
-        //System.out.println("prior_sum = " + prior_sum + ". lg = " + SamplerUtils.logGammaStirling(prior_sum));
-
         val -= size * SamplerUtils.logGammaStirling(prior_val);
-        //System.out.println("prior_val = " + prior_val + ". lg = " + SamplerUtils.logGammaStirling(prior_val));
-
         for (int ii = 0; ii < obs.length; ++ii) {
             val += SamplerUtils.logGammaStirling(prior_val + (double) obs[ii]);
-            //System.out.println("ii = " + ii + ". " + (prior_val + (double) obs[ii]) + ". lg = " + SamplerUtils.logGammaStirling(prior_val + (double) obs[ii]));
         }
         val -= SamplerUtils.logGammaStirling(sum + prior_sum);
-        //System.out.println("sum = " + (sum + prior_sum) + ". lg = " + SamplerUtils.logGammaStirling(sum + prior_sum));
         return val;
     }
 

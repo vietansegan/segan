@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.TreeNode;
 import util.IOUtils;
@@ -159,7 +159,7 @@ public class HLDASampler extends AbstractSampler {
         for (int i = 0; i < V; i++) {
             uniform[i] = 1.0 / V;
         }
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[0], uniform);
+        DirMult dmModel = new DirMult(V, betas[0], uniform);
         this.word_hier_root = new HLDANode(iter, 0, 0, dmModel, null);
     }
 
@@ -593,7 +593,7 @@ public class HLDASampler extends AbstractSampler {
     private HLDANode createNode(HLDANode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmModel = new DirMult(V, betas[level], uniform);
         HLDANode child = new HLDANode(iter, nextChildIndex, level, dmModel, parent);
         return parent.addChild(nextChildIndex, child);
     }
@@ -829,13 +829,13 @@ public class HLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    class HLDANode extends TreeNode<HLDANode, DirichletMultinomialModel> {
+    class HLDANode extends TreeNode<HLDANode, DirMult> {
 
         private final int born;
         int numCustomers;
         HLDANode pseudoChild;
 
-        public HLDANode(int iter, int index, int level, DirichletMultinomialModel content, HLDANode parent) {
+        public HLDANode(int iter, int index, int level, DirMult content, HLDANode parent) {
             super(index, level, content, parent);
             this.born = iter;
             this.numCustomers = 0;

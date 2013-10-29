@@ -62,7 +62,7 @@ public class RunLexicalSHLDA extends AbstractRunner {
             addOption("tau-scale", "Prior scale of lexical regression parameters. [1.0]");
             addOption("num-lex-items", "Number of non-zero lexical regression parameters."
                     + " Defaule: vocabulary size.");
-            
+
             addOption("cv-folder", "Cross validation folder");
             addOption("num-folds", "Number of folds");
             addOption("run-mode", "Running mode");
@@ -84,7 +84,7 @@ public class RunLexicalSHLDA extends AbstractRunner {
 
             verbose = cmd.hasOption("v");
             debug = cmd.hasOption("d");
-            
+
             if (cmd.hasOption("cv-folder")) {
                 runCrossValidation();
             } else {
@@ -144,9 +144,10 @@ public class RunLexicalSHLDA extends AbstractRunner {
                 if (foldIndex != -1 && fold.getIndex() != foldIndex) {
                     continue;
                 }
-                if(verbose)
+                if (verbose) {
                     System.out.println("--- Running fold " + fold.getIndex());
-                
+                }
+
                 String foldFolder = new File(resultFolder, fold.getFoldFolder()).getAbsolutePath();
 
                 int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
@@ -221,8 +222,8 @@ public class RunLexicalSHLDA extends AbstractRunner {
                 ArrayList<Integer> teInstIndices = fold.getTestingInstances();
                 int[][][] teRevWords = getRevSentWords(teInstIndices);
                 double[] teResponses = getResponses(teInstIndices, responses);
-                
-                if(verbose){
+
+                if (verbose) {
 //                    System.out.println()
                 }
 
@@ -255,11 +256,6 @@ public class RunLexicalSHLDA extends AbstractRunner {
                     sampler.testSampler(teRevWords);
                     File teResultFolder = new File(samplerFolder, "te-results");
                     IOUtils.createFolder(teResultFolder);
-                    sampler.computeSingleFinal(teResultFolder, teResponses);
-                    sampler.computeSingleAverage(teResultFolder, teResponses);
-                    sampler.computeMultipleFinal(teResultFolder, teResponses);
-                    sampler.computeMultipleAverage(teResultFolder, teResponses);
-//                    sampler.outputDocTopicDistributions(samplerFolder + "te-doc-topic.txt");
                 } else if (runMode.equals("hack")) {
                 } else {
                     throw new RuntimeException("Run mode " + runMode + " not supported");

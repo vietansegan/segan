@@ -19,7 +19,7 @@ import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
 import sampler.LDA;
 import sampler.supervised.SupervisedSampler;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
@@ -49,8 +49,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
     protected int[][] words;
     protected double[] responses;
     protected int[][] z;
-    protected DirichletMultinomialModel[] docTopics;
-    protected DirichletMultinomialModel[] topicWords;
+    protected DirMult[] docTopics;
+    protected DirMult[] topicWords;
     protected double[] regParams;
     private OLSMultipleLinearRegression regressor;
     private GaussianIndLinearRegObjective optimizable;
@@ -179,9 +179,9 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
     }
 
     private void initializeModelStructure() {
-        topicWords = new DirichletMultinomialModel[K];
+        topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
-            topicWords[k] = new DirichletMultinomialModel(V, hyperparams.get(BETA), 1.0 / V);
+            topicWords[k] = new DirMult(V, hyperparams.get(BETA), 1.0 / V);
         }
 
         regParams = new double[K];
@@ -196,9 +196,9 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             z[d] = new int[words[d].length];
         }
 
-        docTopics = new DirichletMultinomialModel[D];
+        docTopics = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            docTopics[d] = new DirichletMultinomialModel(K, hyperparams.get(ALPHA), 1.0 / K);
+            docTopics[d] = new DirMult(K, hyperparams.get(ALPHA), 1.0 / K);
         }
     }
 
@@ -689,17 +689,19 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         }
 
         try {
+            // model
             StringBuilder modelStr = new StringBuilder();
             for (int k = 0; k < K; k++) {
                 modelStr.append(k).append("\n");
                 modelStr.append(regParams[k]).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(topicWords[k])).append("\n");
+                modelStr.append(DirMult.output(topicWords[k])).append("\n");
             }
 
+            // assignments
             StringBuilder assignStr = new StringBuilder();
             for (int d = 0; d < D; d++) {
                 assignStr.append(d).append("\n");
-                assignStr.append(DirichletMultinomialModel.output(docTopics[d])).append("\n");
+                assignStr.append(DirMult.output(docTopics[d])).append("\n");
 
                 for (int n = 0; n < words[d].length; n++) {
                     assignStr.append(z[d][n]).append("\t");
@@ -750,7 +752,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
                 regParams[k] = Double.parseDouble(reader.readLine());
-                topicWords[k] = DirichletMultinomialModel.input(reader.readLine());
+                topicWords[k] = DirMult.input(reader.readLine());
             }
             reader.close();
         } catch (Exception e) {
@@ -776,7 +778,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
                 if (docIdx != d) {
                     throw new RuntimeException("Indices mismatch when loading assignments");
                 }
-                docTopics[d] = DirichletMultinomialModel.input(reader.readLine());
+                docTopics[d] = DirMult.input(reader.readLine());
 
                 String[] sline = reader.readLine().split("\t");
                 for (int n = 0; n < words[d].length; n++) {

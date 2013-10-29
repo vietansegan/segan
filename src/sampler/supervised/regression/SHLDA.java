@@ -19,15 +19,14 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 import optimization.GurobiMultipleLinearRegression;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.CLIUtils;
 import util.IOUtils;
@@ -92,7 +91,7 @@ public class SHLDA extends AbstractSampler {
     private ArrayList<double[]> lexicalWeightsOverTime;
     // auxiliary
     private double[] uniform;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private int numTokenAssignmentsChange;
     private int numSentAssignmentsChange;
     private int numTableAssignmentsChange;
@@ -486,13 +485,13 @@ public class SHLDA extends AbstractSampler {
     private void initializeModelStructure() {
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double regParam = 0.0;
         this.globalTreeRoot = new SNode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
     }
 
@@ -863,7 +862,7 @@ public class SHLDA extends AbstractSampler {
     private SNode createNode(SNode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmm = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmm = new DirMult(V, betas[level], uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SNode child = new SNode(iter, nextChildIndex, level, dmm, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -2090,7 +2089,7 @@ public class SHLDA extends AbstractSampler {
                 modelStr.append(node.getIterationCreated()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\n");
                 modelStr.append(node.getRegressionParameter()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SNode child : node.getChildren()) {
                     stack.add(child);
@@ -2132,22 +2131,7 @@ public class SHLDA extends AbstractSampler {
             }
 
             // output to a compressed file
-            String filename = IOUtils.removeExtension(IOUtils.getFilename(filepath));
-            ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
-
-            ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
-            writer.putNextEntry(modelEntry);
-            byte[] data = modelStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
-            writer.putNextEntry(assignEntry);
-            data = assignStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            writer.close();
+            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
@@ -2202,7 +2186,7 @@ public class SHLDA extends AbstractSampler {
             int iterCreated = Integer.parseInt(reader.readLine());
             int numCustomers = Integer.parseInt(reader.readLine());
             double regParam = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -2372,6 +2356,10 @@ public class SHLDA extends AbstractSampler {
         return finalPredResponses;
     }
 
+    public File getIterationPredictionFolder() {
+        return new File(getSamplerFolderPath(), IterPredictionFolder);
+    }
+
     public void testSampler(int[][][] newWords) {
         if (verbose) {
             logln("Test sampling ...");
@@ -2503,200 +2491,6 @@ public class SHLDA extends AbstractSampler {
         writer.close();
     }
 
-    private double[][] loadSingleIterationPredictions(String filepath, int numDocs) throws Exception {
-        double[][] preds = new double[numDocs][];
-        BufferedReader reader = IOUtils.getBufferedReader(filepath);
-        String line;
-        String[] sline;
-        int count = 0;
-        while ((line = reader.readLine()) != null) {
-            sline = line.split("\t");
-            double[] ps = new double[sline.length - 1];
-            for (int ii = 0; ii < ps.length; ii++) {
-                ps[ii] = Double.parseDouble(sline[ii + 1]);
-            }
-            preds[count] = ps;
-            count++;
-        }
-        reader.close();
-        return preds;
-    }
-
-    public void computeSingleFinal(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "single-final.txt");
-        if (verbose) {
-            logln("Computing single-final result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            // get the predictions at the final iterations during test time
-            double[] finalPred = new double[predictions.length];
-            for (int d = 0; d < finalPred.length; d++) {
-                finalPred[d] = predictions[d][predictions[0].length - 1];
-            }
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, finalPred);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            writer.write(filename);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void computeSingleAverage(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "single-avg.txt");
-        if (verbose) {
-            logln("Computing single-average result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            // compute the prediction values as the average values
-            double[] avgPred = new double[predictions.length];
-            for (int d = 0; d < avgPred.length; d++) {
-                avgPred[d] = StatisticsUtils.mean(predictions[d]);
-            }
-
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, avgPred);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            writer.write(filename);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void computeMultipleFinal(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "multiple-final.txt");
-        if (verbose) {
-            logln("Computing multiple-final result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        double[] predResponses = new double[trueResponses.length];
-        int numModels = filenames.length;
-
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            for (int d = 0; d < trueResponses.length; d++) {
-                predResponses[d] += predictions[d][predictions[0].length - 1];
-            }
-        }
-
-        for (int d = 0; d < predResponses.length; d++) {
-            predResponses[d] /= numModels;
-        }
-
-        RegressionEvaluation eval = new RegressionEvaluation(
-                trueResponses, predResponses);
-        eval.computeCorrelationCoefficient();
-        eval.computeMeanSquareError();
-        eval.computeRSquared();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
-            writer.write("\t" + measurement.getValue());
-        }
-        writer.write("\n");
-        writer.close();
-    }
-
-    public void computeMultipleAverage(File outputFolder, double[] trueResponses) throws Exception {
-        File outputFile = new File(outputFolder, "multiple-avg.txt");
-        if (verbose) {
-            logln("Computing multiple-avg result. " + outputFile);
-        }
-
-        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-        if (!iterPredFolder.exists()) {
-            throw new RuntimeException("Prediction folder does not exist");
-        }
-        String[] filenames = iterPredFolder.list();
-
-        double[] predResponses = new double[trueResponses.length];
-        int numModels = filenames.length;
-
-        for (int i = 0; i < filenames.length; i++) {
-            String filename = filenames[i];
-
-            double[][] predictions = loadSingleIterationPredictions(
-                    new File(iterPredFolder, filename).getAbsolutePath(),
-                    trueResponses.length);
-
-            for (int d = 0; d < trueResponses.length; d++) {
-                predResponses[d] += StatisticsUtils.mean(predictions[d]);
-            }
-        }
-
-        for (int d = 0; d < predResponses.length; d++) {
-            predResponses[d] /= numModels;
-        }
-
-        RegressionEvaluation eval = new RegressionEvaluation(
-                trueResponses, predResponses);
-        eval.computeCorrelationCoefficient();
-        eval.computeMeanSquareError();
-        eval.computeRSquared();
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
-            writer.write("\t" + measurement.getValue());
-        }
-        writer.write("\n");
-        writer.close();
-    }
-
     private void initializeRandomAssignmentsNewDocuments() {
         if (verbose) {
             logln("--- Initializing random assignments ...");
@@ -2732,13 +2526,13 @@ public class SHLDA extends AbstractSampler {
         }
     }
 
-    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirMult> {
 
         private final int born;
         private int numCustomers;
         private double regression;
 
-        SNode(int iter, int index, int level, DirichletMultinomialModel content, double regParam,
+        SNode(int iter, int index, int level, DirMult content, double regParam,
                 SNode parent) {
             super(index, level, content, parent);
             this.born = iter;
@@ -2818,7 +2612,7 @@ public class SHLDA extends AbstractSampler {
         }
     }
 
-    class STable extends Table<Integer, SNode> {
+    class STable extends FullTable<Integer, SNode> {
 
         private final int born;
         private final int restIndex;
@@ -3093,6 +2887,7 @@ public class SHLDA extends AbstractSampler {
                     burnIn, maxIters, sampleLag, repInterval);
 
             File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+            File iterPredFolder = sampler.getIterationPredictionFolder();
             IOUtils.createFolder(samplerFolder);
 
             if (runMode.equals("train")) {
@@ -3108,10 +2903,7 @@ public class SHLDA extends AbstractSampler {
                 sampler.testSampler(teRevWords);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                sampler.computeSingleFinal(teResultFolder, teResponses);
-                sampler.computeSingleAverage(teResultFolder, teResponses);
-                sampler.computeMultipleFinal(teResultFolder, teResponses);
-                sampler.computeMultipleAverage(teResultFolder, teResponses);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
             } else if (runMode.equals("train-test")) {
                 // train
                 sampler.initialize();
@@ -3126,10 +2918,7 @@ public class SHLDA extends AbstractSampler {
                 sampler.testSampler(teRevWords);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                sampler.computeSingleFinal(teResultFolder, teResponses);
-                sampler.computeSingleAverage(teResultFolder, teResponses);
-                sampler.computeMultipleFinal(teResultFolder, teResponses);
-                sampler.computeMultipleAverage(teResultFolder, teResponses);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
             } else {
                 throw new RuntimeException("Run mode " + runMode + " not supported");
             }

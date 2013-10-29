@@ -11,8 +11,9 @@ import util.IOUtils;
  * @author vietan
  */
 public class LabelSingleResponseTextDataset extends LabelTextData {
+
     protected double[] responses;
-    
+
     public LabelSingleResponseTextDataset(String name, String folder) {
         super(name, folder);
     }
@@ -21,7 +22,7 @@ public class LabelSingleResponseTextDataset extends LabelTextData {
             CorpusProcessor corpProc) {
         super(name, folder, corpProc);
     }
-    
+
     public double[] getResponses() {
         return this.responses;
     }
@@ -45,9 +46,9 @@ public class LabelSingleResponseTextDataset extends LabelTextData {
         }
         reader.close();
     }
-    
+
     @Override
-    protected void outputInfo(String outputFolder) throws Exception {
+    protected void outputDocumentInfo(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile);
 

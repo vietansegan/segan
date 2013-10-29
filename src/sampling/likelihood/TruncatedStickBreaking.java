@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampling.likelihood;
 
 import java.io.BufferedReader;
@@ -12,6 +8,7 @@ import util.MiscUtils;
 import util.SamplerUtils;
 
 /**
+ * Implementation of a truncated stick breaking process.
  *
  * @author vietan
  */

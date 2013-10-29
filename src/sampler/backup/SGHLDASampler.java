@@ -21,11 +21,11 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
@@ -73,7 +73,7 @@ public class SGHLDASampler extends AbstractSampler {
     private int numDocs;
     private int[][] docTokenCounts;
     private double[] uniform;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private TruncatedStickBreaking emptyStick;
     private int numTokenAssignmentsChange;
     private int numTableAssignmentsChange;
@@ -272,7 +272,7 @@ public class SGHLDASampler extends AbstractSampler {
     private void initializeModelStructure() {
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double regParam = SamplerUtils.getGaussian(mus[rootLevel], sigmas[rootLevel]);
         this.globalTreeRoot = new SGHLDANode(iter, rootIndex, rootLevel, dmModel, regParam, null, HAS_PSEUDOCHILD);
 
@@ -281,9 +281,9 @@ public class SGHLDASampler extends AbstractSampler {
             this.localRestaurants[d] = new Restaurant<SGHLDATable, String, SGHLDANode>();
         }
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
 
         this.emptyStick = new TruncatedStickBreaking(L, hyperparams.get(GEM_MEAN), hyperparams.get(GEM_SCALE));
@@ -694,7 +694,7 @@ public class SGHLDASampler extends AbstractSampler {
     private SGHLDANode createNode(SGHLDANode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmm = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmm = new DirMult(V, betas[level], uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SGHLDANode child;
         if (level == L - 1) // leaf node
@@ -2004,7 +2004,7 @@ public class SGHLDASampler extends AbstractSampler {
                 modelStr.append(node.getPathString()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\n");
                 modelStr.append(node.getRegressionParameter()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SGHLDANode child : node.getChildren()) {
                     stack.add(child);
@@ -2132,7 +2132,7 @@ public class SGHLDASampler extends AbstractSampler {
             String pathStr = line;
             int numCusts = Integer.parseInt(reader.readLine());
             double regParam = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -2402,26 +2402,26 @@ public class SGHLDASampler extends AbstractSampler {
         InitialState initState = InitialState.PRESET;
         boolean paramOpt = false;
 
-        DirichletMultinomialModel rootModel = new DirichletMultinomialModel(V, betas[0], 1.0 / V);
+        DirMult rootModel = new DirMult(V, betas[0], 1.0 / V);
         SGHLDANode root = new SGHLDANode(0, 0, 0, rootModel, 0.0, null, true);
 
-        DirichletMultinomialModel node00Model = new DirichletMultinomialModel(V, betas[1], 1.0 / V);
+        DirMult node00Model = new DirMult(V, betas[1], 1.0 / V);
         SGHLDANode node00 = new SGHLDANode(0, 0, 1, node00Model, -1.0, root, true);
         root.addChild(0, node00);
 
-        DirichletMultinomialModel node01Model = new DirichletMultinomialModel(V, betas[1], 1.0 / V);
+        DirMult node01Model = new DirMult(V, betas[1], 1.0 / V);
         SGHLDANode node01 = new SGHLDANode(0, 1, 1, node01Model, 1.0, root, true);
         root.addChild(1, node01);
 
-        DirichletMultinomialModel node000Model = new DirichletMultinomialModel(V, betas[2], 1.0 / V);
+        DirMult node000Model = new DirMult(V, betas[2], 1.0 / V);
         SGHLDANode node000 = new SGHLDANode(0, 0, 2, node000Model, -2.0, node00, false);
         node00.addChild(0, node000);
 
-        DirichletMultinomialModel node001Model = new DirichletMultinomialModel(V, betas[2], 1.0 / V);
+        DirMult node001Model = new DirMult(V, betas[2], 1.0 / V);
         SGHLDANode node001 = new SGHLDANode(0, 1, 2, node001Model, -0.5, node00, false);
         node00.addChild(1, node001);
 
-        DirichletMultinomialModel node010Model = new DirichletMultinomialModel(V, betas[2], 1.0 / V);
+        DirMult node010Model = new DirMult(V, betas[2], 1.0 / V);
         SGHLDANode node010 = new SGHLDANode(0, 0, 2, node010Model, 2, node01, false);
         node01.addChild(0, node010);
 
@@ -2504,14 +2504,14 @@ public class SGHLDASampler extends AbstractSampler {
     }
 }
 
-class SGHLDANode extends TreeNode<SGHLDANode, DirichletMultinomialModel> {
+class SGHLDANode extends TreeNode<SGHLDANode, DirMult> {
 
     private final int born;
     private int numCustomers;
     private double regression;
     private SGHLDANode pseudoChild;
 
-    SGHLDANode(int iter, int index, int level, DirichletMultinomialModel content, double regParam,
+    SGHLDANode(int iter, int index, int level, DirMult content, double regParam,
             SGHLDANode parent, boolean hasPseudoChild) {
         super(index, level, content, parent);
         this.born = iter;
@@ -2585,7 +2585,7 @@ class SGHLDANode extends TreeNode<SGHLDANode, DirichletMultinomialModel> {
     }
 }
 
-class SGHLDATable extends Table<String, SGHLDANode> {
+class SGHLDATable extends FullTable<String, SGHLDANode> {
 
     private final int born;
     final int restIndex;

@@ -17,8 +17,9 @@ import util.normalizer.ZNormalizer;
  * @author vietan
  */
 public class RunLabeledSHLDA extends AbstractRunner {
+
     private static LabelSingleResponseTextDataset data;
-    
+
     public static void main(String[] args) {
         try {
             // create the command line parser
@@ -51,7 +52,7 @@ public class RunLabeledSHLDA extends AbstractRunner {
             addOption("tau-scale", "Prior scale of lexical regression parameters. [1.0]");
             addOption("num-lex-items", "Number of non-zero lexical regression parameters."
                     + " Defaule: vocabulary size.");
-            
+
             addOption("cv-folder", "Cross validation folder");
             addOption("num-folds", "Number of folds");
             addOption("run-mode", "Running mode");
@@ -73,7 +74,7 @@ public class RunLabeledSHLDA extends AbstractRunner {
 
             verbose = cmd.hasOption("v");
             debug = cmd.hasOption("d");
-            
+
             if (cmd.hasOption("cv-folder")) {
 //                runCrossValidation();
             } else {
@@ -86,7 +87,7 @@ public class RunLabeledSHLDA extends AbstractRunner {
             throw new RuntimeException("Exception while running lexical SHLDA");
         }
     }
-    
+
     public static void runModels() {
         try {
             System.out.println("\nLoading formatted data ...");
@@ -104,7 +105,7 @@ public class RunLabeledSHLDA extends AbstractRunner {
             int L = CLIUtils.getIntegerArgument(cmd, "tree-height", 3);
             double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
             double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
-            
+
             data = new LabelSingleResponseTextDataset(datasetName, datasetFolder);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             data.prepareTopicCoherence(numTopWords);

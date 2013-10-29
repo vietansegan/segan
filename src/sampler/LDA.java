@@ -12,7 +12,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
@@ -33,8 +33,8 @@ public class LDA extends AbstractSampler {
     protected int D; // number of documents
     protected int[][] words;  // [D] x [Nd]: words
     protected int[][] z;
-    protected DirichletMultinomialModel[] doc_topics;
-    protected DirichletMultinomialModel[] topic_words;
+    protected DirMult[] doc_topics;
+    protected DirMult[] topic_words;
     private int numTokens;
     private int numTokensChanged;
 
@@ -108,9 +108,9 @@ public class LDA extends AbstractSampler {
         this.words = ws;
         this.D = this.words.length;
 
-        doc_topics = new DirichletMultinomialModel[D];
+        doc_topics = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            doc_topics[d] = new DirichletMultinomialModel(K, hyperparams.get(ALPHA) * K, 1.0 / K);
+            doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
         }
 
         // initialize
@@ -179,14 +179,14 @@ public class LDA extends AbstractSampler {
             logln("--- Initializing topic hierarchy ...");
         }
 
-        doc_topics = new DirichletMultinomialModel[D];
+        doc_topics = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            doc_topics[d] = new DirichletMultinomialModel(K, hyperparams.get(ALPHA) * K, 1.0 / K);
+            doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
         }
 
-        topic_words = new DirichletMultinomialModel[K];
+        topic_words = new DirMult[K];
         for (int k = 0; k < K; k++) {
-            topic_words[k] = new DirichletMultinomialModel(V, hyperparams.get(BETA) * V, 1.0 / V);
+            topic_words[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
 
         z = new int[D][];
@@ -468,7 +468,7 @@ public class LDA extends AbstractSampler {
                 for (int v = 0; v < V; v++) {
                     mean[v] = Double.parseDouble(sline[v]);
                 }
-                this.topic_words[k] = new DirichletMultinomialModel(V, concentration, mean);
+                this.topic_words[k] = new DirMult(V, concentration, mean);
             }
             reader.close();
 
@@ -491,7 +491,7 @@ public class LDA extends AbstractSampler {
                 for (int k = 0; k < K; k++) {
                     mean[k] = Double.parseDouble(sline[k]);
                 }
-                this.doc_topics[d] = new DirichletMultinomialModel(K, concentration, mean);
+                this.doc_topics[d] = new DirMult(K, concentration, mean);
 
                 line = reader.readLine();
                 sline = line.split("\t");

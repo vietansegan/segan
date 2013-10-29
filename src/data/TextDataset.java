@@ -62,7 +62,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     public ArrayList<String> getWordVocab() {
         return this.wordVocab;
     }
-    
+
     public int[][][] getDocSentWords(ArrayList<Integer> instances) {
         int[][][] revSentWords = new int[instances.size()][][];
         for (int i = 0; i < revSentWords.length; i++) {
@@ -71,7 +71,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
         return revSentWords;
     }
-    
+
     public int[][] getDocWords(ArrayList<Integer> instances) {
         int[][] revWords = new int[instances.size()][];
         for (int i = 0; i < revWords.length; i++) {
@@ -79,6 +79,10 @@ public class TextDataset extends AbstractTokenizeDataset {
             revWords[i] = this.words[idx];
         }
         return revWords;
+    }
+
+    public void loadTextDataFromFile(File textFile) throws Exception {
+        loadTextDataFromFile(textFile.getAbsolutePath());
     }
 
     /**
@@ -99,6 +103,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         reader.close();
 
         logln("--- --- Loaded " + docIdList.size() + " document(s)");
+    }
+
+    public void loadTextDataFromFolder(File textFolder) throws Exception {
+        loadTextDataFromFolder(textFolder.getAbsolutePath());
     }
 
     /**
@@ -155,7 +163,7 @@ public class TextDataset extends AbstractTokenizeDataset {
                 corpProc.getVocab());
 
         outputTextData(outputFolder);
-        outputInfo(outputFolder);
+        outputDocumentInfo(outputFolder);
         outputSentTextData(outputFolder);
     }
 
@@ -237,7 +245,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         sentWriter.close();
     }
 
-    protected void outputInfo(String outputFolder) throws Exception {
+    protected void outputDocumentInfo(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile.getAbsolutePath());
 

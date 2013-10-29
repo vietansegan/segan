@@ -138,7 +138,7 @@ public class RunLLDA extends AbstractRunner {
         String outputFolder = CLIUtils.getStringArgument(cmd, "output", "L:/Dropbox/github/data/112/hllda");
         String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
         int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 50);
-        
+
         numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
         topicCoherence = new MimnoTopicCoherence(data.getWords(), data.getWordVocab().size(), numTopWords);
         topicCoherence.prepare();

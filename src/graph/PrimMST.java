@@ -32,7 +32,7 @@ public class PrimMST<C> {
         for (GraphEdge edge : graph.getEdges(root)) {
             frontTier.add(edge);
         }
-        
+
         while (visited.size() < graph.getNumNodes()) {
             GraphEdge maxConnector = null;
             boolean found = false;

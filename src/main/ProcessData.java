@@ -110,7 +110,7 @@ public class ProcessData extends AbstractRunner {
                 LabelSingleResponseTextDataset dataset =
                         new LabelSingleResponseTextDataset(datasetName, datasetFolder, corpProc);
                 dataset.setFormatFilename(formatFile);
-                
+
                 if (cmd.hasOption("L")) {
                     dataset.setMaxLabelVocabSize(Integer.parseInt(cmd.getOptionValue("L")));
                 }

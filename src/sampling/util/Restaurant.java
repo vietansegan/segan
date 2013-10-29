@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampling.util;
 
 import java.util.Collection;
@@ -13,7 +9,7 @@ import java.util.TreeSet;
  *
  * @author vietan
  */
-public class Restaurant<T extends Table<C, M>, C, M> {
+public class Restaurant<T extends FullTable<C, M>, C, M> {
 
     public static final int EMPTY_TABLE_INDEX = -1;
     private HashMap<Integer, T> activeTables;
@@ -141,7 +137,7 @@ public class Restaurant<T extends Table<C, M>, C, M> {
 
     public double getJointProbabilityAssignments(double alpha) {
         double llh = this.getNumTables() * Math.log(alpha);
-        for (Table<C, M> table : this.activeTables.values()) {
+        for (FullTable<C, M> table : this.activeTables.values()) {
             for (int n = 1; n < table.getNumCustomers(); n++) {
                 llh += Math.log(n);
             }
@@ -154,7 +150,7 @@ public class Restaurant<T extends Table<C, M>, C, M> {
 
     public void validate(String msg) {
         int tnc = 0;
-        for (Table<C, M> table : this.getTables()) {
+        for (FullTable<C, M> table : this.getTables()) {
             tnc += table.getNumCustomers();
         }
         if (tnc != this.totalNumCustomers) {

@@ -8,9 +8,9 @@ import core.AbstractSampler;
 import java.io.BufferedWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.util.Restaurant;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -31,7 +31,7 @@ public class HDPSampler extends AbstractSampler {
     protected int K;
     protected int[][] words;  // [D] x [Nd]: words
     protected int[][] z; // local table index
-    private Restaurant<HDPDish, HDPTable, DirichletMultinomialModel> globalRestaurant;
+    private Restaurant<HDPDish, HDPTable, DirMult> globalRestaurant;
     private Restaurant<HDPTable, Integer, HDPDish>[] localRestaurants;
     private double[] uniform;
     private int totalNumObservations = 0;
@@ -133,7 +133,7 @@ public class HDPSampler extends AbstractSampler {
             logln("--- Initializing topic hierarchy ...");
         }
 
-        this.globalRestaurant = new Restaurant<HDPDish, HDPTable, DirichletMultinomialModel>();
+        this.globalRestaurant = new Restaurant<HDPDish, HDPTable, DirMult>();
 
         this.localRestaurants = new Restaurant[D];
         for (int d = 0; d < D; d++) {
@@ -145,7 +145,7 @@ public class HDPSampler extends AbstractSampler {
             z[d] = new int[words[d].length];
         }
 
-        DirichletMultinomialModel emptyModel = new DirichletMultinomialModel(V, hyperparams.get(BETA), uniform);
+        DirMult emptyModel = new DirMult(V, hyperparams.get(BETA), uniform);
         this.emptyDish = new HDPDish(PSEUDO_INDEX, emptyModel);
     }
 
@@ -277,7 +277,7 @@ public class HDPSampler extends AbstractSampler {
      */
     private HDPDish createDish() {
         int newDishIndex = globalRestaurant.getNextTableIndex();
-        DirichletMultinomialModel dm = new DirichletMultinomialModel(V, hyperparams.get(BETA), uniform);
+        DirMult dm = new DirMult(V, hyperparams.get(BETA), uniform);
         HDPDish newDish = new HDPDish(newDishIndex, dm);
         globalRestaurant.addTable(newDish);
         return newDish;
@@ -742,9 +742,9 @@ public class HDPSampler extends AbstractSampler {
     }
 }
 
-class HDPDish extends Table<HDPTable, DirichletMultinomialModel> {
+class HDPDish extends FullTable<HDPTable, DirMult> {
 
-    public HDPDish(int index, DirichletMultinomialModel content) {
+    public HDPDish(int index, DirMult content) {
         super(index, content);
     }
 
@@ -758,7 +758,7 @@ class HDPDish extends Table<HDPTable, DirichletMultinomialModel> {
     }
 }
 
-class HDPTable extends Table<Integer, HDPDish> {
+class HDPTable extends FullTable<Integer, HDPDish> {
 
     int restIndex;
 

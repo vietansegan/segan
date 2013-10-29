@@ -1,14 +1,19 @@
 package sampler.labeled;
 
 import core.AbstractSampler;
+import data.LabelTextData;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
-import sampling.likelihood.DirichletMultinomialModel;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
+import sampling.likelihood.DirMult;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
+import util.evaluation.MimnoTopicCoherence;
 
 /**
  * This is an implementation of a Gibbs sampler for Labeled LDA (Ramage et. al.
@@ -27,8 +32,8 @@ public class LabeledLDA extends AbstractSampler {
     protected int L;
     protected int V;
     protected int D;
-    private DirichletMultinomialModel[] doc_labels;
-    private DirichletMultinomialModel[] label_words;
+    private DirMult[] doc_labels;
+    private DirMult[] label_words;
     private int[][] z;
     private ArrayList<String> labelVocab;
     private int numTokens;
@@ -84,6 +89,8 @@ public class LabeledLDA extends AbstractSampler {
 
         if (verbose) {
             logln("--- folder\t" + folder);
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
             logln("--- label vocab:\t" + L);
             logln("--- word vocab:\t" + V);
             logln("--- alpha:\t" + MiscUtils.formatDouble(alpha));
@@ -110,7 +117,7 @@ public class LabeledLDA extends AbstractSampler {
         this.name = str.toString();
     }
 
-    public DirichletMultinomialModel[] getTopicWordDistributions() {
+    public DirMult[] getTopicWordDistributions() {
         return this.label_words;
     }
 
@@ -138,9 +145,9 @@ public class LabeledLDA extends AbstractSampler {
             logln("--- Initializing model structure ...");
         }
 
-        label_words = new DirichletMultinomialModel[L];
+        label_words = new DirMult[L];
         for (int ll = 0; ll < L; ll++) {
-            label_words[ll] = new DirichletMultinomialModel(V, hyperparams.get(BETA) * V, 1.0 / V);
+            label_words[ll] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
     }
 
@@ -149,9 +156,9 @@ public class LabeledLDA extends AbstractSampler {
             logln("--- Initializing data structure ...");
         }
 
-        doc_labels = new DirichletMultinomialModel[D];
+        doc_labels = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            doc_labels[d] = new DirichletMultinomialModel(L, hyperparams.get(ALPHA) * L, 1.0 / L);
+            doc_labels[d] = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
         }
 
         z = new int[D][];
@@ -203,18 +210,7 @@ public class LabeledLDA extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
-            if (verbose && iter % REP_INTERVAL == 0) {
-                String str = "Iter " + iter
-                        + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                        + "\t" + getCurrentState();
-                if (iter < BURN_IN) {
-                    logln("--- Burning in. " + str + "\n");
-                } else {
-                    logln("--- Sampling. " + str + "\n");
-                }
-            }
+            numTokensChange = 0;
 
             for (int d = 0; d < D; d++) {
                 for (int n = 0; n < words[d].length; n++) {
@@ -224,6 +220,20 @@ public class LabeledLDA extends AbstractSampler {
 
             if (debug) {
                 validate("iter " + iter);
+            }
+
+            double loglikelihood = this.getLogLikelihood();
+            logLikelihoods.add(loglikelihood);
+            if (verbose && iter % REP_INTERVAL == 0) {
+                String str = "Iter " + iter
+                        + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
+                        + "\t tokens changed: " + ((double) numTokensChange / numTokens)
+                        + "\t" + getCurrentState();
+                if (iter < BURN_IN) {
+                    logln("--- Burning in. " + str + "\n");
+                } else {
+                    logln("--- Sampling. " + str + "\n");
+                }
             }
 
             if (iter % LAG == 0 && iter >= BURN_IN) {
@@ -293,7 +303,19 @@ public class LabeledLDA extends AbstractSampler {
         }
     }
 
-    public void sampleZ(int d, int n, 
+    /**
+     * Sample topic assignment for each token.
+     *
+     * @param d Document index
+     * @param n Token index
+     * @param removeFromModel Whether the current assignment should be removed
+     * from the model (i.e., label-word distributions)
+     * @param addToModel Whether the new assignment should be added to the model
+     * @param removeFromData Whether the current assignment should be removed
+     * from the data (i.e., doc-label distributions)
+     * @param addToData Whether the new assignment should be added to the data
+     */
+    public void sampleZ(int d, int n,
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
         if (removeFromModel) {
@@ -418,14 +440,14 @@ public class LabeledLDA extends AbstractSampler {
             StringBuilder modelStr = new StringBuilder();
             for (int k = 0; k < L; k++) {
                 modelStr.append(k).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(label_words[k])).append("\n");
+                modelStr.append(DirMult.output(label_words[k])).append("\n");
             }
 
             // data
             StringBuilder assignStr = new StringBuilder();
             for (int d = 0; d < D; d++) {
                 assignStr.append(d).append("\n");
-                assignStr.append(DirichletMultinomialModel.output(doc_labels[d])).append("\n");
+                assignStr.append(DirMult.output(doc_labels[d])).append("\n");
 
                 for (int n = 0; n < words[d].length; n++) {
                     assignStr.append(z[d][n]).append("\t");
@@ -474,7 +496,7 @@ public class LabeledLDA extends AbstractSampler {
                 if (topicIdx != k) {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
-                label_words[k] = DirichletMultinomialModel.input(reader.readLine());
+                label_words[k] = DirMult.input(reader.readLine());
             }
             reader.close();
         } catch (Exception e) {
@@ -500,7 +522,7 @@ public class LabeledLDA extends AbstractSampler {
                 if (docIdx != d) {
                     throw new RuntimeException("Indices mismatch when loading assignments");
                 }
-                doc_labels[d] = DirichletMultinomialModel.input(reader.readLine());
+                doc_labels[d] = DirMult.input(reader.readLine());
 
                 String[] sline = reader.readLine().split("\t");
                 for (int n = 0; n < words[d].length; n++) {
@@ -542,5 +564,156 @@ public class LabeledLDA extends AbstractSampler {
             writer.write("\n\n");
         }
         writer.close();
+    }
+
+    public void outputTopicCoherence(
+            File file,
+            MimnoTopicCoherence topicCoherence) throws Exception {
+        if (this.wordVocab == null) {
+            throw new RuntimeException("The word vocab has not been assigned yet");
+        }
+
+        if (verbose) {
+            logln("Outputing topic coherence to file " + file);
+        }
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
+        for (int k = 0; k < L; k++) {
+            double[] distribution = this.label_words[k].getDistribution();
+            int[] topic = SamplerUtils.getSortedTopic(distribution);
+            double score = topicCoherence.getCoherenceScore(topic);
+            writer.write(k
+                    + "\t" + label_words[k].getCountSum()
+                    + "\t" + MiscUtils.formatDouble(score));
+            for (int i = 0; i < topicCoherence.getNumTokens(); i++) {
+                writer.write("\t" + this.wordVocab.get(topic[i]));
+            }
+            writer.write("\n");
+        }
+        writer.close();
+    }
+
+    public static void main(String[] args) {
+        run(args);
+    }
+
+    public static void run(String[] args) {
+        try {
+            // create the command line parser
+            parser = new BasicParser();
+
+            // create the Options
+            options = new Options();
+
+            // directories
+            addOption("dataset", "Dataset");
+            addOption("data-folder", "Processed data folder");
+            addOption("format-folder", "Folder holding formatted data");
+            addOption("format-file", "Formatted file name");
+            addOption("output", "Output folder");
+
+            // sampling configurations
+            addOption("burnIn", "Burn-in");
+            addOption("maxIter", "Maximum number of iterations");
+            addOption("sampleLag", "Sample lag");
+            addOption("report", "Report interval");
+
+            // model parameters
+            addOption("K", "Number of topics");
+            addOption("numTopwords", "Number of top words per topic");
+            addOption("min-label-freq", "Minimum label frequency");
+
+            // model hyperparameters
+            addOption("alpha", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for topic distributions");
+            addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for word distributions");
+
+            // running configurations
+//            addOption("cv-folder", "Cross validation folder");
+//            addOption("num-folds", "Number of folds");
+//            addOption("fold", "The cross-validation fold to run");
+//            addOption("run-mode", "Running mode");
+
+            options.addOption("paramOpt", false, "Whether hyperparameter "
+                    + "optimization using slice sampling is performed");
+            options.addOption("v", false, "verbose");
+            options.addOption("d", false, "debug");
+            options.addOption("help", false, "Help");
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp(getHelpCmd(), options);
+                return;
+            }
+
+            runModel();
+        } catch (Exception e) {
+            e.printStackTrace();
+            CLIUtils.printHelp(getHelpCmd(), options);
+            System.exit(1);
+        }
+    }
+
+    private static String getHelpCmd() {
+        return "java -cp dist/segan.jar sampler.labeled.LabeledLDA -help";
+    }
+
+    private static void runModel() throws Exception {
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "L:/Dropbox/github/data");
+        String outputFolder = CLIUtils.getStringArgument(cmd, "output", "L:/Dropbox/github/data/112/format-label/model");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 300);
+
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+
+        boolean verbose = true;
+        boolean debug = true;
+
+        if (verbose) {
+            System.out.println("\nLoading formatted data ...");
+        }
+        LabelTextData data = new LabelTextData(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+        data.filterLabels(minLabelFreq);
+        data.prepareTopicCoherence(numTopWords);
+
+        int V = data.getWordVocab().size();
+        int K = data.getLabelVocab().size();
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        InitialState initState = InitialState.RANDOM;
+
+        if (verbose) {
+            System.out.println("\tRunning Labeled-LDA sampler ...");
+        }
+        LabeledLDA sampler = new LabeledLDA();
+        sampler.setVerbose(verbose);
+        sampler.setDebug(debug);
+        sampler.setWordVocab(data.getWordVocab());
+        sampler.setLabelVocab(data.getLabelVocab());
+
+        sampler.configure(outputFolder, data.getWords(), data.getLabels(),
+                V, K, alpha, beta, initState, paramOpt,
+                burnIn, maxIters, sampleLag, repInterval);
+
+        File lldaFolder = new File(outputFolder, sampler.getSamplerFolder());
+        IOUtils.createFolder(lldaFolder);
+        sampler.sample();
+        sampler.outputTopicTopWords(
+                new File(lldaFolder, TopWordFile),
+                numTopWords);
+        sampler.outputTopicCoherence(
+                new File(lldaFolder, TopicCoherenceFile),
+                data.getTopicCoherence());
     }
 }

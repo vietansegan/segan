@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampling.util;
 
 import java.util.ArrayList;
@@ -42,10 +38,10 @@ public class SparseCount implements Cloneable {
         this.counts.put(observation, count);
         this.countSum += count - curCount;
     }
-    
+
     public ArrayList<Integer> getSortedIndices() {
         ArrayList<Integer> sortedIndices = new ArrayList<Integer>();
-        for(int ii : getIndices()){
+        for (int ii : getIndices()) {
             sortedIndices.add(ii);
         }
         Collections.sort(sortedIndices);
@@ -174,7 +170,7 @@ public class SparseCount implements Cloneable {
         }
         return sp;
     }
-    
+
     public static void main(String[] args) {
         SparseCount sc1 = new SparseCount();
         sc1.changeCount(0, 1);
@@ -184,10 +180,10 @@ public class SparseCount implements Cloneable {
         sc2.changeCount(1, 1);
         sc2.changeCount(2, 2);
         sc2.changeCount(3, 3);
-        
+
         System.out.println(sc1.toString());
         System.out.println(sc2.toString());
-        
+
         SparseCount sc3 = SparseCount.add(sc1, sc2);
         System.out.println(sc3.toString());
     }

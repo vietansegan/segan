@@ -106,7 +106,7 @@ public class RunPriorLDA extends AbstractRunner {
                 CLIUtils.printHelp("java -cp dist/segan.jar main.ProcessData -help", options);
                 return;
             }
-            
+
             verbose = cmd.hasOption("v");
             debug = cmd.hasOption("d");
 
@@ -174,18 +174,18 @@ public class RunPriorLDA extends AbstractRunner {
             System.out.println(ii + "\t" + rankLabels.get(ii).getObject()
                     + "\t" + rankLabels.get(ii).getPrimaryValue());
         }
-        
+
         ArrayList<RankingItem<String>> rankLabelPairs = new ArrayList<RankingItem<String>>();
-        for(String pair : labelPairFreqs.keySet()) {
+        for (String pair : labelPairFreqs.keySet()) {
             rankLabelPairs.add(new RankingItem<String>(pair, labelPairFreqs.get(pair)));
         }
         Collections.sort(rankLabelPairs);
-        
-        for(int ii=0; ii<500; ii++) {
+
+        for (int ii = 0; ii < 500; ii++) {
             String[] labelPair = rankLabelPairs.get(ii).getObject().split(":-:");
             int c1 = labelFreqs.get(labelPair[0]);
             int c2 = labelFreqs.get(labelPair[1]);
-            System.out.println(ii 
+            System.out.println(ii
                     + "\t" + rankLabelPairs.get(ii).getObject()
                     + "\t" + c1 + "\t" + c2
                     + "\t" + rankLabelPairs.get(ii).getPrimaryValue());

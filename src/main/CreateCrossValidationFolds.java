@@ -1,6 +1,5 @@
 package main;
 
-import util.CLIUtils;
 import core.AbstractRunner;
 import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
@@ -11,6 +10,7 @@ import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import util.CLIUtils;
 import util.IOUtils;
 import util.StatisticsUtils;
 
@@ -27,7 +27,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
 
             // create the Options
             options = new Options();
-            
+
             addOption("dataset", "Dataset name");
             addOption("data-folder", "Processed data folder");
             addOption("output", "Output folder");
@@ -37,7 +37,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
                     + " sampling. Default 1.");
             addOption("num-folds", "Number of folds. Default 5.");
             addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
-            
+
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' "
@@ -102,7 +102,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
     private static void outputLexicalSVMLightData(
             Fold<String, RegressionDocumentInstance> fold) throws Exception {
         String featureType = "lexical";
-        BufferedWriter writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+        BufferedWriter writer = IOUtils.getBufferedWriter(new File(fold.getFolder(),
                 "fold-" + fold.getIndex() + "-" + featureType + Fold.TrainingExt).getAbsoluteFile());
         for (int idx : fold.getTrainingInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);
@@ -110,7 +110,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
         }
         writer.close();
 
-        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(),
                 "fold-" + fold.getIndex() + "-" + featureType + Fold.DevelopExt).getAbsoluteFile());
         for (int idx : fold.getDevelopmentInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);
@@ -118,7 +118,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
         }
         writer.close();
 
-        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(), 
+        writer = IOUtils.getBufferedWriter(new File(fold.getFolder(),
                 "fold-" + fold.getIndex() + "-" + featureType + Fold.TestExt).getAbsoluteFile());
         for (int idx : fold.getTestingInstances()) {
             RegressionDocumentInstance inst = fold.getInstance(idx);

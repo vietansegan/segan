@@ -6,9 +6,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import util.IOUtils;
 import util.MiscUtils;
@@ -19,6 +17,7 @@ import util.SamplerUtils;
  * @author vietan
  */
 public class PriorLDA extends AbstractSampler {
+
     public static final int ALPHA = 0;
     public static final int BETA = 1; // 0.1
     public static final int ETA = 2;
@@ -28,8 +27,8 @@ public class PriorLDA extends AbstractSampler {
     protected int K; // number of topics;
     protected int V; // vocab size
     protected int D; // number of documents
-    private DirichletMultinomialModel[] topic_word_dists; // K multinomials over V words
-    private DirichletMultinomialModel[] doc_topic_dists; // D multinomials over K topics
+    private DirMult[] topic_word_dists; // K multinomials over V words
+    private DirMult[] doc_topic_dists; // D multinomials over K topics
     private int numTokens;      // number of token assignments to be sampled
     private int numTokensChange;
     private ArrayList<String> topicVocab;
@@ -142,17 +141,17 @@ public class PriorLDA extends AbstractSampler {
     }
 
     private void initializeModelStructure() {
-        this.topic_word_dists = new DirichletMultinomialModel[K];
+        this.topic_word_dists = new DirMult[K];
         for (int kk = 0; kk < K; kk++) {
-            this.topic_word_dists[kk] = new DirichletMultinomialModel(V, hyperparams.get(BETA) * V, 1.0 / V);
+            this.topic_word_dists[kk] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
     }
 
     private void initializeDataStructure() {
-        this.doc_topic_dists = new DirichletMultinomialModel[D];
+        this.doc_topic_dists = new DirMult[D];
         for (int dd = 0; dd < D; dd++) {
             double[] prior = getDocumentPrior(dd, hyperparams.get(ALPHA), hyperparams.get(ETA));
-            this.doc_topic_dists[dd] = new DirichletMultinomialModel(prior);
+            this.doc_topic_dists[dd] = new DirMult(prior);
         }
 
         this.z = new int[D][];
@@ -414,14 +413,14 @@ public class PriorLDA extends AbstractSampler {
             modelStr.append("eta\t").append(hyperparams.get(ETA)).append("\n");
             for (int k = 0; k < K; k++) {
                 modelStr.append(k).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(topic_word_dists[k])).append("\n");
+                modelStr.append(DirMult.output(topic_word_dists[k])).append("\n");
             }
 
             // assignments
             StringBuilder assignStr = new StringBuilder();
             for (int d = 0; d < D; d++) {
                 assignStr.append(d).append("\n");
-                assignStr.append(DirichletMultinomialModel.output(doc_topic_dists[d])).append("\n");
+                assignStr.append(DirMult.output(doc_topic_dists[d])).append("\n");
             }
 
             for (int d = 0; d < D; d++) {
@@ -432,22 +431,7 @@ public class PriorLDA extends AbstractSampler {
             }
 
             // output to a compressed file
-            String filename = IOUtils.removeExtension(new File(filepath).getName());
-            ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
-
-            ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
-            writer.putNextEntry(modelEntry);
-            byte[] data = modelStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
-            writer.putNextEntry(assignEntry);
-            data = assignStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
-            writer.close();
+            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing state to " + filepath);
@@ -494,13 +478,13 @@ public class PriorLDA extends AbstractSampler {
         hyperparams.add(beta);
         hyperparams.add(eta);
 
-        this.topic_word_dists = new DirichletMultinomialModel[K];
+        this.topic_word_dists = new DirMult[K];
         for (int k = 0; k < K; k++) {
             int topicIdx = Integer.parseInt(reader.readLine());
             if (topicIdx != k) {
                 throw new RuntimeException("Topic indices mismatch when loading model");
             }
-            topic_word_dists[k] = DirichletMultinomialModel.input(reader.readLine());
+            topic_word_dists[k] = DirMult.input(reader.readLine());
         }
         reader.close();
     }
@@ -515,12 +499,10 @@ public class PriorLDA extends AbstractSampler {
 //                    + predictorFile);
 //        }
 //    }
-
 //    @Override
 //    public void outputPredictor(File predictorFile) {
 //        this.outputState(predictorFile.getAbsolutePath());
 //    }
-
 //    @Override
 //    public double[] predict(Page page) {
 //        int[] newWords = page.getWords();
@@ -529,7 +511,6 @@ public class PriorLDA extends AbstractSampler {
 //
 //        return predictBySampling(newWords);
 //    }
-
     public void setIdfs(double[] idfs) {
         this.idfs = idfs;
     }
@@ -592,8 +573,8 @@ public class PriorLDA extends AbstractSampler {
      */
     private double[] predictBySampling(int[] newWords) {
         // initialize data structure
-        DirichletMultinomialModel newDocTopicDist =
-                new DirichletMultinomialModel(K, hyperparams.get(ALPHA), 1.0/ K);
+        DirMult newDocTopicDist =
+                new DirMult(K, hyperparams.get(ALPHA), 1.0 / K);
         int[] newZ = new int[newWords.length];
 
         for (int n = 0; n < newWords.length; n++) {
@@ -638,7 +619,7 @@ public class PriorLDA extends AbstractSampler {
         }
         return topicScores;
     }
-    
+
     public void outputTopicTopWords(File file, int numTopWords) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

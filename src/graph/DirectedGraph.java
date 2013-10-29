@@ -67,11 +67,11 @@ public class DirectedGraph<C> {
             inEdges.remove(target);
         }
     }
-    
+
     public boolean hasOutEdges(GraphNode<C> node) {
         return this.outEdges.get(node) != null;
     }
-    
+
     public boolean hasInEdges(GraphNode<C> node) {
         return this.inEdges.get(node) != null;
     }

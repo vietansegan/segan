@@ -80,7 +80,7 @@ public class GibbsRegressorUtils {
         }
         return preds;
     }
-    
+
     public static void evaluate(File iterPredFolder,
             File outputFolder,
             double[] trueResponses) {
@@ -88,7 +88,7 @@ public class GibbsRegressorUtils {
         computeSingleAverage(iterPredFolder, outputFolder, trueResponses);
         computeMultipleFinal(iterPredFolder, outputFolder, trueResponses);
         computeMultipleAverage(iterPredFolder, outputFolder, trueResponses);
-        
+
     }
 
     /**

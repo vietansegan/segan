@@ -15,10 +15,10 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -49,13 +49,13 @@ public class MSHDPSampler extends AbstractSampler {
     protected double[][] responses; // [D] x [Td]
     protected int[][][] z; // local table index
     protected SparseCount[][] turnCounts;
-    private Restaurant<SHDPDish, SHDPTable, DirichletMultinomialModel> globalRestaurant;
+    private Restaurant<SHDPDish, SHDPTable, DirMult> globalRestaurant;
     private Restaurant<SHDPTable, String, SHDPDish>[] localRestaurants;
     private GaussianIndLinearRegObjective optimizable;
     private Optimizer optimizer;
     private int totalNumObservations = 0;
     private double[] uniform;
-    private DirichletMultinomialModel emptyDirMultModel;
+    private DirMult emptyDirMultModel;
     private int numTokenAssignmentsChange;
     private int numTableAssignmentsChange;
     private int numConverged;
@@ -169,14 +169,14 @@ public class MSHDPSampler extends AbstractSampler {
     }
 
     protected void initializeModelStructure() {
-        this.globalRestaurant = new Restaurant<SHDPDish, SHDPTable, DirichletMultinomialModel>();
+        this.globalRestaurant = new Restaurant<SHDPDish, SHDPTable, DirMult>();
 
         this.localRestaurants = new Restaurant[D];
         for (int d = 0; d < D; d++) {
             this.localRestaurants[d] = new Restaurant<SHDPTable, String, SHDPDish>();
         }
 
-        emptyDirMultModel = new DirichletMultinomialModel(V, hyperparams.get(BETA), uniform);
+        emptyDirMultModel = new DirMult(V, hyperparams.get(BETA), uniform);
     }
 
     protected void initializeDataStructure() {
@@ -501,7 +501,7 @@ public class MSHDPSampler extends AbstractSampler {
      */
     private SHDPDish createDish() {
         int newDishIndex = globalRestaurant.getNextTableIndex();
-        DirichletMultinomialModel dm = new DirichletMultinomialModel(V, hyperparams.get(BETA), uniform);
+        DirMult dm = new DirMult(V, hyperparams.get(BETA), uniform);
         double dishEta = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA_GLOBAL));
         SHDPDish newDish = new SHDPDish(newDishIndex, dm, dishEta);
         globalRestaurant.addTable(newDish);
@@ -1224,7 +1224,7 @@ public class MSHDPSampler extends AbstractSampler {
             for (SHDPDish dish : globalRestaurant.getTables()) {
                 modelStr.append(dish.getIndex()).append("\n");
                 modelStr.append(dish.getMean()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(dish.getContent())).append("\n");
+                modelStr.append(DirMult.output(dish.getContent())).append("\n");
                 for (SHDPTable table : dish.getCustomers()) {
                     modelStr.append(table.getTableId()).append("\t");
                 }
@@ -1326,7 +1326,7 @@ public class MSHDPSampler extends AbstractSampler {
         for (int i = 0; i < numTables; i++) {
             int dishIndex = Integer.parseInt(reader.readLine());
             double dishMean = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
             SHDPDish dish = new SHDPDish(dishIndex, dmm, dishMean);
             globalRestaurant.addTable(dish);
 
@@ -1702,11 +1702,11 @@ public class MSHDPSampler extends AbstractSampler {
     public void regressNewDocuments(int[][][] newWords) {
     }
 
-    class SHDPDish extends Table<SHDPTable, DirichletMultinomialModel> {
+    class SHDPDish extends FullTable<SHDPTable, DirMult> {
 
         private double mean;
 
-        public SHDPDish(int index, DirichletMultinomialModel content, double mean) {
+        public SHDPDish(int index, DirMult content, double mean) {
             super(index, content);
             this.mean = mean;
         }
@@ -1730,7 +1730,7 @@ public class MSHDPSampler extends AbstractSampler {
         }
     }
 
-    class SHDPTable extends Table<String, SHDPDish> {
+    class SHDPTable extends FullTable<String, SHDPDish> {
 
         int restIndex;
         private double eta;

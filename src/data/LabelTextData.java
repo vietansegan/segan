@@ -52,6 +52,10 @@ public class LabelTextData extends TextDataset {
         this.labelVocab = lVoc;
     }
 
+    public ArrayList<String>[] getLabelList() {
+        return this.labelList;
+    }
+
     /**
      * Filter labels that do not meet the minimum frequency requirement.
      *
@@ -107,6 +111,10 @@ public class LabelTextData extends TextDataset {
         System.out.println("--- --- ---- # documents without labels: " + count);
     }
 
+    public void loadLabels(File labelFile) throws Exception {
+        loadLabels(labelFile.getAbsolutePath());
+    }
+
     public void loadLabels(String labelFile) throws Exception {
         logln("--- Loading labels from " + labelFile);
 
@@ -134,6 +142,10 @@ public class LabelTextData extends TextDataset {
             ArrayList<String> docLabels = docLabelMap.get(docIdList.get(ii));
             this.labelList[ii] = docLabels;
         }
+    }
+
+    public void format(File outputFolder) throws Exception {
+        format(outputFolder.getAbsolutePath());
     }
 
     @Override
@@ -217,7 +229,7 @@ public class LabelTextData extends TextDataset {
     }
 
     @Override
-    protected void outputInfo(String outputFolder) throws Exception {
+    protected void outputDocumentInfo(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile);
 

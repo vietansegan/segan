@@ -108,37 +108,38 @@ public class GurobiMultipleLinearRegression {
         }
         return solution;
     }
-    
-    public static void main(String[] args){
+
+    public static void main(String[] args) {
         test();
     }
-    
-    private static void test(){
+
+    private static void test() {
         Random rand = new Random(1);
-        
+
         int D = 10;
         int V = 10;
         double[][] designMatrix = new double[D][V];
-        for(int d=0; d<D; d++){
-            for(int v=0; v<V; v++)
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
                 designMatrix[d][v] = rand.nextFloat();
+            }
         }
-        
+
         double[] trueParams = new double[V];
-        for(int i=0; i<3; i++){
-            trueParams[i] = i+1;
-            trueParams[V-1-i] = -i-1;
+        for (int i = 0; i < 3; i++) {
+            trueParams[i] = i + 1;
+            trueParams[V - 1 - i] = -i - 1;
         }
         System.out.println("true params: " + MiscUtils.arrayToString(trueParams));
-        
+
         // generate response
         double[] responseVector = new double[D];
-        for(int d=0; d<D; d++){
-            for(int v=0; v<V; v++){
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
                 responseVector[d] += designMatrix[d][v] * trueParams[v];
             }
         }
-        
+
         GurobiMultipleLinearRegression lasso = new GurobiMultipleLinearRegression(designMatrix, responseVector, 6.0);
         lasso.solve();
     }

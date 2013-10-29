@@ -26,7 +26,7 @@ import util.CLIUtils;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.labeled.LabeledLDA;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
 import util.IOUtils;
@@ -245,7 +245,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
         setLog(true);
 
         // topics
-        DirichletMultinomialModel[] labelWordDists = llda.getTopicWordDistributions();
+        DirMult[] labelWordDists = llda.getTopicWordDistributions();
         for (int ll = 0; ll < L; ll++) {
             double[] topic = labelWordDists[ll].getDistribution();
             this.nodeList[ll].setTopic(topic);
@@ -396,7 +396,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
                 String str = "Iter " + iter
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
                         + "\t # tokens changed: " + numTokensChange
-                        + "\t (" + ((double)numTokensChange/numTokens) + ")"
+                        + "\t (" + ((double) numTokensChange / numTokens) + ")"
                         + "\t" + getCurrentState();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
@@ -685,7 +685,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
             node.sampleTopic();
         }
     }
-    
+
     protected void updateTree() {
         // remember to update this.leaves
     }
@@ -693,15 +693,15 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
     @Override
     public double getLogLikelihood() {
         double wordLlh = 0.0;
-        for(int kk=0; kk<L+1; kk++) {
+        for (int kk = 0; kk < L + 1; kk++) {
             wordLlh += nodeList[kk].getLogLikelihood();
         }
-        
+
         double llh = wordLlh;
-        if(verbose) {
+        if (verbose) {
             logln("--- word: " + MiscUtils.formatDouble(wordLlh));
         }
-        
+
         return llh;
     }
 
@@ -746,7 +746,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
         }
         return str.toString();
     }
-    
+
     @Override
     public void validate(String msg) {
         int numNodes = 0;
@@ -1010,7 +1010,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
 
         public double getLogLikelihood() {
             double llh = 0.0;
-            for(int obs : this.observations.keys()){
+            for (int obs : this.observations.keys()) {
                 llh += this.observations.get(obs) * Math.log(topic[obs]);
             }
             return llh;
@@ -1054,7 +1054,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
                 }
             }
         }
-        
+
         public void setTopic(double[] t) {
             this.topic = t;
         }
@@ -1110,7 +1110,7 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
         public void setIndex(int index) {
             this.index = index;
         }
-        
+
         public int getIterationCreated() {
             return this.born;
         }
@@ -1148,9 +1148,10 @@ public class HierarchicalLabeledLDABackup extends AbstractSampler {
             }
         }
     }
-    
+
     class TreeInitializer {
         // inputs
+
         private int[] labelFreqs;
         private HashMap<String, Integer> pairFreqs;
         // output

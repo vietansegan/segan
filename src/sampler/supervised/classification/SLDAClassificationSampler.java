@@ -6,7 +6,7 @@ package sampler.supervised.classification;
 
 import core.AbstractSampler;
 import java.util.ArrayList;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import util.IOUtils;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;

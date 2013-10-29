@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampling.util;
 
 import java.util.Collection;
@@ -131,7 +127,7 @@ public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C
     public boolean isRoot() {
         return this.parent == null;
     }
-    
+
     public boolean isLeaf() {
         return this.children.isEmpty();
     }
@@ -154,6 +150,10 @@ public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C
 
     public int getIndex() {
         return this.index;
+    }
+
+    public void setParent(N p) {
+        this.parent = p;
     }
 
     public N getParent() {

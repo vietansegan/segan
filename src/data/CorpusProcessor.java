@@ -171,6 +171,10 @@ public class CorpusProcessor {
         return this.vocabulary;
     }
 
+    public void setVocab(ArrayList<String> voc) {
+        this.vocabulary = voc;
+    }
+
     public int[][] getNumerics() {
         return this.numericDocs;
     }
@@ -264,12 +268,21 @@ public class CorpusProcessor {
                         continue;
                     }
 
+                    // consider a bigram
                     if (i + 1 < normTexts[d][s].length
                             && !normTexts[d][s][i + 1].isEmpty()) {
                         String bigram = getBigramString(normTexts[d][s][i], normTexts[d][s][i + 1]);
+
+                        // if the bigram is not in the vocab, add the current
+                        // unigram and move on
                         if (!voc.contains(bigram)) {
+                            if (voc.contains(curToken)) {
+                                tokens.add(curToken);
+                            }
                             continue;
                         }
+
+                        // if the bigram is in the vocab, add the bigram
                         tokens.add(bigram);
                         i++;
                     } else {
@@ -277,10 +290,9 @@ public class CorpusProcessor {
                             tokens.add(curToken);
                         }
                     }
-                    normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
                 }
+                normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
             }
-
 
             this.numericSentences = new int[rawTexts.length][][];
         }
@@ -346,7 +358,6 @@ public class CorpusProcessor {
             Set<String> uniqueDocTokens = new HashSet<String>();
             String rawText = rawTexts[d];
             rawSentences[d] = sentenceDetector.sentDetect(rawText);
-
             normTexts[d] = new String[rawSentences[d].length][];
 
             for (int s = 0; s < rawSentences[d].length; s++) {
@@ -379,11 +390,11 @@ public class CorpusProcessor {
 
         // debug
         if (verbose) {
-            System.out.println("--- # raw unique unigrams: " + termFreq.size() 
+            System.out.println("--- # raw unique unigrams: " + termFreq.size()
                     + ". " + docFreq.size());
             System.out.println("--- # raw unique bigrams: " + bigramFreq.size());
-            System.out.println("--- # left: " + leftFreq.size() 
-                    + ". # right: " + rightFreq.size() 
+            System.out.println("--- # left: " + leftFreq.size()
+                    + ". # right: " + rightFreq.size()
                     + ". total: " + totalBigram);
         }
 
@@ -431,6 +442,14 @@ public class CorpusProcessor {
                             && !normTexts[d][s][i + 1].isEmpty()) {
                         String bigram = getBigramString(normTexts[d][s][i], normTexts[d][s][i + 1]);
                         if (!vocab.contains(bigram)) {
+                            // if the bigram is not in the vocab, add the current
+                            // unigram and move on to the next unigram
+                            if (termFreq.get(curToken) < this.unigramCountCutoff) {
+                                continue;
+                            }
+                            tokens.add(curToken);
+                            vocab.add(curToken);
+                            MiscUtils.incrementMap(finalTermFreq, curToken);
                             continue;
                         }
                         tokens.add(bigram);
@@ -450,7 +469,7 @@ public class CorpusProcessor {
                 // union
                 docUniqueTerms.addAll(Arrays.asList(normTexts[d][s]));
             }
-            
+
             // update document frequencies
             for (String ut : docUniqueTerms) {
                 MiscUtils.incrementMap(finalDocFreq, ut);
@@ -469,7 +488,7 @@ public class CorpusProcessor {
                     || df > this.vocabDocFreqMaxCutoff) {
                 continue;
             }
-            
+
             double tf = Math.log(rawTf + 1);
             double idf = Math.log(rawTexts.length) - Math.log(df);
             double tfidf = tf * idf;
@@ -496,7 +515,7 @@ public class CorpusProcessor {
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm = 
+                    int numericTerm =
                             Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;

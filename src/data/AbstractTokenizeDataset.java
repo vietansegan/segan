@@ -76,11 +76,11 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         writer.write(this.corpProc.getSettings() + "\n");
         writer.close();
     }
-    
+
     public void setFormatFilename(String fn) {
         this.formatFilename = fn;
     }
-    
+
     public String getFormatFilename() {
         return this.formatFilename;
     }

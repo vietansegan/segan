@@ -20,11 +20,11 @@ import java.util.zip.ZipOutputStream;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianHierLinearRegObjective;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
@@ -75,7 +75,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
     private int tokenCount;
     private int[] docTokenCounts;
     private double[] uniform;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private int numTokenAssignmentsChange;
     private int numSentAssignmentsChange;
     private int numTableAssignmentsChange;
@@ -275,13 +275,13 @@ public class SentCrpNCrpSampler extends AbstractSampler {
     private void initializeModelStructure() {
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double regParam = SamplerUtils.getGaussian(mus[rootLevel], sigmas[rootLevel]);
         this.globalTreeRoot = new SNode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
     }
 
@@ -776,7 +776,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
     private SNode createNode(SNode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmm = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmm = new DirMult(V, betas[level], uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SNode child = new SNode(iter, nextChildIndex, level, dmm, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -2301,7 +2301,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
                 modelStr.append(node.getIterationCreated()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\n");
                 modelStr.append(node.getRegressionParameter()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SNode child : node.getChildren()) {
                     stack.add(child);
@@ -2406,7 +2406,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             int iterCreated = Integer.parseInt(reader.readLine());
             int numCustomers = Integer.parseInt(reader.readLine());
             double regParam = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -3013,13 +3013,13 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         }
     }
 
-    class SNode extends TreeNode<SNode, DirichletMultinomialModel> {
+    class SNode extends TreeNode<SNode, DirMult> {
 
         private final int born;
         private int numCustomers;
         private double regression;
 
-        SNode(int iter, int index, int level, DirichletMultinomialModel content, double regParam,
+        SNode(int iter, int index, int level, DirMult content, double regParam,
                 SNode parent) {
             super(index, level, content, parent);
             this.born = iter;
@@ -3099,7 +3099,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         }
     }
 
-    class STable extends Table<Integer, SNode> {
+    class STable extends FullTable<Integer, SNode> {
 
         private final int born;
         private final int restIndex;

@@ -17,7 +17,7 @@ import java.util.Queue;
 import java.util.Stack;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
@@ -1786,7 +1786,7 @@ class RCRPNode extends TreeNode<RCRPNode, SparseCount> {
     }
 }
 
-class RCRPTable extends Table<Integer, RCRPNode> {
+class RCRPTable extends FullTable<Integer, RCRPNode> {
 
     int restIndex;
 

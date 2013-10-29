@@ -11,19 +11,18 @@ import util.SamplerUtils;
 
 /**
  * Implementation of a multinomial likelihood model in which the multinomial
- * distribution is integrated out
+ * distribution is integrated out.
  *
  * @author vietan
  */
-public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodModel {
-    // prior
+public class DirMult extends AbstractDiscreteFiniteLikelihoodModel {
 
     private double concentration; // concentration parameter
     private double[] center; // the mean vector for asymmetric distribution
     private double centerElement; // an element in the mean vector for symmetric distribution
     private double[] distribution;
 
-    public DirichletMultinomialModel(int dim, double concentration, double centerElement) {
+    public DirMult(int dim, double concentration, double centerElement) {
         super(dim);
         this.centerElement = centerElement;
         this.concentration = concentration;
@@ -31,13 +30,13 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
     /*TODO: dim can be inferred from the dimension of centerVector. remove the
      * argument "dim"! */
 
-    public DirichletMultinomialModel(int dim, double concentration, double[] centerVector) {
+    public DirMult(int dim, double concentration, double[] centerVector) {
         super(dim);
         this.center = centerVector;
         this.concentration = concentration;
     }
 
-    public DirichletMultinomialModel(double[] p) {
+    public DirMult(double[] p) {
         super(p.length);
         this.concentration = 0.0;
         for (double v : p) {
@@ -49,11 +48,11 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
         }
     }
 
-    public void setTrueDistribution(double[] dist) {
+    public void setSamplingDistribution(double[] dist) {
         this.distribution = dist;
     }
 
-    public double[] getTrueDistribution() {
+    public double[] getSamplingDistribution() {
         return this.distribution;
     }
 
@@ -113,8 +112,8 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
     }
 
     @Override
-    public DirichletMultinomialModel clone() throws CloneNotSupportedException {
-        DirichletMultinomialModel newMult = (DirichletMultinomialModel) super.clone();
+    public DirMult clone() throws CloneNotSupportedException {
+        DirMult newMult = (DirMult) super.clone();
         if (!isShortRepresented()) {
             newMult.center = (double[]) this.center.clone();
         }
@@ -241,7 +240,7 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
         return str.toString();
     }
 
-    public static String output(DirichletMultinomialModel model) {
+    public static String output(DirMult model) {
         StringBuilder str = new StringBuilder();
         str.append(model.dimension)
                 .append("\t").append(model.concentration);
@@ -254,7 +253,7 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
         return str.toString();
     }
 
-    public static DirichletMultinomialModel input(String str) {
+    public static DirMult input(String str) {
         String[] sline = str.split("\t");
         int dim = Integer.parseInt(sline[0]);
         double concentration = Double.parseDouble(sline[1]);
@@ -263,7 +262,7 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
         for (int v = 0; v < dim; v++) {
             mean[v] = Double.parseDouble(sline[idx++]);
         }
-        DirichletMultinomialModel model = new DirichletMultinomialModel(dim, concentration, mean);
+        DirMult model = new DirMult(dim, concentration, mean);
         for (int v = 0; v < dim; v++) {
             model.changeCount(v, Integer.parseInt(sline[idx++]));
         }
@@ -286,7 +285,7 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
     private static void testLlh() throws Exception {
         double[] mean = {0.5, 0.5};
         double scale = 2;
-        DirichletMultinomialModel dmm = new DirichletMultinomialModel(mean.length, scale, mean);
+        DirMult dmm = new DirMult(mean.length, scale, mean);
         System.out.println(dmm.getLogLikelihood(0));
         dmm.increment(0);
         System.out.println(dmm.getLogLikelihood());
@@ -301,7 +300,7 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
     private static void testPrior() throws Exception {
         double[] mean = {0.7, 0.2, 0.1};
         double conc = 10000;
-        DirichletMultinomialModel mm = new DirichletMultinomialModel(mean.length, conc, mean);
+        DirMult mm = new DirMult(mean.length, conc, mean);
 
         mm.increment(0);
         System.out.println(java.util.Arrays.toString(mm.getDistribution()));
@@ -311,10 +310,10 @@ public class DirichletMultinomialModel extends AbstractDiscreteFiniteLikelihoodM
         int dim = 10;
         double con = 0.5;
         double ce = 0.1;
-        DirichletMultinomialModel mm = new DirichletMultinomialModel(dim, con, ce);
+        DirMult mm = new DirMult(dim, con, ce);
         mm.increment(1);
 
-        DirichletMultinomialModel newMM = (DirichletMultinomialModel) mm.clone();
+        DirMult newMM = (DirMult) mm.clone();
         System.out.println(mm.getDebugString());
         System.out.println(newMM.getDebugString());
 

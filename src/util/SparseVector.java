@@ -99,8 +99,9 @@ public class SparseVector {
     }
 
     public double cosineSimilarity(SparseVector other) {
-        if(this.size() == 0 || other.size() == 0)
+        if (this.size() == 0 || other.size() == 0) {
             return 0.0;
+        }
         double thisL2Norm = this.getL2Norm();
         double thatL2Norm = other.getL2Norm();
         double dotProd = this.dotProduct(other);

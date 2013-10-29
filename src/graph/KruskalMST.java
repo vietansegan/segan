@@ -56,7 +56,7 @@ public class KruskalMST<C> {
 
             // merge tree
             System.out.println("Merging trees ...");
-            if(sourceTree.tree.getNumNodes() > targetTree.tree.getNumNodes()) {
+            if (sourceTree.tree.getNumNodes() > targetTree.tree.getNumNodes()) {
                 sourceTree.tree.addEdge(edge);
                 for (GraphNode<C> n : targetTree.tree.getNodes()) {
                     for (GraphEdge e : targetTree.tree.getEdges(n)) {
@@ -68,20 +68,20 @@ public class KruskalMST<C> {
                     treeMap.put(n, sourceTree);
                 }
                 targetTree.tree.clear();
-            }
-            else{
+            } else {
                 targetTree.tree.addEdge(edge);
-                for(GraphNode<C> n : sourceTree.tree.getNodes()){
-                    for(GraphEdge e : sourceTree.tree.getEdges(n))
+                for (GraphNode<C> n : sourceTree.tree.getNodes()) {
+                    for (GraphEdge e : sourceTree.tree.getEdges(n)) {
                         targetTree.tree.addEdge(e);
+                    }
                 }
                 treeMap.put(source, targetTree);
-                for(GraphNode<C> n : sourceTree.tree.getNodes()){
+                for (GraphNode<C> n : sourceTree.tree.getNodes()) {
                     treeMap.put(n, targetTree);
                 }
                 sourceTree.tree.clear();
             }
-            
+
             numTrees--;
 
             // debug

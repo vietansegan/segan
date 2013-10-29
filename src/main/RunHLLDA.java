@@ -155,14 +155,14 @@ public class RunHLLDA extends AbstractRunner {
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
         data.filterLabels(minLabelFreq);
         data.filterDocumentWithoutLabels();
-        if(verbose){
+        if (verbose) {
             System.out.println("--- Data loaded.");
             System.out.println("--- --- min-label-freq: " + minLabelFreq);
             System.out.println("--- --- label vocab size: " + data.getLabelVocab().size());
             System.out.println("--- --- # documents: " + data.getWords().length
                     + ". " + data.getLabels().length);
         }
-        
+
         if (verbose) {
             System.out.println("--- Sampling hierarchical labeled LDA ...");
         }
@@ -223,7 +223,7 @@ public class RunHLLDA extends AbstractRunner {
             sampler.setLabelVocab(data.getLabelVocab());
 
             sampler.configure(resultFolder, data.getWords(), data.getLabels(),
-                    V, data.getLabelVocab().size(), 
+                    V, data.getLabelVocab().size(),
                     alpha, beta, gamma, mean, scale,
                     InitialState.RANDOM, HierarchicalLabeledLDABackup.PathAssumption.MINIMAL,
                     paramOpt,

@@ -20,7 +20,7 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.TreeNode;
 import sampling.util.SparseCount;
@@ -58,7 +58,7 @@ public class SentSHLDASampler extends AbstractSampler {
     private TruncatedStickBreaking[] doc_level_distr;
     private SparseCount[][] sent_level_count;
     private SentSHLDANode word_hier_root;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private GaussianIndLinearRegObjective optimizable;
     private Optimizer optimizer;
     private double[] uniform;
@@ -256,13 +256,13 @@ public class SentSHLDASampler extends AbstractSampler {
 
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double regParam = SamplerUtils.getGaussian(mus[rootLevel], sigmas[rootLevel]);
         this.word_hier_root = new SentSHLDANode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
     }
 
@@ -578,7 +578,7 @@ public class SentSHLDASampler extends AbstractSampler {
     private SentSHLDANode createNode(SentSHLDANode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmModel = new DirMult(V, betas[level], uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SentSHLDANode child = new SentSHLDANode(iter, nextChildIndex, level, dmModel, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -1374,7 +1374,7 @@ public class SentSHLDASampler extends AbstractSampler {
                 modelStr.append(node.getIterationCreated()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\n");
                 modelStr.append(node.getRegressionParameter()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SentSHLDANode child : node.getChildren()) {
                     stack.add(child);
@@ -1467,7 +1467,7 @@ public class SentSHLDASampler extends AbstractSampler {
             int iterCreated = Integer.parseInt(reader.readLine());
             int numCustomers = Integer.parseInt(reader.readLine());
             double regParam = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -1695,13 +1695,13 @@ public class SentSHLDASampler extends AbstractSampler {
     }
 }
 
-class SentSHLDANode extends TreeNode<SentSHLDANode, DirichletMultinomialModel> {
+class SentSHLDANode extends TreeNode<SentSHLDANode, DirMult> {
 
     private final int born;
     private int numCustomers;
     private double regression;
 
-    SentSHLDANode(int iter, int index, int level, DirichletMultinomialModel content,
+    SentSHLDANode(int iter, int index, int level, DirMult content,
             double regParam, SentSHLDANode parent) {
         super(index, level, content, parent);
         this.born = iter;

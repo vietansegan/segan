@@ -15,6 +15,7 @@ import util.IOUtils;
  * @author vietan
  */
 public class SingleResponseTextDataset extends TextDataset {
+
     protected double[] responses;
 
     public SingleResponseTextDataset(String name, String folder) {
@@ -33,7 +34,7 @@ public class SingleResponseTextDataset extends TextDataset {
     public void setResponses(double[] responses) {
         this.responses = responses;
     }
-    
+
     public double[] getResponses(ArrayList<Integer> instances) {
         double[] res = new double[instances.size()];
         for (int i = 0; i < res.length; i++) {
@@ -42,7 +43,7 @@ public class SingleResponseTextDataset extends TextDataset {
         }
         return res;
     }
-    
+
     public void loadResponses(String responseFilepath) throws Exception {
         logln("--- Loading response from file " + responseFilepath);
 
@@ -64,10 +65,10 @@ public class SingleResponseTextDataset extends TextDataset {
     }
 
     @Override
-    protected void outputInfo(String outputFolder) throws Exception {
+    protected void outputDocumentInfo(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + docInfoExt);
         logln("--- Outputing document info ... " + outputFile);
-        
+
         BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
         for (int docIndex : this.processedDocIndices) {
             infoWriter.write(this.docIdList.get(docIndex)

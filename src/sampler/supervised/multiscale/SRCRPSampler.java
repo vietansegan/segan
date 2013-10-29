@@ -18,10 +18,10 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.Table;
+import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
@@ -63,7 +63,7 @@ public class SRCRPSampler extends AbstractSampler {
     private int totalNumObservations = 0;
     private double[] uniform;
     private int[] docNumWords;
-    private DirichletMultinomialModel[] emptyModels;
+    private DirMult[] emptyModels;
     private int numTokenAssignmentsChange;
     private int numTableAssignmentsChange;
     private int numConverged;
@@ -229,7 +229,7 @@ public class SRCRPSampler extends AbstractSampler {
     private void initializeModelStructure() {
         int rootLevel = 0;
         int rootIndex = 0;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
         double rootMean = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
         this.globalTreeRoot = new SRCRPNode(rootIndex, rootLevel, dmModel, null, rootMean);
 
@@ -238,9 +238,9 @@ public class SRCRPSampler extends AbstractSampler {
             this.localRestaurants[d] = new Restaurant<SRCRPTable, String, SRCRPNode>();
         }
 
-        this.emptyModels = new DirichletMultinomialModel[L - 1];
+        this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirichletMultinomialModel(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
         }
 
         this.multiscaleModel = new MultiscaleStateSpace(globalTreeRoot,
@@ -575,7 +575,7 @@ public class SRCRPSampler extends AbstractSampler {
     private SRCRPNode createGlobalNode(SRCRPNode parentNode) {
         int childIndex = parentNode.getNextChildIndex();
         int childLevel = parentNode.getLevel() + 1;
-        DirichletMultinomialModel llhModel = new DirichletMultinomialModel(V, betas[childLevel], uniform);
+        DirMult llhModel = new DirMult(V, betas[childLevel], uniform);
         double mean = SamplerUtils.getGaussian(parentNode.getMean(), sigmas[parentNode.getLevel()]);
         SRCRPNode childNode = new SRCRPNode(childIndex, childLevel, llhModel, parentNode, mean);
         parentNode.addChild(childIndex, childNode);
@@ -1736,7 +1736,7 @@ public class SRCRPSampler extends AbstractSampler {
                 modelStr.append(node.getPathString()).append("\n");
                 modelStr.append(node.getNumPathCustomers()).append("\n");
                 modelStr.append(node.getMean()).append("\n");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
                 for (SRCRPTable table : node.getCustomers()) {
                     modelStr.append(table.getTableId()).append("\t");
                 }
@@ -1846,7 +1846,7 @@ public class SRCRPSampler extends AbstractSampler {
             String pathStr = line;
             int numPathCusts = Integer.parseInt(reader.readLine());
             double mean = Double.parseDouble(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -2262,13 +2262,13 @@ public class SRCRPSampler extends AbstractSampler {
     }
 }
 
-class SRCRPNode extends TreeNode<SRCRPNode, DirichletMultinomialModel> {
+class SRCRPNode extends TreeNode<SRCRPNode, DirMult> {
 
     ArrayList<SRCRPTable> customers;
     int numPathCustomers; // number of customers on the path from root to this node (including customers in the subtree)
     private double mean;
 
-    SRCRPNode(int index, int level, DirichletMultinomialModel content, SRCRPNode parent,
+    SRCRPNode(int index, int level, DirMult content, SRCRPNode parent,
             double mean) {
         super(index, level, content, parent);
         this.numPathCustomers = 0;
@@ -2383,7 +2383,7 @@ class SRCRPNode extends TreeNode<SRCRPNode, DirichletMultinomialModel> {
     }
 }
 
-class SRCRPTable extends Table<String, SRCRPNode> {
+class SRCRPTable extends FullTable<String, SRCRPNode> {
 
     final int restIndex;
     private double eta;

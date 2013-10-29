@@ -21,6 +21,7 @@ import util.RankingItem;
  * @author vietan
  */
 public abstract class AbstractSampler {
+
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
     public static final String ReportFolder = "report/";
@@ -63,17 +64,16 @@ public abstract class AbstractSampler {
     protected boolean log = true;
     protected boolean report = false;
     protected BufferedWriter logger;
-    
     protected static CommandLineParser parser;
     protected static Options options;
     protected static CommandLine cmd;
-    
-    protected static void addOption(String optName, String optDesc){
+
+    protected static void addOption(String optName, String optDesc) {
         options.addOption(OptionBuilder.withLongOpt(optName)
-                    .withDescription(optDesc)
-                    .hasArg()
-                    .withArgName(optName)
-                    .create());
+                .withDescription(optDesc)
+                .hasArg()
+                .withArgName(optName)
+                .create());
     }
 
     public void setSamplerConfiguration(int burn_in, int max_iter, int lag, int repInt) {
@@ -102,7 +102,7 @@ public abstract class AbstractSampler {
     public abstract void outputState(String filepath);
 
     public abstract void inputState(String filepath);
-    
+
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
         return str.toString();

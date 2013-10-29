@@ -15,7 +15,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.DirichletMultinomialModel;
+import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.TreeNode;
 import util.IOUtils;
@@ -231,7 +231,7 @@ public class SHLDASampler extends AbstractSampler {
         for (int i = 0; i < V; i++) {
             uniform[i] = 1.0 / V;
         }
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[0], uniform);
+        DirMult dmModel = new DirMult(V, betas[0], uniform);
         word_hier_root = new SHLDANode(0, 0, dmModel, null);
     }
 
@@ -956,7 +956,7 @@ public class SHLDASampler extends AbstractSampler {
     private SHLDANode createNode(SHLDANode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirichletMultinomialModel dmModel = new DirichletMultinomialModel(V, betas[level], uniform);
+        DirMult dmModel = new DirMult(V, betas[level], uniform);
         SHLDANode child = new SHLDANode(nextChildIndex, level, dmModel,
                 //mus[level], sigmas[level], 
                 parent);
@@ -1141,7 +1141,7 @@ public class SHLDASampler extends AbstractSampler {
 
                 modelStr.append(node.getPathString()).append("\n");
                 modelStr.append(node.getNumCustomers()).append("\t");
-                modelStr.append(DirichletMultinomialModel.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
 
                 for (SHLDANode child : node.getChildren()) {
                     stack.add(child);
@@ -1228,7 +1228,7 @@ public class SHLDASampler extends AbstractSampler {
         while ((line = reader.readLine()) != null) {
             String pathStr = line;
             int numCustomers = Integer.parseInt(reader.readLine());
-            DirichletMultinomialModel dmm = DirichletMultinomialModel.input(reader.readLine());
+            DirMult dmm = DirMult.input(reader.readLine());
 
             // create node
             int lastColonIndex = pathStr.lastIndexOf(":");
@@ -1363,7 +1363,7 @@ public class SHLDASampler extends AbstractSampler {
     }
 }
 
-class SHLDANode extends TreeNode<SHLDANode, DirichletMultinomialModel> {
+class SHLDANode extends TreeNode<SHLDANode, DirMult> {
 
     private int numCustomers;
     private SHLDANode pseudoChild;
@@ -1371,7 +1371,7 @@ class SHLDANode extends TreeNode<SHLDANode, DirichletMultinomialModel> {
 //    private double sigma; // standard deviation of the Gaussian distrbution
     private double regression; // regression parameter
 
-    public SHLDANode(int index, int level, DirichletMultinomialModel content,
+    public SHLDANode(int index, int level, DirMult content,
             //            double mu, double sigma,
             SHLDANode parent) {
         super(index, level, content, parent);
