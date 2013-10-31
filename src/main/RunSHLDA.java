@@ -7,7 +7,7 @@ package main;
 import util.CLIUtils;
 import core.AbstractExperiment;
 import core.AbstractSampler.InitialState;
-import data.SingleResponseTextDataset;
+import data.RegressionTextDataset;
 import data.TextDataset;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
@@ -150,7 +150,7 @@ public class RunSHLDA {
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
             String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-            SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder);
+            RegressionTextDataset dataset = new RegressionTextDataset(datasetName, datasetFolder);
             dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);

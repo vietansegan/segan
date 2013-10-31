@@ -8,7 +8,7 @@ import core.AbstractRunner;
 import data.CorpusProcessor;
 import data.LabelSingleResponseTextDataset;
 import data.LabelTextData;
-import data.SingleResponseTextDataset;
+import data.RegressionTextDataset;
 import data.TextDataset;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
@@ -130,7 +130,7 @@ public class ProcessData extends AbstractRunner {
                 dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             } else if (cmd.hasOption("response-file")) {
                 String responseFile = cmd.getOptionValue("response-file");
-                SingleResponseTextDataset dataset = new SingleResponseTextDataset(datasetName, datasetFolder, corpProc);
+                RegressionTextDataset dataset = new RegressionTextDataset(datasetName, datasetFolder, corpProc);
                 dataset.setFormatFilename(formatFile);
 
                 // load text data

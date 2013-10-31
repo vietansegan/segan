@@ -8,7 +8,7 @@ import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
 import core.crossvalidation.Instance;
 import core.crossvalidation.RegressionDocumentInstance;
-import data.SingleResponseTextDataset;
+import data.RegressionTextDataset;
 import data.TextDataset;
 import java.io.File;
 import java.util.ArrayList;
@@ -26,7 +26,7 @@ import util.normalizer.ZNormalizer;
  */
 public class RunLexicalSHLDA extends AbstractRunner {
 
-    private static SingleResponseTextDataset data;
+    private static RegressionTextDataset data;
     private static MimnoTopicCoherence topicCoherence;
     private static int numTopWords;
 
@@ -109,7 +109,7 @@ public class RunLexicalSHLDA extends AbstractRunner {
             String cvFolder = cmd.getOptionValue("cv-folder");
             int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
 
-            data = new SingleResponseTextDataset(datasetName, datasetFolder);
+            data = new RegressionTextDataset(datasetName, datasetFolder);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
@@ -274,7 +274,7 @@ public class RunLexicalSHLDA extends AbstractRunner {
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
             String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-            data = new SingleResponseTextDataset(datasetName, datasetFolder);
+            data = new RegressionTextDataset(datasetName, datasetFolder);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);

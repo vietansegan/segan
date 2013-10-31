@@ -116,7 +116,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      * @param textFilepath The input data file
      */
     public void loadTextDataFromFile(String textFilepath) throws Exception {
-        logln("--- Loading text data from file " + textFilepath);
+        if (verbose) {
+            logln("--- Loading text data from file " + textFilepath);
+        }
 
         BufferedReader reader = IOUtils.getBufferedReader(textFilepath);
         String line;
@@ -126,7 +128,9 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
         reader.close();
 
-        logln("--- --- Loaded " + docIdList.size() + " document(s)");
+        if (verbose) {
+            logln("--- --- Loaded " + docIdList.size() + " document(s)");
+        }
     }
 
     /**
@@ -146,7 +150,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      * @param textFolderPath The input data folder
      */
     public void loadTextDataFromFolder(String textFolderPath) throws Exception {
-        logln("--- Loading text data from folder " + textFolderPath);
+        if (verbose) {
+            logln("--- Loading text data from folder " + textFolderPath);
+        }
 
         File fd = new File(textFolderPath);
         String[] filenames = fd.list();
@@ -165,7 +171,9 @@ public class TextDataset extends AbstractTokenizeDataset {
             textList.add(docText.toString());
         }
 
-        logln("--- --- Loaded " + docIdList.size() + " document(s)");
+        if (verbose) {
+            logln("--- --- Loaded " + docIdList.size() + " document(s)");
+        }
     }
 
     public void format(File outputFolder) throws Exception {
@@ -179,7 +187,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      * be stored
      */
     public void format(String outputFolder) throws Exception {
-        logln("--- Processing data ...");
+        if (verbose) {
+            logln("--- Processing data ...");
+        }
         IOUtils.createFolder(outputFolder);
 
         String[] rawTexts = textList.toArray(new String[textList.size()]);
@@ -199,7 +209,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      */
     protected void outputWordVocab(String outputFolder) throws Exception {
         File wordVocFile = new File(outputFolder, formatFilename + wordVocabExt);
-        logln("--- Outputing word vocab ... " + wordVocFile.getAbsolutePath());
+        if (verbose) {
+            logln("--- Outputing word vocab ... " + wordVocFile.getAbsolutePath());
+        }
         DataUtils.outputVocab(wordVocFile.getAbsolutePath(),
                 corpProc.getVocab());
     }
@@ -211,7 +223,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      */
     protected void outputTextData(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + numDocDataExt);
-        logln("--- Outputing main numeric data ... " + outputFile);
+        if (verbose) {
+            logln("--- Outputing main numeric data ... " + outputFile);
+        }
 
         // output main numeric
         int[][] numDocs = corpProc.getNumerics();
@@ -252,7 +266,9 @@ public class TextDataset extends AbstractTokenizeDataset {
      */
     protected void outputSentTextData(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + numSentDataExt);
-        logln("--- Outputing sentence data ... " + outputFile);
+        if (verbose) {
+            logln("--- Outputing sentence data ... " + outputFile);
+        }
 
         int[][][] numSents = corpProc.getNumericSentences();
         String[][] rawSents = corpProc.getRawSentences();
@@ -300,7 +316,9 @@ public class TextDataset extends AbstractTokenizeDataset {
 
     protected void outputDocumentInfo(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + docInfoExt);
-        logln("--- Outputing document info ... " + outputFile.getAbsolutePath());
+        if (verbose) {
+            logln("--- Outputing document info ... " + outputFile.getAbsolutePath());
+        }
 
         BufferedWriter infoWriter = IOUtils.getBufferedWriter(outputFile);
         for (int docIndex : this.processedDocIndices) {
@@ -322,7 +340,9 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     public void loadFormattedData(String fFolder) {
-        logln("--- Loading formatted data from " + fFolder);
+        if (verbose) {
+            logln("--- Loading formatted data from " + fFolder);
+        }
         try {
             inputWordVocab(new File(fFolder, formatFilename + wordVocabExt));
             inputTextData(new File(fFolder, formatFilename + numDocDataExt));
@@ -651,8 +671,6 @@ public class TextDataset extends AbstractTokenizeDataset {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
-        String formatFolder = cmd.getOptionValue("format-folder");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
         int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);
         int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 0);
@@ -666,7 +684,7 @@ public class TextDataset extends AbstractTokenizeDataset {
 
         boolean stopwordFilter = cmd.hasOption("s");
         boolean lemmatization = cmd.hasOption("l");
-        
+
         int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
         double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
         String cvFolder = cmd.getOptionValue("cv-folder");
@@ -686,7 +704,6 @@ public class TextDataset extends AbstractTokenizeDataset {
                 lemmatization);
 
         TextDataset dataset = new TextDataset(datasetName, datasetFolder, corpProc);
-        dataset.setFormatFilename(formatFile);
         // load text data
         if (cmd.hasOption("file")) {
             dataset.loadTextDataFromFile(textInputData);

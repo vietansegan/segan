@@ -16,8 +16,8 @@ public class AbstractRunner {
     protected static CommandLineParser parser;
     protected static Options options;
     protected static CommandLine cmd;
-    protected static boolean verbose;
-    protected static boolean debug;
+    protected static boolean verbose = true;
+    protected static boolean debug = true;
 
     protected static void addOption(String optName, String optDesc) {
         options.addOption(OptionBuilder.withLongOpt(optName)
