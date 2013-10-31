@@ -355,7 +355,7 @@ public class LDA extends AbstractSampler {
         for (int k = 0; k < K; k++) {
             distrs[k] = topic_words[k].getDistribution();
         }
-        IOUtils.outputTopWordsCummProbs(distrs, wordVocab, numTopWords, filepath);
+        IOUtils.outputTopWordsWithProbs(distrs, wordVocab, numTopWords, filepath);
     }
 
     public void outputTopicWordDistribution(String outputFile) throws Exception {

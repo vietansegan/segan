@@ -153,8 +153,8 @@ public class RunHLLDA extends AbstractRunner {
         }
         data = new LabelTextData(datasetName, datasetFolder);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-        data.filterLabels(minLabelFreq);
-        data.filterDocumentWithoutLabels();
+        data.filterLabelsByFrequency(minLabelFreq);
+//        data.filterDocumentWithoutLabels();
         if (verbose) {
             System.out.println("--- Data loaded.");
             System.out.println("--- --- min-label-freq: " + minLabelFreq);

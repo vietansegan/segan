@@ -1,11 +1,8 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package core.crossvalidation;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import util.IOUtils;
 
@@ -43,10 +40,10 @@ public class Fold<I, T extends Instance<I>> {
         this.testingInstances = teList;
     }
 
-    public void outputFold() {
+    public void outputFold(File folder) {
         try {
             // file format: <instance_index>\t<instance_id>\n
-            BufferedWriter writer = IOUtils.getBufferedWriter(getFolder() + "fold-" + index + TrainingExt);
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(folder, "fold-" + index + TrainingExt));
             writer.write(trainingInstances.size() + "\n");
             for (int trInst : trainingInstances) {
                 writer.write(trInst
@@ -55,7 +52,7 @@ public class Fold<I, T extends Instance<I>> {
             }
             writer.close();
 
-            writer = IOUtils.getBufferedWriter(getFolder() + "fold-" + index + DevelopExt);
+            writer = IOUtils.getBufferedWriter(new File(folder, "fold-" + index + DevelopExt));
             writer.write(developmentInstances.size() + "\n");
             for (int deInst : developmentInstances) {
                 writer.write(deInst
@@ -64,7 +61,7 @@ public class Fold<I, T extends Instance<I>> {
             }
             writer.close();
 
-            writer = IOUtils.getBufferedWriter(getFolder() + "fold-" + index + TestExt);
+            writer = IOUtils.getBufferedWriter(new File(folder, "fold-" + index + TestExt));
             writer.write(testingInstances.size() + "\n");
             for (int teInst : testingInstances) {
                 writer.write(teInst
@@ -78,10 +75,16 @@ public class Fold<I, T extends Instance<I>> {
         }
     }
 
-    public void inputFold() {
+    public void outputFold() {
+        File foldFolder = new File(this.getFoldFolderPath());
+        IOUtils.createFolder(foldFolder);
+        this.outputFold(foldFolder);
+    }
+
+    public void inputFold(File folder) {
         try {
             String line;
-            BufferedReader reader = IOUtils.getBufferedReader(getFolder() + "fold-" + index + TrainingExt);
+            BufferedReader reader = IOUtils.getBufferedReader(new File(folder, "fold-" + index + TrainingExt));
             this.trainingInstances = new ArrayList<Integer>();
             reader.readLine(); // first line showing # of instance
             while ((line = reader.readLine()) != null) {
@@ -89,7 +92,7 @@ public class Fold<I, T extends Instance<I>> {
             }
             reader.close();
 
-            reader = IOUtils.getBufferedReader(getFolder() + "fold-" + index + DevelopExt);
+            reader = IOUtils.getBufferedReader(new File(folder, "fold-" + index + DevelopExt));
             this.developmentInstances = new ArrayList<Integer>();
             reader.readLine(); // first line showing # of instance
             while ((line = reader.readLine()) != null) {
@@ -97,7 +100,7 @@ public class Fold<I, T extends Instance<I>> {
             }
             reader.close();
 
-            reader = IOUtils.getBufferedReader(getFolder() + "fold-" + index + TestExt);
+            reader = IOUtils.getBufferedReader(new File(folder, "fold-" + index + TestExt));
             this.testingInstances = new ArrayList<Integer>();
             reader.readLine(); // first line showing # of instance
             while ((line = reader.readLine()) != null) {
@@ -110,8 +113,18 @@ public class Fold<I, T extends Instance<I>> {
         }
     }
 
-    public String getFoldFolder() {
-        return "fold-" + index + "/";
+    public void inputFold() {
+        File foldFolder = new File(this.getFoldFolderPath());
+        IOUtils.createFolder(foldFolder);
+        this.inputFold(foldFolder);
+    }
+
+    public String getFoldFolderPath() {
+        return new File(getFolder(), getFoldName()).getAbsolutePath();
+    }
+    
+    public String getFoldName() {
+        return "fold-" + index;
     }
 
     public String getFolder() {

@@ -685,7 +685,7 @@ public class LabeledLDA extends AbstractSampler {
         LabelTextData data = new LabelTextData(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-        data.filterLabels(minLabelFreq);
+        data.filterLabelsByFrequency(minLabelFreq);
         data.prepareTopicCoherence(numTopWords);
 
         int V = data.getWordVocab().size();

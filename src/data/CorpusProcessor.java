@@ -64,8 +64,22 @@ public class CorpusProcessor {
     private ArrayList<String> vocabulary;
     private int[][] numericDocs;
     private int[][][] numericSentences;
-//    private String[][] rawSentences;
+    private String[][] rawSentences;
     private Pattern p = Pattern.compile("\\p{Punct}");
+
+    public CorpusProcessor(CorpusProcessor corp) {
+        this(corp.unigramCountCutoff,
+                corp.bigramCountCutoff,
+                corp.bigramScoreCutoff,
+                corp.maxVocabSize,
+                corp.vocabTermFreqMinCutoff,
+                corp.vocabTermFreqMaxCutoff,
+                corp.vocabDocFreqMinCutoff,
+                corp.vocabDocFreqMaxCutoff,
+                corp.docTypeCountCutoff,
+                corp.filterStopwords,
+                corp.lemmatization);
+    }
 
     public CorpusProcessor(
             int unigramCountCutoff,
@@ -128,6 +142,10 @@ public class CorpusProcessor {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    public String[][] getRawSentences() {
+        return this.rawSentences;
     }
 
     public void setRawTexts(String[] rawTexts) {
@@ -194,16 +212,16 @@ public class CorpusProcessor {
             throw new RuntimeException("Sentence detector is not initialized.");
         }
         int D = rawDocuments.length;
-        String[][] rawSentences = new String[D][];
+        String[][] rawSents = new String[D][];
         int step = MiscUtils.getRoundStepSize(D, 10);
         for (int d = 0; d < D; d++) {
             if (verbose && d % step == 0) {
                 System.out.println("--- Segmenting sentences " + d + " / " + D);
             }
 
-            rawSentences[d] = sentenceDetector.sentDetect(rawDocuments[d]);
+            rawSents[d] = sentenceDetector.sentDetect(rawDocuments[d]);
         }
-        return rawSentences;
+        return rawSents;
     }
 
     /**
@@ -253,13 +271,20 @@ public class CorpusProcessor {
         }
 
         // segment sentences
-        String[][] rawSentences = this.segmentSentences(this.rawTexts);
+        rawSentences = this.segmentSentences(this.rawTexts);
 
         // tokenize sentences and normalize tokens
         String[][][] normTexts = this.normalizeTokens(rawSentences);
 
         // keep only unigrams and bigrams in the given vocab
+        if (verbose) {
+            System.out.println("Building numeric representations ...");
+        }
+        int step = MiscUtils.getRoundStepSize(normTexts.length, 10);
         for (int d = 0; d < normTexts.length; d++) {
+            if (verbose && d % step == 0) {
+                System.out.println("--- Normalizing tokens d = " + d + " / " + normTexts.length);
+            }
             for (int s = 0; s < normTexts[d].length; s++) {
                 ArrayList<String> tokens = new ArrayList<String>();
                 for (int i = 0; i < normTexts[d][s].length; i++) {
@@ -293,8 +318,6 @@ public class CorpusProcessor {
                 }
                 normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
             }
-
-            this.numericSentences = new int[rawTexts.length][][];
         }
 
         this.vocabulary = voc;
@@ -348,7 +371,7 @@ public class CorpusProcessor {
             System.out.println("Tokenizing and counting ...");
         }
         String[][][] normTexts = new String[rawTexts.length][][];
-        String[][] rawSentences = new String[rawTexts.length][];
+        rawSentences = new String[rawTexts.length][];
         int stepsize = MiscUtils.getRoundStepSize(rawTexts.length, 10);
         for (int d = 0; d < rawTexts.length; d++) {
             if (verbose && d % stepsize == 0) {

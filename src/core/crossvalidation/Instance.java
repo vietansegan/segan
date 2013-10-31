@@ -15,4 +15,9 @@ public class Instance<I> {
     public I getId() {
         return this.id;
     }
+    
+    @Override
+    public String toString() {
+        return this.id.toString();
+    }
 }

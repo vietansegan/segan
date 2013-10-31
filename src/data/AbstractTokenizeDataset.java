@@ -40,6 +40,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
             String folder) {
         super(name);
         this.folder = folder;
+        this.formatFilename = name; // by default
         try {
             // initiate tokenizer
             InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
@@ -57,7 +58,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
             CorpusProcessor corpProc) {
         super(name);
         this.folder = folder;
-
+        this.formatFilename = name; // by default
         this.corpProc = corpProc;
 
         try {

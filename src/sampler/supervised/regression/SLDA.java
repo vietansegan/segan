@@ -1362,7 +1362,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
                 System.out.println("\nRunning fold " + foldIndex);
             }
 
-            File foldFolder = new File(resultFolder, fold.getFoldFolder());
+            File foldFolder = new File(resultFolder, fold.getFoldName());
 
             SLDA sampler = new SLDA();
             sampler.setVerbose(verbose);

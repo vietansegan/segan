@@ -4,7 +4,7 @@ package core;
  *
  * @author vietan
  */
-public abstract class AbstractDataset {
+public abstract class AbstractDataset extends AbstractRunner {
 
     protected final String name;
 

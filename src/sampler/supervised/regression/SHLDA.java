@@ -24,9 +24,9 @@ import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
+import sampling.util.FullTable;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
-import sampling.util.FullTable;
 import sampling.util.TreeNode;
 import util.CLIUtils;
 import util.IOUtils;
@@ -255,6 +255,14 @@ public class SHLDA extends AbstractSampler {
             logln("--- sample lag:\t" + LAG);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
+
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
+            int[] histogram = StatisticsUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
         }
     }
 
@@ -422,7 +430,7 @@ public class SHLDA extends AbstractSampler {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_lex-MSHLDA")
+                .append("_SHLDA")
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
@@ -2854,7 +2862,7 @@ public class SHLDA extends AbstractSampler {
                 System.out.println("\nRunning fold " + foldIndex);
             }
 
-            File foldFolder = new File(resultFolder, fold.getFoldFolder());
+            File foldFolder = new File(resultFolder, fold.getFoldName());
 
             SHLDA sampler = new SHLDA();
             sampler.setVerbose(verbose);

@@ -1918,8 +1918,8 @@ public class L2H extends AbstractSampler {
             LabelTextData data = new LabelTextData(datasetName, datasetFolder);
             data.setFormatFilename(formatFile);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-            data.filterLabels(minLabelFreq);
-            data.filterDocumentWithoutLabels();
+            data.filterLabelsByFrequency(minLabelFreq);
+//            data.filterDocumentWithoutLabels();
             data.prepareTopicCoherence(numTopWords);
             if (verbose) {
                 System.out.println("--- Data loaded.");

@@ -382,7 +382,7 @@ public class IOUtils {
         return sortedVocab;
     }
 
-    public static void outputTopWordsCummProbs(double[][] topicWordDistr, ArrayList<String> vocab,
+    public static void outputTopWordsWithProbs(double[][] topicWordDistr, ArrayList<String> vocab,
             int numTopWord, String filepath) throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
         for (int t = 0; t < topicWordDistr.length; t++) {

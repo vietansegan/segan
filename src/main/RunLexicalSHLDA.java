@@ -148,7 +148,7 @@ public class RunLexicalSHLDA extends AbstractRunner {
                     System.out.println("--- Running fold " + fold.getIndex());
                 }
 
-                String foldFolder = new File(resultFolder, fold.getFoldFolder()).getAbsolutePath();
+                String foldFolder = new File(resultFolder, fold.getFoldName()).getAbsolutePath();
 
                 int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
                 int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);

@@ -14,7 +14,7 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import sampling.likelihood.LogisticNormalModel;
+import sampling.likelihood.LogisticNormal;
 import sampling.likelihood.TruncatedStickBreaking;
 import util.IOUtils;
 import util.MiscUtils;
@@ -47,7 +47,7 @@ public class DHLDASampler extends AbstractSampler {
     protected DNCRPNode[] dynamicRoots; // dnCRPs
     protected int[][][] z; // level assignments for each token
     protected DNCRPNode[][] c; // path assignments for each document
-    protected LogisticNormalModel emptyModel;
+    protected LogisticNormal emptyModel;
 //    protected HashMap<DNCRPNode, Double>[] jointPathLogProbs;
     private double[] zeros;
     private double[] sigmaSquares;
@@ -198,13 +198,13 @@ public class DHLDASampler extends AbstractSampler {
         // initial all roots
         dynamicRoots = new DNCRPNode[T];
         // --- for the 1st time point
-        LogisticNormalModel ln0 = new LogisticNormalModel(V, zeros, sigmaSquares);
+        LogisticNormal ln0 = new LogisticNormal(V, zeros, sigmaSquares);
         ln0.sampleFromPrior();
         dynamicRoots[0] = new DNCRPNode(0, 0, ln0, null, null, null);
         dynamicRoots[0].createPseudoChildNode();
 
         // empty model 
-        this.emptyModel = new LogisticNormalModel(V, zeros, sigmaSquares);
+        this.emptyModel = new LogisticNormal(V, zeros, sigmaSquares);
 
         // allocate memory
         this.c = new DNCRPNode[T][];
@@ -479,7 +479,7 @@ public class DHLDASampler extends AbstractSampler {
             logln("--- Initializing epoch " + t);
         }
 
-        LogisticNormalModel ln0 = new LogisticNormalModel(V,
+        LogisticNormal ln0 = new LogisticNormal(V,
                 dynamicRoots[t - 1].getContent().getMean(),
                 dynamicRoots[t - 1].getContent().getVariance());
         ln0.sampleFromPrior();
@@ -506,7 +506,7 @@ public class DHLDASampler extends AbstractSampler {
                 preNodesStack.add(preChild);
 
                 // create a corresponding node if number of pseudo documents > 0
-                LogisticNormalModel ln = new LogisticNormalModel(V,
+                LogisticNormal ln = new LogisticNormal(V,
                         preChild.getContent().getMean(),
                         preChild.getContent().getVariance());
                 ln.sampleFromPrior();
@@ -528,7 +528,7 @@ public class DHLDASampler extends AbstractSampler {
      */
     private DNCRPNode createChild(DNCRPNode parentNode) {
         int childIndex = parentNode.getNextChildIndex();
-        LogisticNormalModel lnModel = new LogisticNormalModel(V, zeros, sigmaSquares);
+        LogisticNormal lnModel = new LogisticNormal(V, zeros, sigmaSquares);
         lnModel.sampleFromPrior();
         DNCRPNode childNode = new DNCRPNode(childIndex, parentNode.getLevel() + 1, lnModel, parentNode, null, null);
         childNode.createPseudoChildNode();
@@ -536,12 +536,12 @@ public class DHLDASampler extends AbstractSampler {
 
         // create child node in future trees
         DNCRPNode parentPosNode = parentNode.getPosNode();
-        LogisticNormalModel curModel = lnModel;
+        LogisticNormal curModel = lnModel;
         DNCRPNode curChildNode = childNode;
         int t = 1;
         while (parentPosNode != null && t <= delta) {
             int posChildIndex = parentPosNode.getNextChildIndex();
-            LogisticNormalModel posModel = new LogisticNormalModel(V, curModel.getMean(), curModel.getVariance());
+            LogisticNormal posModel = new LogisticNormal(V, curModel.getMean(), curModel.getVariance());
 
             DNCRPNode childPosNode = new DNCRPNode(posChildIndex, childNode.getLevel(), posModel, parentPosNode, curChildNode, null);
             curChildNode.setPosNode(childPosNode);
@@ -2104,7 +2104,7 @@ public class DHLDASampler extends AbstractSampler {
             pVar[i] = Double.parseDouble(sline[i]);
         }
 
-        LogisticNormalModel lnModel = new LogisticNormalModel(V, pMean, pVar);
+        LogisticNormal lnModel = new LogisticNormal(V, pMean, pVar);
 
         // mean
         sline = mean.split("\t");

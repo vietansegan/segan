@@ -5,7 +5,7 @@
 package sampler.dynamic;
 
 import java.util.HashMap;
-import sampling.likelihood.LogisticNormalModel;
+import sampling.likelihood.LogisticNormal;
 import sampling.util.TreeNode;
 import util.MiscUtils;
 
@@ -13,7 +13,7 @@ import util.MiscUtils;
  *
  * @author vietan
  */
-public class DNCRPNode extends TreeNode<DNCRPNode, LogisticNormalModel> {
+public class DNCRPNode extends TreeNode<DNCRPNode, LogisticNormal> {
 
     public static final int PSEUDO_CHILD_INDEX = -1;
     public static final String EMPTY_NODE_PATH = "*";
@@ -24,7 +24,7 @@ public class DNCRPNode extends TreeNode<DNCRPNode, LogisticNormalModel> {
     private double numPseudoCustomers; // S
 
     public DNCRPNode(int index, int level,
-            LogisticNormalModel content,
+            LogisticNormal content,
             DNCRPNode parent,
             DNCRPNode preNode,
             DNCRPNode posNode) {

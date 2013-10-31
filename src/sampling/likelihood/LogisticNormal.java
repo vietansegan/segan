@@ -8,7 +8,7 @@ import sampling.AbstractDiscreteFiniteLikelihoodModel;
  *
  * @author vietan
  */
-public class LogisticNormalModel extends AbstractDiscreteFiniteLikelihoodModel {
+public class LogisticNormal extends AbstractDiscreteFiniteLikelihoodModel {
 
     public static final int Q = 10;
     private double[] priorMean;
@@ -18,7 +18,7 @@ public class LogisticNormalModel extends AbstractDiscreteFiniteLikelihoodModel {
     private double[] distribution;
     private ArrayList<double[]> auxDistributions;
 
-    public LogisticNormalModel(int dim, double[] pm, double[] pv) {
+    public LogisticNormal(int dim, double[] pm, double[] pv) {
         super(dim);
         this.priorMean = pm;
         this.priorVariance = pv;

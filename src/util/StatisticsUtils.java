@@ -168,21 +168,13 @@ public class StatisticsUtils {
                 min = value;
             }
         }
-        System.out.println("min = " + min);
-        System.out.println("max = " + max);
-
         double stepSize = (max - min) / numBins;
-        System.out.println("stepsize = " + stepSize);
 
         for (double value : data) {
             int binIndex = (int) ((value - min) / stepSize);
-            if (binIndex == numBins) // correct for the max value
-            {
+            if (binIndex == numBins) { // correct for the max value
                 binIndex = numBins - 1;
             }
-
-            System.out.println(value + " -> " + binIndex);
-
             bins[binIndex]++;
         }
 

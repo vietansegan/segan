@@ -1,5 +1,6 @@
 package sampler.labeled;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import sampling.util.SparseCount;
@@ -30,6 +31,22 @@ public class TFIDF {
         this.L = L;
         this.V = V;
         this.D = this.words.length;
+    }
+
+    public TFIDF(
+            ArrayList<int[]> docWords,
+            ArrayList<int[]> docLabels,
+            int L,
+            int V) {
+        this.L = L;
+        this.V = V;
+        this.D = docWords.size();
+        this.words = new int[docWords.size()][];
+        this.labels = new int[docLabels.size()][];
+        for (int d = 0; d < D; d++) {
+            this.words[d] = docWords.get(d);
+            this.labels[d] = docLabels.get(d);
+        }
     }
 
     public SparseVector[] getLabelVectors() {

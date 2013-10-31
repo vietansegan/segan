@@ -150,7 +150,7 @@ public class RunLLDA extends AbstractRunner {
 
         data = new LabelTextData(datasetName, datasetFolder);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-        data.filterLabels(minLabelFreq);
+        data.filterLabelsByFrequency(minLabelFreq);
 
         double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
         double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);

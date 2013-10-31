@@ -57,11 +57,41 @@ public class LabelTextData extends TextDataset {
     }
 
     /**
+     * Filter document labels. The remaining labels only come from a given set
+     * of labels
+     *
+     * @param labVoc The given set of labels
+     */
+    public void filterLabels(ArrayList<String> labVoc) {
+        int D = words.length;
+        this.labelVocab = labVoc;
+
+        int[][] filterLabels = new int[D][];
+        for (int d = 0; d < D; d++) {
+            ArrayList<Integer> docFilterLabels = new ArrayList<Integer>();
+            for (int ii = 0; ii < labels[d].length; ii++) {
+                String label = labelVocab.get(labels[d][ii]);
+                int filterLabelIndex = this.labelVocab.indexOf(label);
+                if (filterLabelIndex >= 0) {
+                    docFilterLabels.add(filterLabelIndex);
+                }
+            }
+
+            filterLabels[d] = new int[docFilterLabels.size()];
+            for (int ii = 0; ii < docFilterLabels.size(); ii++) {
+                filterLabels[d][ii] = docFilterLabels.get(ii);
+            }
+        }
+
+        this.labels = filterLabels;
+    }
+
+    /**
      * Filter labels that do not meet the minimum frequency requirement.
      *
      * @param minLabelFreq Minimum frequency
      */
-    public void filterLabels(int minLabelFreq) {
+    public void filterLabelsByFrequency(int minLabelFreq) {
         int D = words.length;
         int L = labelVocab.size();
         int[] labelFreqs = new int[L];
@@ -100,16 +130,17 @@ public class LabelTextData extends TextDataset {
         this.labelVocab = filterLabelVocab;
     }
 
-    public void filterDocumentWithoutLabels() {
-        System.out.println("--- --- Filtering out documents without labels");
-        int count = 0;
-        for (int d = 0; d < labels.length; d++) {
-            if (labels[d].length == 0) {
-                count++;
-            }
-        }
-        System.out.println("--- --- ---- # documents without labels: " + count);
-    }
+//    public void filterDocumentWithoutLabels() {
+//        logln("Filtering out documents without labels");
+//        int count = 0;
+//        for (int d = 0; d < labels.length; d++) {
+//            if (labels[d].length == 0) {
+//                // TODO
+//                count++;
+//            }
+//        }
+//        logln("--- # documents without labels: " + count);
+//    }
 
     public void loadLabels(File labelFile) throws Exception {
         loadLabels(labelFile.getAbsolutePath());
@@ -152,18 +183,20 @@ public class LabelTextData extends TextDataset {
     public void format(String outputFolder) throws Exception {
         IOUtils.createFolder(outputFolder);
 
-        if (formatFilename == null) {
-            formatFilename = name;
-        }
+        formatLabels(outputFolder);
 
+        // perform normal processing
+        super.format(outputFolder);
+    }
+
+    public void formatLabels(String outputFolder) throws Exception {
+        logln("Formatting labels ...");
         if (this.labelVocab == null) {
             createLabelVocab();
         }
 
-        File labelVocFile = new File(outputFolder, formatFilename + labelVocabExt);
-        logln("--- Outputing label vocab ... " + labelVocFile.getAbsolutePath());
-        DataUtils.outputVocab(labelVocFile.getAbsolutePath(),
-                this.labelVocab);
+        // output label vocab
+        outputLabelVocab(outputFolder);
 
         // get label indices
         this.labels = new int[this.labelList.length][];
@@ -181,11 +214,23 @@ public class LabelTextData extends TextDataset {
                 this.labels[ii][jj] = docLabels.get(jj);
             }
         }
-
-        // perform normal processing
-        super.format(outputFolder);
     }
 
+    /**
+     * Output the list of unique labels
+     *
+     * @param outputFolder Output folder
+     */
+    protected void outputLabelVocab(String outputFolder) throws Exception {
+        File labelVocFile = new File(outputFolder, formatFilename + labelVocabExt);
+        logln("--- Outputing label vocab ... " + labelVocFile.getAbsolutePath());
+        DataUtils.outputVocab(labelVocFile.getAbsolutePath(),
+                this.labelVocab);
+    }
+
+    /**
+     * Create label vocabulary
+     */
     public void createLabelVocab() throws Exception {
         logln("--- Creating label vocab ...");
         createLabelVocabByFrequency();
@@ -218,14 +263,6 @@ public class LabelTextData extends TextDataset {
             this.labelVocab.add(rankLabels.get(k).getObject());
         }
         Collections.sort(this.labelVocab);
-    }
-
-    public void outputLabelVocab(String filepath) throws Exception {
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-        for (String label : labelVocab) {
-            writer.write(label + "\n");
-        }
-        writer.close();
     }
 
     @Override

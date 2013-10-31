@@ -1712,7 +1712,7 @@ public class SHDP extends AbstractSampler {
                 System.out.println("\nRunning fold " + foldIndex);
             }
 
-            File foldFolder = new File(resultFolder, fold.getFoldFolder());
+            File foldFolder = new File(resultFolder, fold.getFoldName());
 
             SHDP sampler = new SHDP();
             sampler.setVerbose(verbose);
