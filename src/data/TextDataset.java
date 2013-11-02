@@ -31,6 +31,10 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected int[][][] sentWords;
     protected String[][] sentRawWords;
     protected MimnoTopicCoherence topicCoherence;
+    
+    public TextDataset(String name) {
+        super(name);
+    }
 
     public TextDataset(
             String name,

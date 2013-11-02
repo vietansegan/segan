@@ -21,6 +21,11 @@ public class Fold<I, T extends Instance<I>> {
     private ArrayList<Integer> trainingInstances;
     private ArrayList<Integer> developmentInstances;
     private ArrayList<Integer> testingInstances;
+    
+    public Fold(int idx, String folder) {
+        this.index = idx;
+        this.folder = folder;
+    }
 
     public Fold(int idx, String folder,
             ArrayList<T> instList) {
@@ -31,7 +36,9 @@ public class Fold<I, T extends Instance<I>> {
 
     public Fold(int idx, String folder,
             ArrayList<T> instList,
-            ArrayList<Integer> trList, ArrayList<Integer> devList, ArrayList<Integer> teList) {
+            ArrayList<Integer> trList, 
+            ArrayList<Integer> devList, 
+            ArrayList<Integer> teList) {
         this.index = idx;
         this.folder = folder;
         this.instanceList = instList;

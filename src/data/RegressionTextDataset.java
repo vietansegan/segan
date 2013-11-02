@@ -20,6 +20,10 @@ public class RegressionTextDataset extends TextDataset {
 
     protected double[] responses;
 
+    public RegressionTextDataset(String name) {
+        super(name);
+    }
+
     public RegressionTextDataset(String name, String folder) {
         super(name, folder);
     }

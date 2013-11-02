@@ -136,6 +136,19 @@ public class TruncatedStickBreaking {
         }
     }
 
+    public void changeCount(int k, int delta) {
+        this.counts[k] += delta;
+        for (int i = 0; i <= k; i++) {
+            this.backwardCounts[k] += delta;
+        }
+
+        if (this.counts[k] < 0) {
+            throw new RuntimeException("Negative count " + this.counts[k]);
+        } else if (this.backwardCounts[k] < 0) {
+            throw new RuntimeException("Negative backward count " + this.backwardCounts[k]);
+        }
+    }
+
     public void increment(int k) {
         this.counts[k]++;
         for (int i = 0; i <= k; i++) {
@@ -174,6 +187,41 @@ public class TruncatedStickBreaking {
                     / (this.scale + this.backwardCounts[j]);
         }
         return Math.log(score);
+    }
+
+    private double getSingleNodeLogProbability(
+            double priorHead, double priorTail,
+            int numHeads, int numTails) {
+        double priorSum = priorHead + priorTail;
+        double val = 0.0;
+        int c = 0;
+        for (int ii = 0; ii < numHeads; ii++) {
+            val += Math.log(priorHead + ii) - Math.log(priorSum + c);
+            c++;
+        }
+        for (int jj = 0; jj < numTails; jj++) {
+            val += Math.log(priorTail + jj) - Math.log(priorSum + c);
+            c++;
+        }
+        return val;
+    }
+
+    public double getLogProbability(int[] obs) {
+        int[] backObs = new int[obs.length];
+        backObs[obs.length-1] = obs[obs.length-1];
+        for(int l=obs.length-2; l>=0; l--){
+            backObs[l] = backObs[l+1] + obs[l];
+        }
+                
+        double val = 0.0;
+        for(int l=0; l<obs.length; l++) {
+            double priorHead = mean * scale + counts[l];
+            double priorTail = (1-mean) * scale + (backwardCounts[l] - counts[l]);
+            int numHeads = obs[l];
+            int numTails = backObs[l] - obs[l];
+            val += getSingleNodeLogProbability(priorHead, priorTail, numHeads, numTails);
+        }
+        return val;
     }
 
     public void validate(String msg) {
@@ -295,5 +343,8 @@ public class TruncatedStickBreaking {
         System.out.println(MiscUtils.arrayToString(stick.backwardCounts));
         System.out.println(MiscUtils.arrayToString(stick.getDistribution()));
         System.out.println(stick.getLogLikelihood());
+        
+        int[] obs = {1, 2, 3};
+        System.out.println(Math.exp(stick.getLogProbability(obs)));
     }
 }

@@ -7,6 +7,10 @@ import java.util.Stack;
 import java.util.TreeSet;
 
 /**
+ * Implementation of a generic node in a tree which has a single parent node, a
+ * set of (unbounded) children nodes.
+ *
+ * The content of the node can be any object.
  *
  * @author vietan
  */

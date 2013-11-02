@@ -35,6 +35,11 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
     protected CorpusProcessor corpProc;
     protected String formatFilename;
 
+    public AbstractTokenizeDataset(String name) {
+        super(name);
+        this.formatFilename = name;
+    }
+
     public AbstractTokenizeDataset(
             String name,
             String folder) {

@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-import optimization.GurobiMultipleLinearRegression;
+import optimization.GurobiMLRL2Norm;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;
@@ -408,7 +408,7 @@ public class LabeledSHLDASampler extends AbstractSampler {
         if (verbose) {
             logln("--- Start running gurobi ...");
         }
-        GurobiMultipleLinearRegression lasso = new GurobiMultipleLinearRegression(
+        GurobiMLRL2Norm lasso = new GurobiMLRL2Norm(
                 designMatrix, responses, lambda);
         double[] weights = lasso.solve();
         for (int ii = 0; ii < weights.length; ii++) {
@@ -1442,8 +1442,8 @@ public class LabeledSHLDASampler extends AbstractSampler {
             responseVector[d] = responses[d] - docLexicalWeights[d] / docTokenCounts[d];
         }
 
-        GurobiMultipleLinearRegression mlr =
-                new GurobiMultipleLinearRegression(designMatrix, responseVector, lambdas);
+        GurobiMLRL2Norm mlr =
+                new GurobiMLRL2Norm(designMatrix, responseVector, lambdas);
         double[] weights = mlr.solve();
 
         // update

@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampler.supervised;
 
 import core.AbstractSampler;
@@ -17,7 +13,7 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-import optimization.GurobiMultipleLinearRegression;
+import optimization.GurobiMLRL2Norm;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.Restaurant;
@@ -1153,7 +1149,7 @@ public class BackgroundLexicalMSHLDASampler extends AbstractSampler {
             responseVector[d] = responses[d] - docLexicalWeights[d] / docTokenCounts[d];
         }
 
-        GurobiMultipleLinearRegression mlr = new GurobiMultipleLinearRegression(designMatrix, responseVector, lambdas);
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responseVector, lambdas);
         double[] weights = mlr.solve();
 
         // update
