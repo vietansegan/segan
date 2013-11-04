@@ -16,10 +16,19 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
 
         MINIMAL, MAXIMAL
     }
-    private SparseCount pseudoCounts; // pseudo observations from children
+    protected SparseCount pseudoCounts; // pseudo observations from children
+    protected double[] logTopics;
 
     public TopicTreeNode(int index, int level, C content, N parent) {
         super(index, level, content, parent);
+        this.pseudoCounts = new SparseCount();
+    }
+    
+    public void setTopic(double[] topic) {
+        this.content.setSamplingDistribution(topic);
+        this.logTopics = new double[topic.length];
+        for(int v=0; v<topic.length; v++)
+            this.logTopics[v] = Math.log(topic[v]);
     }
 
     /**
@@ -27,6 +36,34 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
      */
     public double[] getTopic() {
         return this.content.getSamplingDistribution();
+    }
+
+    /**
+     * Get the log sampling topic
+     */
+    public double[] getLogTopic() {
+        return this.logTopics;
+    }
+
+    /**
+     * Get the log sampling probability of an observation. If the topic has not
+     * been explicitly sampled, use the smoothed observation counts.
+     *
+     * @param obs The observation
+     */
+    public double getLogProbability(int obs) {
+        if (this.getTopic() == null) { // collapsed, smoothed log probability
+            return this.content.getLogLikelihood(obs);
+        } else { // sampling log probability
+            return this.logTopics[obs];
+        }
+    }
+
+    /**
+     * Get pseudo-counts of observations from children
+     */
+    public SparseCount getPseudoCounts() {
+        return this.pseudoCounts;
     }
 
     /**
@@ -87,6 +124,6 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
         }
         Dirichlet dir = new Dirichlet(meanVector);
         double[] topic = dir.nextDistribution();
-        this.content.setSamplingDistribution(topic);
+        this.setTopic(topic);
     }
 }

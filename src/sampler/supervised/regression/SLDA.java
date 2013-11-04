@@ -37,7 +37,6 @@ import util.normalizer.ZNormalizer;
  */
 public class SLDA extends AbstractSampler implements SupervisedSampler {
 
-    public static final String IterPredictionFolder = "iter-predictions/";
     public static final int ALPHA = 0;
     public static final int BETA = 1;
     public static final int MU = 2;

@@ -1,8 +1,9 @@
-package sampler.supervised;
+package sampler.supervised.regression.development;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
+import data.RegressionTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -15,10 +16,13 @@ import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.TreeNode;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -26,6 +30,7 @@ import util.StatisticsUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
+import util.normalizer.ZNormalizer;
 
 /**
  * Gibbs sampler for Original SHLDA where each document is assigned to a path in
@@ -74,7 +79,7 @@ public class SHLDASampler extends AbstractSampler {
             double[] sigmas, // stadard deviation of Gaussian for regression parameters
             double rho, // standard deviation of Gaussian for document observations
             int regressLevel,
-            AbstractSampler.InitialState initState, boolean paramOpt,
+            InitialState initState, boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInterval) {
         if (verbose) {
             logln("Configuring ...");
@@ -185,7 +190,7 @@ public class SHLDASampler extends AbstractSampler {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_SHLDA")
+                .append("_single-SHLDA")
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
@@ -240,69 +245,15 @@ public class SHLDASampler extends AbstractSampler {
         if (verbose) {
             logln("--- Initializing topic hierarchy ...");
         }
-
-//        HashMap<Integer, Integer> tfs = new HashMap<Integer, Integer>();
-//        HashMap<Integer, Integer> dfs = new HashMap<Integer, Integer>();
-//        HashMap<Integer, Double> sumRes = new HashMap<Integer, Double>();
-//        for(int d=0; d<D; d++){
-//            Set<Integer> docUniqueTerms = new HashSet<Integer>();
-//            for(int n=0; n<words[d].length; n++){
-//                int token = words[d][n];
-//                docUniqueTerms.add(token);
-//                
-//                Integer tf = tfs.get(token);
-//                if(tf == null)
-//                    tfs.put(token, 1);
-//                else
-//                    tfs.put(token, tf + 1);
-//            }
-//            
-//            for(int token : docUniqueTerms){
-//                Integer df = dfs.get(token);
-//                if(df == null)
-//                    dfs.put(token, 1);
-//                else
-//                    dfs.put(token, df + 1);
-//                
-//                Double sr = sumRes.get(token);
-//                if(sr == null)
-//                    sumRes.put(token, responses[d]);
-//                else
-//                    sumRes.put(token, sr + responses[d]);
-//            }
-//        }
-//        
-//        int maxTf = 0;
-//        for(int type : tfs.keySet()){
-//            if(maxTf < tfs.get(type))
-//                maxTf = tfs.get(type);
-//        }
-//        
-//        double[] rootMean = new double[V];
-//        for(int v=0; v<V; v++){
-//            if(tfs.containsKey(v)){
-//                double tf = 0.5 + 0.5 * tfs.get(v) / maxTf;
-//                double idf = Math.log(D) - Math.log(dfs.get(v));
-//                double tf_idf = tf * idf;
-//                double sent = sumRes.get(v);
-//
-//                double value = 1.0 / (tf_idf * Math.abs(sent));
-//                rootMean[v] = value * betas[0];
-//            }
-//            else{
-//                rootMean[v] = 1.0 / V * betas[0];
-//            }
-//        }
-
         int rootLevel = 0;
         int rootIndex = 0;
-        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel] * V, uniform);
         double regParam = SamplerUtils.getGaussian(mus[rootLevel], sigmas[rootLevel]);
         this.word_hier_root = new SHLDANode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
         this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1] * V, uniform);
         }
     }
 
@@ -374,9 +325,10 @@ public class SHLDASampler extends AbstractSampler {
         }
         logLikelihoods = new ArrayList<Double>();
 
+        File repFolderPath = new File(getSamplerFolderPath(), ReportFolder);
         try {
-            if (report) {
-                IOUtils.createFolder(this.folder + this.getSamplerFolder() + ReportFolder);
+            if (report && !repFolderPath.exists()) {
+                IOUtils.createFolder(repFolderPath);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -394,14 +346,13 @@ public class SHLDASampler extends AbstractSampler {
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
+                String str = "Iter " + iter
+                        + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
+                        + "\t" + getCurrentState();
                 if (iter < BURN_IN) {
-                    logln("--- Burning in. Iter " + iter
-                            + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + "\t" + getCurrentState());
+                    logln("--- Burning in. " + str);
                 } else {
-                    logln("--- Sampling. Iter " + iter
-                            + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                            + "\t" + getCurrentState());
+                    logln("--- Sampling. " + str);
                 }
             }
 
@@ -445,21 +396,14 @@ public class SHLDASampler extends AbstractSampler {
             if (iter % LAG == 0 && iter >= BURN_IN) {
                 if (paramOptimized) { // slice sampling
                     if (verbose) {
-                        logln("*** *** Optimizing hyperparameters by slice sampling ...");
-                        logln("*** *** cur param:" + MiscUtils.listToString(hyperparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
+                        logln("--- --- Slice sampling ...");
                     }
 
                     sliceSample();
-                    ArrayList<Double> sparams = new ArrayList<Double>();
-                    for (double param : this.hyperparams) {
-                        sparams.add(param);
-                    }
-                    this.sampledParams.add(sparams);
+                    this.sampledParams.add(this.cloneHyperparameters());
 
                     if (verbose) {
-                        logln("*** *** new param:" + MiscUtils.listToString(sparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
+                        logln("--- ---- " + MiscUtils.listToString(hyperparams));
                     }
                 }
             }
@@ -470,9 +414,10 @@ public class SHLDASampler extends AbstractSampler {
 
             // store model
             if (report && iter >= BURN_IN && iter % LAG == 0) {
-                outputState(this.folder + this.getSamplerFolder() + ReportFolder + "iter-" + iter + ".zip");
+                outputState(new File(repFolderPath, "iter-" + iter + ".zip"));
                 try {
-                    outputTopicTopWords(this.folder + this.getSamplerFolder() + ReportFolder + "iter-" + iter + "-top-words.txt", 15);
+                    outputTopicTopWords(new File(repFolderPath,
+                            "iter-" + iter + "-top-words.txt"), 15);
                 } catch (Exception e) {
                     e.printStackTrace();
                     System.exit(1);
@@ -480,9 +425,9 @@ public class SHLDASampler extends AbstractSampler {
             }
         }
 
+        // output final model
         if (report) {
-            outputState(this.folder + this.getSamplerFolder() + "final.zip");
-            outputState(this.folder + this.getSamplerFolder() + ReportFolder + "iter-" + iter + ".zip");
+            outputState(new File(repFolderPath, "iter-" + iter + ".zip"));
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -493,14 +438,15 @@ public class SHLDASampler extends AbstractSampler {
         }
 
         try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(this.folder + this.getSamplerFolder() + "likelihoods.txt");
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "likelihoods.txt"));
             for (int i = 0; i < logLikelihoods.size(); i++) {
                 writer.write(i + "\t" + logLikelihoods.get(i) + "\n");
             }
             writer.close();
 
             if (paramOptimized && log) {
-                this.outputSampledHyperparameters(this.folder + this.getSamplerFolder() + "hyperparameters.txt");
+                this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
+                        "hyperparameters.txt").getAbsolutePath());
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -645,7 +591,7 @@ public class SHLDASampler extends AbstractSampler {
     private SHLDANode createNode(SHLDANode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirMult dmModel = new DirMult(V, betas[level], uniform);
+        DirMult dmModel = new DirMult(V, betas[level] * V, uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SHLDANode child = new SHLDANode(iter, nextChildIndex, level, dmModel, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -844,6 +790,46 @@ public class SHLDASampler extends AbstractSampler {
         }
     }
 
+//    private void optimize(SHLDANode root) {
+//        ArrayList<SHLDANode> flatTree = this.flattenTree(root);
+//
+//        // map a node in the subtree to its index in the flattened tree (i.e. 1D array)
+//        HashMap<SHLDANode, Integer> nodeMap = new HashMap<SHLDANode, Integer>();
+//        for (int i = 0; i < flatTree.size(); i++) {
+//            nodeMap.put(flatTree.get(i), i);
+//        }
+//
+//        ArrayList<double[]> designList = new ArrayList<double[]>();
+//        ArrayList<Double> responseList = new ArrayList<Double>();
+//        for (int d = 0; d < D; d++) {
+//            if (!nodeMap.containsKey(c[d])) // if this subtree does not contain this document
+//            {
+//                continue;
+//            }
+//            SHLDANode[] docPath = this.getPathFromNode(c[d]);
+//            double[] empiricalProb = doc_level_distr[d].getEmpiricalDistribution();
+//
+//            double[] row = new double[flatTree.size()];
+//            for (int l = root.getLevel(); l < L; l++) {
+//                int nodeIndex = nodeMap.get(docPath[l]);
+//                row[nodeIndex] = empiricalProb[l];
+//            }
+//            designList.add(row);
+//            responseList.add(responses[d]);
+//        }
+//
+//        double[][] designMatrix = new double[designList.size()][flatTree.size()];
+//        for (int i = 0; i < designList.size(); i++) {
+//            designMatrix[i] = designList.get(i);
+//        }
+//
+//        double[] response = new double[responseList.size()];
+//        for (int i = 0; i < response.length; i++) {
+//            response[i] = responseList.get(i);
+//        }
+//        
+//        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, mus, MAX_LOG)
+//    }
     private void optimize(SHLDANode root) {
         ArrayList<SHLDANode> flatTree = this.flattenTree(root);
 
@@ -1170,7 +1156,7 @@ public class SHLDASampler extends AbstractSampler {
         return str.toString();
     }
 
-    public void outputTopicTopWords(String outputFile, int numWords)
+    public void outputTopicTopWords(File outputFile, int numWords)
             throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1220,7 +1206,7 @@ public class SHLDASampler extends AbstractSampler {
     }
 
     public void outputTopicCoherence(
-            String filepath,
+            File filepath,
             MimnoTopicCoherence topicCoherence) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1271,7 +1257,7 @@ public class SHLDASampler extends AbstractSampler {
 //        logln("weighted avg = " + MiscUtils.formatDouble(sum / count));
     }
 
-    public void outputTopicWordDistributions(String filepath) throws Exception {
+    public void outputTopicWordDistributions(File filepath) throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
         Stack<SHLDANode> stack = new Stack<SHLDANode>();
         stack.add(word_hier_root);
@@ -1294,7 +1280,7 @@ public class SHLDASampler extends AbstractSampler {
         writer.close();
     }
 
-    public void outputDocPathAssignments(String filepath) throws Exception {
+    public void outputDocPathAssignments(File filepath) throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
         for (int d = 0; d < D; d++) {
             SHLDANode docNode = this.c[d];
@@ -1439,14 +1425,14 @@ public class SHLDASampler extends AbstractSampler {
         stack.add(word_hier_root);
         while (!stack.isEmpty()) {
             SHLDANode node = stack.pop();
-            node.getContent().setConcentration(betas[node.getLevel()]);
+            node.getContent().setConcentration(betas[node.getLevel()] * V);
             for (SHLDANode child : node.getChildren()) {
                 stack.add(child);
             }
         }
 
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l].setConcentration(betas[l + 1]);
+            this.emptyModels[l].setConcentration(betas[l + 1] * V);
         }
 
 //        for(int d=0; d<D; d++){
@@ -1604,7 +1590,7 @@ public class SHLDASampler extends AbstractSampler {
 //        this.initializeModelStructure();
         this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1] * V, uniform);
         }
 
         String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
@@ -2375,5 +2361,206 @@ public class SHLDASampler extends AbstractSampler {
                     .append("]");
             return str.toString();
         }
+    }
+
+    public static String getHelpString() {
+        return "java -cp dist/segan.jar " + SHLDASampler.class.getName() + " -help";
+    }
+
+    public static void main(String[] args) {
+        try {
+            run(args);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+
+    public static void run(String[] args) throws Exception {
+        // create the command line parser
+        parser = new BasicParser();
+
+        // create the Options
+        options = new Options();
+
+        addOption("output", "Output folder");
+        addOption("dataset", "Dataset");
+        addOption("data-folder", "Processed data folder");
+        addOption("format-folder", "Folder holding formatted data");
+        addOption("format-file", "Format file");
+
+        addOption("burnIn", "Burn-in");
+        addOption("maxIter", "Maximum number of iterations");
+        addOption("sampleLag", "Sample lag");
+        addOption("report", "Report interval.");
+        addOption("gem-mean", "GEM mean. [0.5]");
+        addOption("gem-scale", "GEM scale. [50]");
+        addOption("betas", "Dirichlet hyperparameter for topic distributions."
+                + " [1, 0.5, 0.25] for a 3-level tree.");
+        addOption("gammas", "DP hyperparameters. [1.0, 1.0] for a 3-level tree");
+        addOption("mus", "Prior means for topic regression parameters."
+                + " [0.0, 0.0, 0.0] for a 3-level tree and standardized"
+                + " response variable.");
+        addOption("sigmas", "Prior variances for topic regression parameters."
+                + " [0.0001, 0.5, 1.0] for a 3-level tree and stadardized"
+                + " response variable.");
+        addOption("rho", "Prior variance for response variable. [1.0]");
+        addOption("tau-mean", "Prior mean of lexical regression parameters. [0.0]");
+        addOption("tau-scale", "Prior scale of lexical regression parameters. [1.0]");
+        addOption("num-lex-items", "Number of non-zero lexical regression parameters."
+                + " Defaule: vocabulary size.");
+
+        addOption("cv-folder", "Cross validation folder");
+        addOption("num-folds", "Number of folds");
+        addOption("run-mode", "Running mode");
+        addOption("fold", "The cross-validation fold to run");
+
+        options.addOption("paramOpt", false, "Whether hyperparameter "
+                + "optimization using slice sampling is performed");
+        options.addOption("v", false, "verbose");
+        options.addOption("d", false, "debug");
+        options.addOption("z", false, "whether standardize (z-score normalization)");
+        options.addOption("help", false, "Help");
+
+        cmd = parser.parse(options, args);
+        if (cmd.hasOption("help")) {
+            CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' "
+                    + "main.RunLexicalSHLDA -help", options);
+            return;
+        }
+
+//            if (cmd.hasOption("cv-folder")) {
+//                runCrossValidation();
+//            } else {
+////                runModel();
+//            }
+
+        runModel();
+    }
+
+    public static void runModel() throws Exception {
+//        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
+//        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
+//        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/amazon-data/model");
+//        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-response");
+//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo/govtrack");
+        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/govtrack/112/model");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", "teaparty");
+
+
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 500);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 1000);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        boolean verbose = cmd.hasOption("v");
+        boolean debug = cmd.hasOption("d");
+        InitialState initState = InitialState.RANDOM;
+
+        verbose = true;
+        debug = true;
+
+//        String cvFolder = cmd.getOptionValue("cv-folder");
+//        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
+//        String runMode = cmd.getOptionValue("run-mode");
+
+        if (resultFolder == null) {
+            throw new RuntimeException("Result folder (--output) is not set.");
+        }
+
+        if (verbose) {
+            System.out.println("\nLoading formatted data ...");
+        }
+        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
+        data.prepareTopicCoherence(numTopWords);
+
+        int V = data.getWordVocab().size();
+        int L = CLIUtils.getIntegerArgument(cmd, "tree-height", 3);
+        double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
+        double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
+
+        double[] defaultBetas = new double[L];
+        defaultBetas[0] = 1;
+        for (int i = 1; i < L; i++) {
+            defaultBetas[i] = 1.0 / (i + 1);
+        }
+        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
+//        for (int i = 0; i < betas.length; i++) {
+//            betas[i] = betas[i] * V;
+//        }
+
+        double[] defaultGammas = new double[L - 1];
+        for (int i = 0; i < defaultGammas.length; i++) {
+            defaultGammas[i] = 0.5;
+        }
+
+        double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
+
+        double[] responses = data.getResponses();
+//        if (cmd.hasOption("z")) {
+        ZNormalizer zNorm = new ZNormalizer(responses);
+        for (int i = 0; i < responses.length; i++) {
+            responses[i] = zNorm.normalize(responses[i]);
+        }
+//        }
+
+        double meanResponse = StatisticsUtils.mean(responses);
+        double[] defaultMus = new double[L];
+        for (int i = 0; i < L; i++) {
+            defaultMus[i] = meanResponse;
+        }
+        double[] mus = CLIUtils.getDoubleArrayArgument(cmd, "mus", defaultMus, ",");
+
+        double[] defaultSigmas = new double[L];
+        defaultSigmas[0] = 0.0001; // root node
+        for (int l = 1; l < L; l++) {
+            defaultSigmas[l] = 0.5 * l;
+        }
+        double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
+
+        double tau_mean = CLIUtils.getDoubleArgument(cmd, "tau-mean", 0.0);
+        double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
+        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+
+        SHLDASampler sampler = new SHLDASampler();
+        sampler.setVerbose(verbose);
+        sampler.setDebug(debug);
+        sampler.setLog(true);
+        sampler.setReport(true);
+        sampler.setWordVocab(data.getWordVocab());
+
+        int regressLevel = 1;
+        sampler.configure(resultFolder,
+                data.getWords(), data.getResponses(),
+                V, L,
+                gem_mean,
+                gem_scale,
+                betas,
+                gammas,
+                mus,
+                sigmas,
+                rho,
+                regressLevel,
+                initState, paramOpt,
+                burnIn, maxIters, sampleLag, repInterval);
+
+        File shldaFolder = new File(resultFolder, sampler.getSamplerFolder());
+        IOUtils.createFolder(shldaFolder);
+        sampler.initialize();
+        sampler.iterate();
+        sampler.outputTopicTopWords(new File(shldaFolder, TopWordFile), numTopWords);
+//        sampler.outputLexicalWeights(new File(shldaFolder, "lexical-reg-params.txt"));
+        sampler.outputDocPathAssignments(new File(shldaFolder, "doc-topic.txt"));
+        sampler.outputTopicWordDistributions(new File(shldaFolder, "topic-word.txt"));
     }
 }

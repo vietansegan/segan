@@ -52,7 +52,7 @@ public class GurobiMLRL2Norm {
     public double[] solve() {
         double[] solution = new double[getNumVariables()];
         try {
-            GRBEnv env = new GRBEnv("env.log");
+            GRBEnv env = new GRBEnv();
             GRBModel model = new GRBModel(env);
 
             // add variables

@@ -37,8 +37,21 @@ public class SparseVector {
         this.values.put(index, value);
     }
 
+    public boolean containsIndex(int idx) {
+        return this.values.containsKey(idx);
+    }
+
     public Set<Integer> getIndices() {
         return this.values.keySet();
+    }
+
+    public ArrayList<Integer> getSortedIndices() {
+        ArrayList<Integer> sortedIndices = new ArrayList<Integer>();
+        for (int idx : getIndices()) {
+            sortedIndices.add(idx);
+        }
+        Collections.sort(sortedIndices);
+        return sortedIndices;
     }
 
     /**

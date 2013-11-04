@@ -14,7 +14,7 @@ import java.io.File;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampler.supervised.regression.SHLDA;
+import sampler.supervised.regression.development.SHLDA;
 import util.IOUtils;
 import util.StatisticsUtils;
 import util.evaluation.MimnoTopicCoherence;
@@ -236,7 +236,6 @@ public class RunLexicalSHLDA extends AbstractRunner {
                         tau_mean, tau_scale,
                         betas, gammas,
                         mus, sigmas,
-                        null, numLexicalItems,
                         initState, paramOpt,
                         burnIn, maxIters, sampleLag, repInterval);
 
@@ -441,7 +440,6 @@ public class RunLexicalSHLDA extends AbstractRunner {
                     tau_mean, tau_scale,
                     betas, gammas,
                     mus, sigmas,
-                    lexicalWeights, numLexicalItems,
                     initState, paramOpt,
                     burn_in, max_iters, sample_lag, reportInterval);
 

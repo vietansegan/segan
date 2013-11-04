@@ -31,7 +31,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected int[][][] sentWords;
     protected String[][] sentRawWords;
     protected MimnoTopicCoherence topicCoherence;
-    
+
     public TextDataset(String name) {
         super(name);
     }
@@ -55,6 +55,14 @@ public class TextDataset extends AbstractTokenizeDataset {
         this.docIdList = new ArrayList<String>();
         this.textList = new ArrayList<String>();
         this.processedDocIndices = new ArrayList<Integer>();
+    }
+
+    public ArrayList<String> getDocIdList() {
+        return this.docIdList;
+    }
+
+    public ArrayList<String> getTextList() {
+        return this.textList;
     }
 
     public void prepareTopicCoherence(int numTopWords) {

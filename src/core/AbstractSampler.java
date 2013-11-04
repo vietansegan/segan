@@ -22,6 +22,7 @@ import util.RankingItem;
  */
 public abstract class AbstractSampler {
 
+    public static final String IterPredictionFolder = "iter-predictions/";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
     public static final String ReportFolder = "report/";
@@ -285,22 +286,31 @@ public abstract class AbstractSampler {
         this.paramOptimized = po;
     }
 
+    public void outputLogLikelihoods(File file) throws Exception {
+        IOUtils.outputLogLikelihoods(logLikelihoods, file.getAbsolutePath());
+    }
+
     public void outputSampledHyperparameters(File file) throws Exception {
         this.outputSampledHyperparameters(file.getAbsoluteFile());
     }
 
-    public void outputSampledHyperparameters(String filepath) throws Exception {
+    public void outputSampledHyperparameters(String filepath) {
         System.out.println("Outputing sampled hyperparameters to file " + filepath);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-        for (int i = 0; i < this.sampledParams.size(); i++) {
-            writer.write(Integer.toString(i));
-            for (double p : this.sampledParams.get(i)) {
-                writer.write("\t" + p);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+            for (int i = 0; i < this.sampledParams.size(); i++) {
+                writer.write(Integer.toString(i));
+                for (double p : this.sampledParams.get(i)) {
+                    writer.write("\t" + p);
+                }
+                writer.write("\n");
             }
-            writer.write("\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing sampled hyperparameters");
         }
-        writer.close();
     }
 
     protected ArrayList<Double> cloneHyperparameters() {

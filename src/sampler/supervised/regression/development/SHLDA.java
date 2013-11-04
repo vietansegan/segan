@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.development;
 
 import core.AbstractSampler;
 import core.AbstractSampler.InitialState;
@@ -14,14 +14,14 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.Stack;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampler.supervised.regression.GibbsRegressorUtils;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;
@@ -45,7 +45,7 @@ import util.normalizer.ZNormalizer;
  */
 public class SHLDA extends AbstractSampler {
 
-    public static final String IterPredictionFolder = "iter-predictions/";
+    public static final Double WEIGHT_THRESHOLD = 10e-2;
     public static final int PSEUDO_TABLE_INDEX = -1;
     public static final int PSEUDO_NODE_INDEX = -1;
     public static final int ALPHA = 0;
@@ -59,6 +59,7 @@ public class SHLDA extends AbstractSampler {
     protected int L; // level of hierarchies
     protected int V; // vocabulary size
     protected int D; // number of documents
+    protected double T; // L1-norm regularization parameter
     protected double[] betas;  // topics concentration parameter
     protected double[] gammas; // DP
     protected double[] mus;    // regression parameter means
@@ -80,8 +81,6 @@ public class SHLDA extends AbstractSampler {
     private Restaurant<STable, Integer, SNode>[] localRestaurants; // franchise
     private TruncatedStickBreaking[] docLevelDists; // doc sticks
     private double[] lexicalWeights; // background lexical
-    private int numLexicalItems;
-    private ArrayList<Integer> lexicalIndices;
     private double[][] docLexicalDesignMatrix;
     // state statistics stored
     private SparseCount[][] sentLevelCounts;
@@ -92,9 +91,9 @@ public class SHLDA extends AbstractSampler {
     // auxiliary
     private double[] uniform;
     private DirMult[] emptyModels;
-    private int numTokenAssignmentsChange;
-    private int numSentAssignmentsChange;
-    private int numTableAssignmentsChange;
+    private int nTokenAsgnChange;
+    private int nSentAsgnChange;
+    private int nTableAsgnChange;
 
     public void configure(String folder,
             int[][][] words,
@@ -110,8 +109,6 @@ public class SHLDA extends AbstractSampler {
             double[] gammas,
             double[] mus,
             double[] sigmas,
-            double[] lexicalWeights, // weights for all lexical items (i.e., words)
-            int numLexicalItems, // number of lexical items considered
             InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
@@ -167,30 +164,6 @@ public class SHLDA extends AbstractSampler {
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
-
-        this.numLexicalItems = numLexicalItems;
-        if (lexicalWeights != null) { // if the lexical weights are given
-            this.lexicalWeights = lexicalWeights;
-            this.filterLexicalItems();
-        } else {
-            this.initializeLexicalWeights();
-        }
-
-        this.docLexicalDesignMatrix = new double[D][this.numLexicalItems];
-        for (int d = 0; d < D; d++) {
-            for (int s = 0; s < words[d].length; s++) {
-                for (int n = 0; n < words[d][s].length; n++) {
-                    int idx = this.lexicalIndices.indexOf(words[d][s][n]);
-                    if (idx != -1) {
-                        docLexicalDesignMatrix[d][idx]++;
-                    }
-                }
-            }
-
-            for (int ii = 0; ii < this.lexicalIndices.size(); ii++) {
-                docLexicalDesignMatrix[d][ii] /= docTokenCounts[d];
-            }
-        }
 
         this.BURN_IN = burnin;
         this.MAX_ITER = maxiter;
@@ -263,118 +236,6 @@ public class SHLDA extends AbstractSampler {
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
-        }
-    }
-
-    private void filterLexicalItems() {
-        this.lexicalIndices = new ArrayList<Integer>();
-        ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
-        for (int v = 0; v < V; v++) {
-            rankItems.add(new RankingItem<Integer>(v, lexicalWeights[v]));
-        }
-        Collections.sort(rankItems);
-
-        for (int i = 0; i < numLexicalItems / 2; i++) {
-            this.lexicalIndices.add(rankItems.get(i).getObject());
-        }
-        for (int i = 0; i < numLexicalItems / 2; i++) {
-            this.lexicalIndices.add(rankItems.get(V - 1 - i).getObject());
-        }
-
-        for (int v = 0; v < V; v++) {
-            int idx = this.lexicalIndices.indexOf(v);
-            if (idx == -1) {
-                this.lexicalWeights[v] = 0.0;
-            }
-        }
-    }
-
-    private void initializeLexicalWeights() {
-        if (verbose) {
-            logln("Initializing lexical weights ...");
-        }
-
-        // flatten the input documents' words
-        ArrayList<Integer>[] docWords = new ArrayList[D];
-        for (int d = 0; d < D; d++) {
-            docWords[d] = new ArrayList<Integer>();
-            for (int s = 0; s < words[d].length; s++) {
-                for (int n = 0; n < words[d][s].length; n++) {
-                    docWords[d].add(words[d][s][n]);
-                }
-            }
-        }
-
-        // compute tf-idf's
-        HashMap<Integer, Integer> tfs = new HashMap<Integer, Integer>();
-        HashMap<Integer, Integer> dfs = new HashMap<Integer, Integer>();
-        for (int v = 0; v < V; v++) {
-            tfs.put(v, 0);
-            dfs.put(v, 0);
-        }
-        for (int d = 0; d < D; d++) {
-            Set<Integer> docUniqueTerms = new HashSet<Integer>();
-            for (int n = 0; n < docWords[d].size(); n++) {
-                int token = docWords[d].get(n);
-                docUniqueTerms.add(token);
-
-                Integer tf = tfs.get(token);
-                tfs.put(token, tf + 1);
-            }
-
-            for (int token : docUniqueTerms) {
-                Integer df = dfs.get(token);
-                dfs.put(token, df + 1);
-            }
-        }
-
-        int maxTf = 0;
-        for (int type : tfs.keySet()) {
-            if (maxTf < tfs.get(type)) {
-                maxTf = tfs.get(type);
-            }
-        }
-
-        ArrayList<RankingItem<Integer>> rankWords = new ArrayList<RankingItem<Integer>>();
-        for (int v = 0; v < V; v++) {
-            double tf = 0.5 + 0.5 * tfs.get(v) / maxTf;
-            double idf = Math.log(D) - Math.log(dfs.get(v) + 1);
-            double tf_idf = tf * idf;
-
-            rankWords.add(new RankingItem<Integer>(v, tf_idf));
-        }
-        Collections.sort(rankWords);
-
-        // only keep low tf-idf lexical items
-        lexicalIndices = new ArrayList<Integer>();
-        for (int i = 0; i < this.numLexicalItems; i++) {
-            lexicalIndices.add(rankWords.get(rankWords.size() - 1 - i).getObject());
-        }
-
-        // optimize
-        double[][] designMatrix = new double[D][numLexicalItems];
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < docWords[d].size(); n++) {
-                int featIndex = lexicalIndices.indexOf(docWords[d].get(n));
-                if (featIndex == -1) {
-                    continue;
-                }
-                designMatrix[d][featIndex]++;
-            }
-        }
-
-        this.lexicalWeights = new double[V];
-        double lambda = 1.0 / hyperparams.get(TAU_SCALE);
-
-        if (verbose) {
-            logln("--- Start running gurobi ...");
-        }
-        GurobiMLRL2Norm lasso = new GurobiMLRL2Norm(
-                designMatrix, responses, lambda);
-        double[] weights = lasso.solve();
-        for (int ii = 0; ii < weights.length; ii++) {
-            int v = lexicalIndices.get(ii);
-            this.lexicalWeights[v] = weights[ii];
         }
     }
 
@@ -468,13 +329,10 @@ public class SHLDA extends AbstractSampler {
         }
 
         iter = INIT;
-
+        initializeLexicalWeights();
         initializeModelStructure();
-
         initializeDataStructure();
-
         initializeAssignments();
-
         updateDocumentTopicWeights();
         updateDocumentLexicalWeights();
 
@@ -490,16 +348,91 @@ public class SHLDA extends AbstractSampler {
         }
     }
 
+    /**
+     * Initialize lexical weights using LASSO
+     */
+    private void initializeLexicalWeights() {
+        if (verbose) {
+            logln("Initializing lexical weights ...");
+        }
+
+        int t = V / 4;
+        GurobiMLRL1Norm lasso = new GurobiMLRL1Norm(t);
+        double[] ws = null;
+        try {
+            File regFile = new File(this.folder, "init-weights-" + t + ".txt");
+            if (regFile.exists()) {
+                ws = inputWeights(regFile);
+            } else {
+                logln("--- Initial weights not found. " + regFile);
+                logln("--- Optimizing ...");
+                double[][] designMatrix = new double[D][V];
+                for (int d = 0; d < D; d++) {
+                    for (int s = 0; s < words[d].length; s++) {
+                        for (int n = 0; n < words[d][s].length; n++) {
+                            designMatrix[d][words[d][s][n]]++;
+                        }
+                    }
+                    
+                    for(int v=0; v<V; v++){
+                        designMatrix[d][v] /= docTokenCounts[d];
+                    }
+                }
+                lasso.setDesignMatrix(designMatrix);
+                lasso.setResponseVector(responses);
+                ws = lasso.solve();
+                outputWeights(regFile, ws);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while initializing lexical weights");
+        }
+
+        this.lexicalWeights = new double[V];
+        int count = 0;
+        for (int v = 0; v < V; v++) {
+            if (ws[v] >= WEIGHT_THRESHOLD) {
+                this.lexicalWeights[v] = ws[v];
+                count++;
+            }
+        }
+        logln("--- # non-zero lexical weights: " + count);
+    }
+
+    private void outputWeights(File outputFile, double[] ws) throws Exception {
+        if (verbose) {
+            logln("--- Writing weights to file " + outputFile);
+        }
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int ii = 0; ii < ws.length; ii++) {
+            writer.write(wordVocab.get(ii) + "\t" + ws[ii] + "\n");
+        }
+        writer.close();
+    }
+
+    private double[] inputWeights(File inputFile) throws Exception {
+        if (verbose) {
+            logln("--- Reading weights from file " + inputFile);
+        }
+        double[] ws = new double[V];
+        BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+        for (int v = 0; v < V; v++) {
+            ws[v] = Double.parseDouble(reader.readLine().split("\t")[1]);
+        }
+        reader.close();
+        return ws;
+    }
+
     private void initializeModelStructure() {
         int rootLevel = 0;
         int rootIndex = 0;
-        DirMult dmModel = new DirMult(V, betas[rootLevel], uniform);
+        DirMult dmModel = new DirMult(V, betas[rootLevel] * V, uniform);
         double regParam = 0.0;
         this.globalTreeRoot = new SNode(iter, rootIndex, rootLevel, dmModel, regParam, null);
 
         this.emptyModels = new DirMult[L - 1];
         for (int l = 0; l < emptyModels.length; l++) {
-            this.emptyModels[l] = new DirMult(V, betas[l + 1], uniform);
+            this.emptyModels[l] = new DirMult(V, betas[l + 1] * V, uniform);
         }
     }
 
@@ -623,9 +556,9 @@ public class SHLDA extends AbstractSampler {
             if (verbose) {
                 String str = "Iter " + iter
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                        + "\t # tokens change: " + numTokenAssignmentsChange
-                        + "\t # sents change: " + numSentAssignmentsChange
-                        + "\t # tables change: " + numTableAssignmentsChange
+                        + "\t # tokens change: " + nTokenAsgnChange
+                        + "\t # sents change: " + nSentAsgnChange
+                        + "\t # tables change: " + nTableAsgnChange
                         + "\n" + getCurrentState()
                         + "\n";
                 if (iter < BURN_IN) {
@@ -635,9 +568,9 @@ public class SHLDA extends AbstractSampler {
                 }
             }
 
-            numTableAssignmentsChange = 0;
-            numSentAssignmentsChange = 0;
-            numTokenAssignmentsChange = 0;
+            nTableAsgnChange = 0;
+            nSentAsgnChange = 0;
+            nTokenAsgnChange = 0;
 
             for (int d = 0; d < D; d++) {
                 for (int s = 0; s < words[d].length; s++) {
@@ -656,11 +589,7 @@ public class SHLDA extends AbstractSampler {
             if (isSupervised()) {
                 optimizeTopicRegressionParameters();
             }
-
-            if (isOptimizingLexicalWeights()) {
-                // not perform 
-            }
-
+            
             if (verbose && isSupervised()) {
                 double[] trPredResponses = getRegressionValues();
                 RegressionEvaluation eval = new RegressionEvaluation(
@@ -882,7 +811,7 @@ public class SHLDA extends AbstractSampler {
     private SNode createNode(SNode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
-        DirMult dmm = new DirMult(V, betas[level], uniform);
+        DirMult dmm = new DirMult(V, betas[level] * V, uniform);
         double regParam = SamplerUtils.getGaussian(mus[level], sigmas[level]);
         SNode child = new SNode(iter, nextChildIndex, level, dmm, regParam, parent);
         return parent.addChild(nextChildIndex, child);
@@ -1036,7 +965,7 @@ public class SHLDA extends AbstractSampler {
 //        logln(">>> idx = " + sampledIndex + ". tabIdx = " + tableIdx + "\n");
 
         if (curTable != null && curTable.getIndex() != tableIdx) {
-            numSentAssignmentsChange++;
+            nSentAsgnChange++;
         }
 
         STable table;
@@ -1135,7 +1064,7 @@ public class SHLDA extends AbstractSampler {
 //        logln("--->>> sampled level = " + sampledL + "\n");
 
         if (z[d][s][n] != sampledL) {
-            numTokenAssignmentsChange++;
+            nTokenAsgnChange++;
         }
 
         // update and increment
@@ -1276,7 +1205,7 @@ public class SHLDA extends AbstractSampler {
 
         // debug
         if (curLeaf == null || curLeaf.equals(newLeaf)) {
-            numTableAssignmentsChange++;
+            nTableAsgnChange++;
         }
 
         // if pick an internal node, create the path from the internal node to leave
@@ -1313,58 +1242,58 @@ public class SHLDA extends AbstractSampler {
 //        }
     }
 
-    private void optimizeAllRegressionParameters() {
-        ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
-        int numTopicParams = flattenTree.size();
-        int numLexParams = lexicalIndices.size();
-
-        double[] lambdas = new double[numTopicParams + numLexParams];
-        HashMap<SNode, Integer> nodeIndices = new HashMap<SNode, Integer>();
-        for (int i = 0; i < flattenTree.size(); i++) {
-            SNode node = flattenTree.get(i);
-            nodeIndices.put(node, i);
-            lambdas[i] = 1.0 / sigmas[node.getLevel()];
-        }
-        for (int ii = 0; ii < numLexParams; ii++) {
-            lambdas[numTopicParams + ii] = 200;
-        }
-//            lambdas[numTopicParams + ii] = 1.0 / hyperparams.get(TAU_SCALE);
-
-        // design matrix
-        double[][] designMatrix = new double[D][numTopicParams + numLexParams];
-        for (int d = 0; d < D; d++) {
-            // topic
-            for (int s = 0; s < words[d].length; s++) {
-                SNode[] path = getPathFromNode(c[d][s].getContent());
-                for (int l = 1; l < L; l++) {
-                    int nodeIdx = nodeIndices.get(path[l]);
-                    int count = sentLevelCounts[d][s].getCount(l);
-                    designMatrix[d][nodeIdx] += count;
-                }
-            }
-            for (int i = 0; i < numTopicParams; i++) {
-                designMatrix[d][i] /= docTokenCounts[d];
-            }
-            System.arraycopy(docLexicalDesignMatrix[d], 0, designMatrix[d], numTopicParams, numLexParams);
-        }
-
-        GurobiMLRL2Norm mlr =
-                new GurobiMLRL2Norm(designMatrix, responses, lambdas);
-        double[] weights = mlr.solve();
-
-        // update
-        for (int i = 0; i < numTopicParams; i++) {
-            flattenTree.get(i).setRegressionParameter(weights[i]);
-        }
-        for (int i = 0; i < numLexParams; i++) {
-            int vocIdx = lexicalIndices.get(i);
-            lexicalWeights[vocIdx] = weights[numTopicParams + i];
-        }
-
-        updateDocumentTopicWeights();
-        updateDocumentLexicalWeights();
-    }
-
+//    private void optimizeAllRegressionParameters() {
+//        ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
+//        int numTopicParams = flattenTree.size();
+//        int numLexParams = lexicalIndices.size();
+//
+//        double[] lambdas = new double[numTopicParams + numLexParams];
+//        HashMap<SNode, Integer> nodeIndices = new HashMap<SNode, Integer>();
+//        for (int i = 0; i < flattenTree.size(); i++) {
+//            SNode node = flattenTree.get(i);
+//            nodeIndices.put(node, i);
+//            lambdas[i] = 1.0 / sigmas[node.getLevel()];
+//        }
+//        for (int ii = 0; ii < numLexParams; ii++) {
+//            lambdas[numTopicParams + ii] = 200;
+//        }
+////            lambdas[numTopicParams + ii] = 1.0 / hyperparams.get(TAU_SCALE);
+//
+//        // design matrix
+//        double[][] designMatrix = new double[D][numTopicParams + numLexParams];
+//        for (int d = 0; d < D; d++) {
+//            // topic
+//            for (int s = 0; s < words[d].length; s++) {
+//                SNode[] path = getPathFromNode(c[d][s].getContent());
+//                for (int l = 1; l < L; l++) {
+//                    int nodeIdx = nodeIndices.get(path[l]);
+//                    int count = sentLevelCounts[d][s].getCount(l);
+//                    designMatrix[d][nodeIdx] += count;
+//                }
+//            }
+//            for (int i = 0; i < numTopicParams; i++) {
+//                designMatrix[d][i] /= docTokenCounts[d];
+//            }
+//            System.arraycopy(docLexicalDesignMatrix[d], 0, designMatrix[d], numTopicParams, numLexParams);
+//        }
+//
+//        GurobiMLRL2Norm mlr =
+//                new GurobiMLRL2Norm(designMatrix, responses, lambdas);
+//        double[] weights = mlr.solve();
+//
+//        // update
+//        for (int i = 0; i < numTopicParams; i++) {
+//            flattenTree.get(i).setRegressionParameter(weights[i]);
+//        }
+//        for (int i = 0; i < numLexParams; i++) {
+//            int vocIdx = lexicalIndices.get(i);
+//            lexicalWeights[vocIdx] = weights[numTopicParams + i];
+//        }
+//
+//        updateDocumentTopicWeights();
+//        updateDocumentLexicalWeights();
+//    }
+    
     private void optimizeTopicRegressionParameters() {
         ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
         int numNodes = flattenTree.size();
@@ -1962,9 +1891,14 @@ public class SHLDA extends AbstractSampler {
         stack.add(globalTreeRoot);
         while (!stack.isEmpty()) {
             SNode node = stack.pop();
-
-            for (SNode child : node.getChildren()) {
-                stack.add(child);
+            
+            ArrayList<RankingItem<SNode>> rankChildren = new ArrayList<RankingItem<SNode>>();
+            for(SNode child : node.getChildren()){
+                rankChildren.add(new RankingItem<SNode>(child, child.getRegressionParameter()));
+            }
+            Collections.sort(rankChildren);
+            for(int ii=0; ii<rankChildren.size(); ii++){
+                stack.add(rankChildren.get(ii).getObject());
             }
 
             // skip leaf nodes that are empty
@@ -2744,8 +2678,7 @@ public class SHLDA extends AbstractSampler {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' "
-                        + "main.RunLexicalSHLDA -help", options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 
@@ -2758,28 +2691,42 @@ public class SHLDA extends AbstractSampler {
             runModel();
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SHLDA -help", options);
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }
+    
+    public static String getHelpString() {
+        return "java -cp dist/segan.jar " + SHLDA.class.getName() + " -help";
+    }
 
     public static void runModel() throws Exception {
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
-        String resultFolder = cmd.getOptionValue("output");
-        String formatFolder = cmd.getOptionValue("format-folder");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+//        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
+//        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
+//        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/amazon-data/model");
+//        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-response");
+//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo/govtrack");
+        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/govtrack/112/model");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", "teaparty");
+        
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
 
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 25);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 50);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
         int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
 
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
         InitialState initState = InitialState.RANDOM;
+
+        verbose = true;
+        debug = true;
 
 //        String cvFolder = cmd.getOptionValue("cv-folder");
 //        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
@@ -2808,24 +2755,24 @@ public class SHLDA extends AbstractSampler {
             defaultBetas[i] = 1.0 / (i + 1);
         }
         double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
-        for (int i = 0; i < betas.length; i++) {
-            betas[i] = betas[i] * V;
-        }
+//        for (int i = 0; i < betas.length; i++) {
+//            betas[i] = betas[i] * V;
+//        }
 
         double[] defaultGammas = new double[L - 1];
         for (int i = 0; i < defaultGammas.length; i++) {
-            defaultGammas[i] = 1.0;
+            defaultGammas[i] = 0.5;
         }
 
         double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
 
         double[] responses = data.getResponses();
-        if (cmd.hasOption("z")) {
-            ZNormalizer zNorm = new ZNormalizer(responses);
-            for (int i = 0; i < responses.length; i++) {
-                responses[i] = zNorm.normalize(responses[i]);
-            }
+//        if (cmd.hasOption("z")) {
+        ZNormalizer zNorm = new ZNormalizer(responses);
+        for (int i = 0; i < responses.length; i++) {
+            responses[i] = zNorm.normalize(responses[i]);
         }
+//        }
 
         double meanResponse = StatisticsUtils.mean(responses);
         double[] defaultMus = new double[L];
@@ -2845,7 +2792,6 @@ public class SHLDA extends AbstractSampler {
         double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
         double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-        int numLexicalItems = CLIUtils.getIntegerArgument(cmd, "num-lex-items", V);
 
         SHLDA sampler = new SHLDA();
         sampler.setVerbose(verbose);
@@ -2863,7 +2809,6 @@ public class SHLDA extends AbstractSampler {
                 tau_mean, tau_scale,
                 betas, gammas,
                 mus, sigmas,
-                null, numLexicalItems,
                 initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
 
@@ -2872,7 +2817,7 @@ public class SHLDA extends AbstractSampler {
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(shldaFolder, TopWordFile), numTopWords);
-//        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
+////        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
         sampler.outputLexicalWeights(new File(shldaFolder, "lexical-reg-params.txt"));
         sampler.outputDocPathAssignments(new File(shldaFolder, "doc-topic.txt"));
         sampler.outputTopicWordDistributions(new File(shldaFolder, "topic-word.txt"));
@@ -2952,7 +2897,7 @@ public class SHLDA extends AbstractSampler {
         double[] defaultSigmas = new double[L];
         defaultSigmas[0] = 0.0001; // root node
         for (int l = 1; l < L; l++) {
-            defaultSigmas[l] = 0.5 * l;
+            defaultSigmas[l] = 0.5;
         }
         double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
 
@@ -2960,7 +2905,6 @@ public class SHLDA extends AbstractSampler {
         double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
         double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-        int numLexicalItems = CLIUtils.getIntegerArgument(cmd, "num-lex-items", V);
 
         if (verbose) {
             System.out.println("\nLoading cross validation info from " + cvFolder);
@@ -3020,7 +2964,6 @@ public class SHLDA extends AbstractSampler {
                     tau_mean, tau_scale,
                     betas, gammas,
                     mus, sigmas,
-                    null, numLexicalItems,
                     initState, paramOpt,
                     burnIn, maxIters, sampleLag, repInterval);
 

@@ -139,7 +139,7 @@ public class TruncatedStickBreaking {
     public void changeCount(int k, int delta) {
         this.counts[k] += delta;
         for (int i = 0; i <= k; i++) {
-            this.backwardCounts[k] += delta;
+            this.backwardCounts[i] += delta;
         }
 
         if (this.counts[k] < 0) {
@@ -346,5 +346,25 @@ public class TruncatedStickBreaking {
         
         int[] obs = {1, 2, 3};
         System.out.println(Math.exp(stick.getLogProbability(obs)));
+        
+        stick = new TruncatedStickBreaking(dim, mean, scale);
+        for (int i = 0; i < 2; i++) {
+            stick.increment(0);
+        }
+        for (int i = 0; i < 1; i++) {
+            stick.increment(1);
+        }
+        for (int i = 0; i < 0; i++) {
+            stick.increment(2);
+        }
+        
+        System.out.println(MiscUtils.arrayToString(stick.getCounts()));
+        System.out.println(MiscUtils.arrayToString(stick.backwardCounts));
+        int[] counts = {2, 1, 0};
+        for(int i=0; i<counts.length; i++) {
+            stick.changeCount(i, -counts[i]);
+        }
+        System.out.println(MiscUtils.arrayToString(stick.getCounts()));
+        System.out.println(MiscUtils.arrayToString(stick.backwardCounts));
     }
 }

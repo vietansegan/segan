@@ -15,7 +15,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
-import sampler.supervised.SHLDASampler;
+import sampler.supervised.regression.development.SHLDASampler;
 import util.IOUtils;
 import util.StatisticsUtils;
 import util.evaluation.MimnoTopicCoherence;
@@ -280,15 +280,15 @@ public class RunSHLDA {
                     initState, paramOpt,
                     burn_in, max_iters, sample_lag, reportInterval);
 
-            String shldaFolder = new File(resultFolder, sampler.getSamplerFolder()).getAbsolutePath();
+            File shldaFolder = new File(resultFolder, sampler.getSamplerFolder());
             IOUtils.createFolder(shldaFolder);
 
             sampler.sample();
 
-            sampler.outputTopicTopWords(shldaFolder + TopWordFile, numTopWords);
-            sampler.outputTopicCoherence(shldaFolder + TopicCoherenceFile, topicCoherence);
-            sampler.outputDocPathAssignments(shldaFolder + "doc-topic.txt");
-            sampler.outputTopicWordDistributions(shldaFolder + "topic-word.txt");
+            sampler.outputTopicTopWords(new File(shldaFolder, TopWordFile), numTopWords);
+            sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
+            sampler.outputDocPathAssignments(new File(shldaFolder, "doc-topic.txt"));
+            sampler.outputTopicWordDistributions(new File(shldaFolder, "topic-word.txt"));
         }
 
         @Override
