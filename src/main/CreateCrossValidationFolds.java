@@ -4,7 +4,7 @@ import core.AbstractRunner;
 import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
 import core.crossvalidation.RegressionDocumentInstance;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
@@ -58,7 +58,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
             String datasetName = cmd.getOptionValue("dataset");
             String datasetFolder = cmd.getOptionValue("data-folder");
             String formatFolder = cmd.getOptionValue("format-folder");
-            RegressionTextDataset dataset = new RegressionTextDataset(datasetName, datasetFolder);
+            ResponseTextDataset dataset = new ResponseTextDataset(datasetName, datasetFolder);
             dataset.loadFormattedData(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();

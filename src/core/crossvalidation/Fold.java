@@ -12,6 +12,9 @@ import util.IOUtils;
  */
 public class Fold<I, T extends Instance<I>> {
 
+    public static final int TRAIN = 0;
+    public static final int DEV = 1;
+    public static final int TEST = 2;
     public static final String TrainingExt = ".tr";
     public static final String DevelopExt = ".de";
     public static final String TestExt = ".te";
@@ -21,7 +24,7 @@ public class Fold<I, T extends Instance<I>> {
     private ArrayList<Integer> trainingInstances;
     private ArrayList<Integer> developmentInstances;
     private ArrayList<Integer> testingInstances;
-    
+
     public Fold(int idx, String folder) {
         this.index = idx;
         this.folder = folder;
@@ -36,8 +39,8 @@ public class Fold<I, T extends Instance<I>> {
 
     public Fold(int idx, String folder,
             ArrayList<T> instList,
-            ArrayList<Integer> trList, 
-            ArrayList<Integer> devList, 
+            ArrayList<Integer> trList,
+            ArrayList<Integer> devList,
             ArrayList<Integer> teList) {
         this.index = idx;
         this.folder = folder;
@@ -129,7 +132,7 @@ public class Fold<I, T extends Instance<I>> {
     public String getFoldFolderPath() {
         return new File(getFolder(), getFoldName()).getAbsolutePath();
     }
-    
+
     public String getFoldName() {
         return "fold-" + index;
     }

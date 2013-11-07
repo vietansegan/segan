@@ -11,24 +11,26 @@ import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import util.CLIUtils;
 import util.IOUtils;
+import util.StatisticsUtils;
+import util.normalizer.ZNormalizer;
 
 /**
  *
  * @author vietan
  */
-public class RegressionTextDataset extends TextDataset {
+public class ResponseTextDataset extends TextDataset {
 
     protected double[] responses;
 
-    public RegressionTextDataset(String name) {
+    public ResponseTextDataset(String name) {
         super(name);
     }
 
-    public RegressionTextDataset(String name, String folder) {
+    public ResponseTextDataset(String name, String folder) {
         super(name, folder);
     }
 
-    public RegressionTextDataset(String name, String folder,
+    public ResponseTextDataset(String name, String folder,
             CorpusProcessor corpProc) {
         super(name, folder, corpProc);
     }
@@ -48,6 +50,14 @@ public class RegressionTextDataset extends TextDataset {
             res[i] = responses[idx];
         }
         return res;
+    }
+
+    public ZNormalizer zNormalize() {
+        ZNormalizer znorm = new ZNormalizer(responses);
+        for (int ii = 0; ii < responses.length; ii++) {
+            responses[ii] = znorm.normalize(responses[ii]);
+        }
+        return znorm;
     }
 
     public void loadResponses(String responseFilepath) throws Exception {
@@ -121,15 +131,14 @@ public class RegressionTextDataset extends TextDataset {
      * @param numFolds Number of folds
      * @param trToDevRatio Ratio between the number of training and the number
      * of test data
+     * @param numClasses Number of discrete classes for stratified sampling
      */
-    @Override
-    public void createCrossValidation(String cvFolder, int numFolds, double trToDevRatio)
+    public void createCrossValidation(String cvFolder, int numFolds, double trToDevRatio, int numClasses)
             throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
-        ArrayList<Integer> groupIdList = new ArrayList<Integer>();
+        ArrayList<Integer> groupIdList = StatisticsUtils.discretize(responses, numClasses);
         for (int d = 0; d < this.docIdList.size(); d++) {
             instanceList.add(new Instance<String>(docIdList.get(d)));
-            groupIdList.add(0); // random, no stratified
         }
 
         String cvName = "";
@@ -147,7 +156,7 @@ public class RegressionTextDataset extends TextDataset {
             CorpusProcessor cp = new CorpusProcessor(corpProc);
 
             // training data
-            RegressionTextDataset trainData = new RegressionTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
             trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
             ArrayList<String> trDocIds = new ArrayList<String>();
             ArrayList<String> trDocTexts = new ArrayList<String>();
@@ -163,7 +172,7 @@ public class RegressionTextDataset extends TextDataset {
             trainData.format(fold.getFoldFolderPath());
 
             // development data
-            RegressionTextDataset devData = new RegressionTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
             devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
             ArrayList<String> deDocIds = new ArrayList<String>();
             ArrayList<String> deDocTexts = new ArrayList<String>();
@@ -179,7 +188,7 @@ public class RegressionTextDataset extends TextDataset {
             devData.format(fold.getFoldFolderPath());
 
             // test data
-            RegressionTextDataset testData = new RegressionTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
             testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
             ArrayList<String> teDocIds = new ArrayList<String>();
             ArrayList<String> teDocTexts = new ArrayList<String>();
@@ -194,6 +203,27 @@ public class RegressionTextDataset extends TextDataset {
             testData.setResponses(teResponses);
             testData.format(fold.getFoldFolderPath());
         }
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder str = new StringBuilder();
+        str.append("# docs: ").append(docIds.length).append("\n");
+        double max = StatisticsUtils.max(responses);
+        double min = StatisticsUtils.min(responses);
+        double mean = StatisticsUtils.mean(responses);
+        double stdv = StatisticsUtils.standardDeviation(responses);
+        int[] bins = StatisticsUtils.bin(responses, 5);
+        str.append("range: ").append(min).append(" - ").append(max).append("\n");
+        str.append("mean: ").append(mean).append(". stdv: ").append(stdv).append("\n");
+        for (int ii = 0; ii < bins.length; ii++) {
+            str.append(ii).append("\t").append(bins[ii]).append("\n");
+        }
+        return str.toString();
+    }
+
+    public static String getHelpString() {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + ResponseTextDataset.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -226,6 +256,7 @@ public class RegressionTextDataset extends TextDataset {
             addOption("num-folds", "Number of folds. Default 5.");
             addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
             addOption("cv-folder", "Folder to store cross validation folds");
+            addOption("num-classes", "Number of classes that the response");
 
             addOption("run-mode", "Run mode");
 
@@ -238,7 +269,7 @@ public class RegressionTextDataset extends TextDataset {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData -help", options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 
@@ -284,6 +315,7 @@ public class RegressionTextDataset extends TextDataset {
         int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
         double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
         String cvFolder = cmd.getOptionValue("cv-folder");
+        int numClasses = CLIUtils.getIntegerArgument(cmd, "num-classes", 1);
         IOUtils.createFolder(cvFolder);
 
         CorpusProcessor corpProc = new CorpusProcessor(
@@ -299,7 +331,7 @@ public class RegressionTextDataset extends TextDataset {
                 stopwordFilter,
                 lemmatization);
 
-        RegressionTextDataset dataset = new RegressionTextDataset(datasetName, datasetFolder, corpProc);
+        ResponseTextDataset dataset = new ResponseTextDataset(datasetName, datasetFolder, corpProc);
         // load text data
         if (cmd.hasOption("file")) {
             dataset.loadTextDataFromFile(textInputData);
@@ -307,19 +339,44 @@ public class RegressionTextDataset extends TextDataset {
             dataset.loadTextDataFromFolder(textInputData);
         }
         dataset.loadResponses(responseFile); // load response data
-        dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio);
+        dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio, numClasses);
     }
 
-    public static RegressionTextDataset load(String[] args) throws Exception {
+    public static ResponseTextDataset load(String[] args) throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String formatFolder = cmd.getOptionValue("format-folder");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         return data;
+    }
+
+    /**
+     * Load train/development/test data in a cross validation fold.
+     *
+     * @param fold The given fold
+     */
+    public static ResponseTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
+        ResponseTextDataset[] foldData = new ResponseTextDataset[3];
+        ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
+        trainData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TRAIN] = trainData;
+
+        ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
+        devData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.DEV] = devData;
+
+        ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
+        testData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TEST] = testData;
+
+        return foldData;
     }
 
     public static void process(String[] args) throws Exception {
@@ -356,7 +413,7 @@ public class RegressionTextDataset extends TextDataset {
                 stopwordFilter,
                 lemmatization);
 
-        RegressionTextDataset dataset = new RegressionTextDataset(datasetName, datasetFolder, corpProc);
+        ResponseTextDataset dataset = new ResponseTextDataset(datasetName, datasetFolder, corpProc);
         dataset.setFormatFilename(formatFile);
 
         // load text data
@@ -367,5 +424,41 @@ public class RegressionTextDataset extends TextDataset {
         }
         dataset.loadResponses(responseFile); // load response data
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
+    }
+
+    /**
+     * Z-normalize the response variable using the training responses as the
+     * base distribution.
+     *
+     * @param train The training data
+     * @param dev The development data
+     * @param test The test data
+     */
+    public static void zNormalize(
+            ResponseTextDataset train,
+            ResponseTextDataset dev,
+            ResponseTextDataset test) {
+        ZNormalizer zNorm = new ZNormalizer(train.getResponses());
+
+        // train
+        double[] zNormTrResponse = new double[train.responses.length];
+        for (int ii = 0; ii < zNormTrResponse.length; ii++) {
+            zNormTrResponse[ii] = zNorm.normalize(train.responses[ii]);
+        }
+        train.setResponses(zNormTrResponse);
+
+        // development
+        double[] zNormDeResponse = new double[dev.responses.length];
+        for (int ii = 0; ii < zNormDeResponse.length; ii++) {
+            zNormDeResponse[ii] = zNorm.normalize(dev.responses[ii]);
+        }
+        dev.setResponses(zNormDeResponse);
+
+        // test
+        double[] zNormTeResponse = new double[test.responses.length];
+        for (int ii = 0; ii < zNormTeResponse.length; ii++) {
+            zNormTeResponse[ii] = zNorm.normalize(test.responses[ii]);
+        }
+        test.setResponses(zNormTeResponse);
     }
 }

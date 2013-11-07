@@ -8,8 +8,11 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampling.util.SparseCount;
 import util.CLIUtils;
 import util.DataUtils;
 import util.IOUtils;
@@ -31,6 +34,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected int[][][] sentWords;
     protected String[][] sentRawWords;
     protected MimnoTopicCoherence topicCoherence;
+    protected double[] tfidfs;
 
     public TextDataset(String name) {
         super(name);
@@ -55,6 +59,42 @@ public class TextDataset extends AbstractTokenizeDataset {
         this.docIdList = new ArrayList<String>();
         this.textList = new ArrayList<String>();
         this.processedDocIndices = new ArrayList<Integer>();
+    }
+
+    /**
+     * Compute the TF-IDF score of each item in the vocabulary.
+     */
+    public void computeTFIDFs() {
+        int V = this.wordVocab.size();
+        int D = this.words.length;
+        SparseCount tfs = new SparseCount();
+        SparseCount dfs = new SparseCount();
+        for (int d = 0; d < D; d++) {
+            Set<Integer> uniqueWords = new HashSet<Integer>();
+            for (int n = 0; n < words[d].length; n++) {
+                uniqueWords.add(words[d][n]);
+                tfs.increment(words[d][n]);
+            }
+
+            for (int w : uniqueWords) {
+                dfs.increment(w);
+            }
+        }
+
+        this.tfidfs = new double[V];
+        for (int v = 0; v < V; v++) {
+            double tf = Math.log(tfs.getCount(v));
+            double idf = Math.log(D) - Math.log(dfs.getCount(v));
+            this.tfidfs[v] = tf * idf;
+        }
+    }
+
+    public double[] getTFIDFs() {
+        return this.tfidfs;
+    }
+
+    public String[][] getRawSentences() {
+        return this.sentRawWords;
     }
 
     public ArrayList<String> getDocIdList() {
@@ -614,6 +654,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
     }
 
+    public static String getHelpString() {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + TextDataset.class.getName() + " -help";
+    }
+
     public static void main(String[] args) {
         try {
             parser = new BasicParser();
@@ -655,7 +699,7 @@ public class TextDataset extends AbstractTokenizeDataset {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp 'dist/segan.jar:dist/lib/*' main.ProcessData -help", options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 

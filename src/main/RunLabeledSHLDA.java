@@ -3,7 +3,7 @@ package main;
 import util.CLIUtils;
 import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
-import data.LabelSingleResponseTextDataset;
+import data.LabelResponseTextDataset;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
@@ -18,7 +18,7 @@ import util.normalizer.ZNormalizer;
  */
 public class RunLabeledSHLDA extends AbstractRunner {
 
-    private static LabelSingleResponseTextDataset data;
+    private static LabelResponseTextDataset data;
 
     public static void main(String[] args) {
         try {
@@ -106,7 +106,7 @@ public class RunLabeledSHLDA extends AbstractRunner {
             double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
             double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
 
-            data = new LabelSingleResponseTextDataset(datasetName, datasetFolder);
+            data = new LabelResponseTextDataset(datasetName, datasetFolder);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             data.prepareTopicCoherence(numTopWords);
 

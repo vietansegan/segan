@@ -8,7 +8,7 @@ import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
 import core.crossvalidation.Instance;
 import core.crossvalidation.RegressionDocumentInstance;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -19,8 +19,8 @@ import org.apache.commons.cli.Options;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
-import sampling.util.Restaurant;
 import sampling.util.FullTable;
+import sampling.util.Restaurant;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
@@ -37,7 +37,6 @@ import util.normalizer.ZNormalizer;
  */
 public class SHDP extends AbstractSampler {
 
-    public static final String IterPredictionFolder = "iter-predictions/";
     public static final int PSEUDO_INDEX = -1;
     public static final int ALPHA_GLOBAL = 0;
     public static final int ALPHA_LOCAL = 1;
@@ -1657,7 +1656,7 @@ public class SHDP extends AbstractSampler {
             System.out.println("\nLoading formatted data ...");
         }
 
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);

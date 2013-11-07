@@ -33,7 +33,7 @@ public class GibbsRegressorUtils {
             ArrayList<double[]> predictions) {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
-            for (int d = 0; d < predictions.size(); d++) {
+            for (int d = 0; d < predictions.get(0).length; d++) {
                 writer.write(Integer.toString(d));
 
                 for (int ii = 0; ii < predictions.size(); ii++) {
@@ -81,7 +81,15 @@ public class GibbsRegressorUtils {
         return preds;
     }
 
-    public static void evaluate(File iterPredFolder,
+    /**
+     * Evaluating regression predictions.
+     *
+     * @param iterPredFolder Prediction folder
+     * @param outputFolder Output folder
+     * @param trueResponses Ground truth responses
+     */
+    public static void evaluate(
+            File iterPredFolder,
             File outputFolder,
             double[] trueResponses) {
         computeSingleFinal(iterPredFolder, outputFolder, trueResponses);

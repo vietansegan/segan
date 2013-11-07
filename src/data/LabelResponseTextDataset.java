@@ -10,15 +10,15 @@ import util.IOUtils;
  *
  * @author vietan
  */
-public class LabelSingleResponseTextDataset extends LabelTextData {
+public class LabelResponseTextDataset extends LabelTextData {
 
     protected double[] responses;
 
-    public LabelSingleResponseTextDataset(String name, String folder) {
+    public LabelResponseTextDataset(String name, String folder) {
         super(name, folder);
     }
 
-    public LabelSingleResponseTextDataset(String name, String folder,
+    public LabelResponseTextDataset(String name, String folder,
             CorpusProcessor corpProc) {
         super(name, folder, corpProc);
     }

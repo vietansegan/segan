@@ -236,6 +236,23 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel {
         return str.toString();
     }
 
+    public static String outputDistribution(double[] dist) {
+        StringBuilder str = new StringBuilder();
+        for (int ii = 0; ii < dist.length; ii++) {
+            str.append(dist[ii]).append("\t");
+        }
+        return str.toString().trim();
+    }
+
+    public static double[] inputDistribution(String str) {
+        String[] sstr = str.split("\t");
+        double[] dist = new double[sstr.length];
+        for (int ii = 0; ii < dist.length; ii++) {
+            dist[ii] = Double.parseDouble(sstr[ii]);
+        }
+        return dist;
+    }
+
     public static String output(DirMult model) {
         StringBuilder str = new StringBuilder();
         str.append(model.dimension)

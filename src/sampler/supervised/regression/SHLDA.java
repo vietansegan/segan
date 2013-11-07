@@ -1,7 +1,8 @@
 package sampler.supervised.regression;
 
 import core.AbstractSampler;
-import data.RegressionTextDataset;
+import core.crossvalidation.Fold;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -32,13 +33,12 @@ import util.SparseVector;
 import util.StatisticsUtils;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;
-import util.normalizer.ZNormalizer;
 
 /**
  *
  * @author vietan
  */
-public class SHLDA extends AbstractSampler {
+public class SHLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final Double WEIGHT_THRESHOLD = 10e-2;
     public static final int PSEUDO_TABLE_INDEX = -1;
@@ -97,8 +97,6 @@ public class SHLDA extends AbstractSampler {
     private int numSecondTopics = 3; // # second-level topics per first-level topic
 
     public void configure(String folder,
-            int[][][] words,
-            double[] responses,
             int V, int L,
             double T,
             double alpha,
@@ -120,24 +118,9 @@ public class SHLDA extends AbstractSampler {
         }
         this.folder = folder;
 
-        this.words = words;
-        this.responses = responses;
-
         this.V = V;
         this.L = L;
-        this.D = this.words.length;
         this.T = T;
-
-        sentCount = 0;
-        tokenCount = 0;
-        docTokenCounts = new int[D];
-        for (int d = 0; d < D; d++) {
-            sentCount += words[d].length;
-            for (int s = 0; s < words[d].length; s++) {
-                tokenCount += words[d][s].length;
-                docTokenCounts[d] += words[d][s].length;
-            }
-        }
 
         this.betas = betas;
         this.gammas = gammas;
@@ -245,11 +228,11 @@ public class SHLDA extends AbstractSampler {
             }
         }
     }
-    
+
     public void setNumInitTopics(int numTopics) {
         this.numFirstTopics = numTopics;
     }
-    
+
     public void setNumInitFrames(int numFrames) {
         this.numSecondTopics = numFrames;
     }
@@ -290,6 +273,11 @@ public class SHLDA extends AbstractSampler {
         }
     }
 
+    @Override
+    public String getName() {
+        return this.name;
+    }
+
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
@@ -324,6 +312,29 @@ public class SHLDA extends AbstractSampler {
         str.append("_opt-").append(this.paramOptimized);
         str.append("_").append(this.paramOptimized);
         this.name = str.toString();
+    }
+
+    @Override
+    public void train(ResponseTextDataset trainData) {
+        this.words = trainData.getSentenceWords();
+        this.responses = trainData.getResponses();
+        this.D = this.words.length;
+
+        sentCount = 0;
+        tokenCount = 0;
+        docTokenCounts = new int[D];
+        for (int d = 0; d < D; d++) {
+            sentCount += words[d].length;
+            for (int s = 0; s < words[d].length; s++) {
+                tokenCount += words[d][s].length;
+                docTokenCounts[d] += words[d][s].length;
+            }
+        }
+    }
+
+    @Override
+    public void test(ResponseTextDataset testData) {
+        this.testSampler(testData.getSentenceWords());
     }
 
     @Override
@@ -462,6 +473,8 @@ public class SHLDA extends AbstractSampler {
                 z[d][s] = new int[words[d][s].length];
             }
         }
+
+        this.docTopicWeights = new double[D];
     }
 
     /**
@@ -821,7 +834,8 @@ public class SHLDA extends AbstractSampler {
 
             if (report) {
                 // weights over time
-                BufferedWriter writer = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "weights-over-time.txt"));
+                BufferedWriter writer = IOUtils.getBufferedWriter(
+                        new File(getSamplerFolderPath(), "weights-over-time.txt"));
                 for (int v = 0; v < V; v++) {
                     writer.write(v + "\t" + wordVocab.get(v));
                     for (int i = 0; i < this.lexicalWeightsOverTime.size(); i++) {
@@ -1760,8 +1774,40 @@ public class SHLDA extends AbstractSampler {
         return path;
     }
 
+    /**
+     * Check whether a given node is a leaf node.
+     *
+     * @param node The node
+     */
     private boolean isLeafNode(SNode node) {
         return node.getLevel() == L - 1;
+    }
+
+    /**
+     * Parse the node path string.
+     *
+     * @param nodePath The node path string
+     */
+    public int[] parseNodePath(String nodePath) {
+        String[] ss = nodePath.split(":");
+        int[] parsedPath = new int[ss.length];
+        for (int i = 0; i < ss.length; i++) {
+            parsedPath[i] = Integer.parseInt(ss[i]);
+        }
+        return parsedPath;
+    }
+
+    /**
+     * Get a node in the tree given a parsed path
+     *
+     * @param parsedPath The parsed path
+     */
+    private SNode getNode(int[] parsedPath) {
+        SNode node = globalTreeRoot;
+        for (int i = 1; i < parsedPath.length; i++) {
+            node = node.getChild(parsedPath[i]);
+        }
+        return node;
     }
 
     private void outputWeights(File outputFile, double[] ws) throws Exception {
@@ -2083,9 +2129,87 @@ public class SHLDA extends AbstractSampler {
     }
 
     @Override
+    public void output(File samplerFile) {
+        this.outputState(samplerFile.getAbsolutePath());
+    }
+
+    @Override
+    public void input(File samplerFile) {
+        this.inputModel(samplerFile.getAbsolutePath());
+    }
+
+    public void inputFinalModel() {
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        this.inputModel(new File(reportFolder, "iter-" + MAX_ITER + ".zip").getAbsolutePath());
+    }
+
+    @Override
     public void outputState(String filepath) {
         if (verbose) {
             logln("--- Outputing current state to " + filepath + "\n");
+        }
+
+        try {
+            // model
+            StringBuilder modelStr = new StringBuilder();
+            modelStr.append(SparseVector.output(lexicalWeights)).append("\n");
+
+            Stack<SNode> stack = new Stack<SNode>();
+            stack.add(globalTreeRoot);
+            while (!stack.isEmpty()) {
+                SNode node = stack.pop();
+                modelStr.append(node.getPathString()).append("\n");
+                modelStr.append(node.getIterationCreated()).append("\n");
+                modelStr.append(node.getNumCustomers()).append("\n");
+                modelStr.append(node.getRegressionParameter()).append("\n");
+                modelStr.append(DirMult.output(node.getContent())).append("\n");
+                modelStr.append(DirMult.outputDistribution(node.getContent().getSamplingDistribution())).append("\n");
+
+                for (SNode child : node.getChildren()) {
+                    stack.add(child);
+                }
+            }
+
+            // assignments
+            StringBuilder assignStr = new StringBuilder();
+            for (int d = 0; d < D; d++) {
+                assignStr.append(d)
+                        .append("\t").append(localRestaurants[d].getNumTables())
+                        .append("\n");
+                for (STable table : localRestaurants[d].getTables()) {
+                    assignStr.append(table.getIndex()).append("\n");
+                    assignStr.append(table.getIterationCreated()).append("\n");
+                    assignStr.append(table.getContent().getPathString()).append("\n");
+                    assignStr.append(TruncatedStickBreaking.output(table.levelDist)).append("\n");
+                }
+            }
+
+            for (int d = 0; d < D; d++) {
+                for (int s = 0; s < words[d].length; s++) {
+                    assignStr.append(d)
+                            .append(":").append(s)
+                            .append("\t").append(c[d][s].getIndex())
+                            .append("\n");
+                }
+            }
+
+            for (int d = 0; d < D; d++) {
+                for (int t = 0; t < words[d].length; t++) {
+                    for (int n = 0; n < words[d][t].length; n++) {
+                        assignStr.append(d)
+                                .append(":").append(t)
+                                .append(":").append(n)
+                                .append("\t").append(z[d][t][n])
+                                .append("\n");
+                    }
+                }
+            }
+
+            // output to a compressed file
+            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + filepath);
         }
     }
 
@@ -2094,6 +2218,170 @@ public class SHLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Reading state from " + filepath + "\n");
         }
+
+        try {
+            inputModel(filepath);
+
+            inputAssignments(filepath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        if (debug) {
+            validate("--- Loaded.");
+        }
+    }
+
+    /**
+     * Load the model from a compressed state file
+     *
+     * @param zipFilepath Path to the compressed state file (.zip)
+     */
+    private void inputModel(String zipFilepath) {
+        if (verbose) {
+            logln("--- --- Loading model from " + zipFilepath + "\n");
+        }
+
+        try {
+            // initialize
+            this.initializeModelStructure();
+
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
+
+            // lexical weights
+            String line = reader.readLine();
+            this.lexicalWeights = SparseVector.input(line);
+
+            // topic tree
+            HashMap<String, SNode> nodeMap = new HashMap<String, SNode>();
+            while ((line = reader.readLine()) != null) {
+                String pathStr = line;
+                int iterCreated = Integer.parseInt(reader.readLine());
+                int numCustomers = Integer.parseInt(reader.readLine());
+                double regParam = Double.parseDouble(reader.readLine());
+                DirMult dmm = DirMult.input(reader.readLine());
+                double[] dist = DirMult.inputDistribution(reader.readLine());
+                dmm.setSamplingDistribution(dist);
+
+                // create node
+                int lastColonIndex = pathStr.lastIndexOf(":");
+                SNode parent = null;
+                if (lastColonIndex != -1) {
+                    parent = nodeMap.get(pathStr.substring(0, lastColonIndex));
+                }
+
+                String[] pathIndices = pathStr.split(":");
+                int nodeIndex = Integer.parseInt(pathIndices[pathIndices.length - 1]);
+                int nodeLevel = pathIndices.length - 1;
+                SNode node = new SNode(iterCreated, nodeIndex,
+                        nodeLevel, dmm, regParam, parent);
+                node.setTopic(dist);
+
+                node.changeNumCustomers(numCustomers);
+
+                if (node.getLevel() == 0) {
+                    globalTreeRoot = node;
+                }
+
+                if (parent != null) {
+                    parent.addChild(node.getIndex(), node);
+                }
+
+                nodeMap.put(pathStr, node);
+            }
+            reader.close();
+
+            Stack<SNode> stack = new Stack<SNode>();
+            stack.add(globalTreeRoot);
+            while (!stack.isEmpty()) {
+                SNode node = stack.pop();
+                if (!isLeafNode(node)) {
+                    node.fillInactiveChildIndices();
+                    for (SNode child : node.getChildren()) {
+                        stack.add(child);
+                    }
+                }
+            }
+
+            validateModel("Loading model " + filename);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading model from "
+                    + zipFilepath);
+        }
+    }
+
+    /**
+     * Load the assignments of the training data from the compressed state file
+     *
+     * @param zipFilepath Path to the compressed state file (.zip)
+     */
+    private void inputAssignments(String zipFilepath) throws Exception {
+        if (verbose) {
+            logln("--- --- Loading assignments from " + zipFilepath + "\n");
+        }
+
+        // initialize
+        this.initializeDataStructure();
+
+        String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+        BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
+
+        String[] sline;
+
+        for (int d = 0; d < D; d++) {
+            sline = reader.readLine().split("\t");
+            if (d != Integer.parseInt(sline[0])) {
+                throw new RuntimeException("Mismatch");
+            }
+            int numTables = Integer.parseInt(sline[1]);
+
+            for (int i = 0; i < numTables; i++) {
+                int tabIndex = Integer.parseInt(reader.readLine());
+                int iterCreated = Integer.parseInt(reader.readLine());
+                SNode leafNode = getNode(parseNodePath(reader.readLine()));
+                TruncatedStickBreaking levelDist = TruncatedStickBreaking.input(reader.readLine());
+                STable table = new STable(iterCreated, tabIndex, leafNode, d, levelDist);
+                localRestaurants[d].addTable(table);
+            }
+        }
+
+        for (int d = 0; d < D; d++) {
+            localRestaurants[d].fillInactiveTableIndices();
+        }
+
+        for (int d = 0; d < D; d++) {
+            for (int s = 0; s < words[d].length; s++) {
+                sline = reader.readLine().split("\t");
+                if (!sline[0].equals(d + ":" + s)) {
+                    throw new RuntimeException("Mismatch");
+                }
+                int tableIndex = Integer.parseInt(sline[1]);
+                STable table = localRestaurants[d].getTable(tableIndex);
+                c[d][s] = table;
+                localRestaurants[d].addCustomerToTable(s, tableIndex);
+            }
+        }
+
+        for (int d = 0; d < D; d++) {
+            for (int s = 0; s < words[d].length; s++) {
+                STable table = c[d][s];
+                SNode[] path = getPathFromNode(table.getContent());
+                for (int n = 0; n < words[d][s].length; n++) {
+                    sline = reader.readLine().split("\t");
+                    if (!sline[0].equals(d + ":" + s + ":" + n)) {
+                        throw new RuntimeException("Mismatch");
+                    }
+                    z[d][s][n] = Integer.parseInt(sline[1]);
+                    path[z[d][s][n]].getContent().increment(words[d][s][n]);
+                    sentLevelCounts[d][s][z[d][s][n]]++;
+                }
+            }
+        }
+
+        reader.close();
     }
 
     public void outputTopicTopWords(File outputFile, int numWords) {
@@ -2152,6 +2440,240 @@ public class SHLDA extends AbstractSampler {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing topics "
                     + outputFile);
+        }
+    }
+
+    public void outputSentences(File outputFile, String[][] rawSentences, int numSents) {
+        // rank sentences for each path
+        HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap =
+                new HashMap<SNode, ArrayList<RankingItem<String>>>();
+        for (int d = 0; d < D; d++) {
+            for (STable table : localRestaurants[d].getTables()) {
+                SNode pathNode = table.getContent();
+
+                for (int s : table.getCustomers()) {
+                    double score = 0.0;
+                    for (int n = 0; n < words[d][s].length; n++) {
+                        if (z[d][s][n] == L - 1) {
+                            score += pathNode.getLogProbability(words[d][s][n]);
+                        }
+                    }
+                    RankingItem<String> rankSent = new RankingItem<String>(d + "-" + s, score);
+
+                    ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(pathNode);
+                    if (rankSents == null) {
+                        rankSents = new ArrayList<RankingItem<String>>();
+                    }
+                    rankSents.add(rankSent);
+                    pathRankSentMap.put(pathNode, rankSents);
+                }
+            }
+        }
+
+        // print out top sentences
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            Stack<SNode> stack = new Stack<SNode>();
+            stack.add(globalTreeRoot);
+            while (!stack.isEmpty()) {
+                SNode node = stack.pop();
+
+                for (SNode child : node.getChildren()) {
+                    stack.add(child);
+                }
+
+                if (isLeafNode(node)) {
+                    writer.write(node.toString() + "\n");
+                    ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(node);
+                    Collections.sort(rankSents);
+                    for (int ii = 0; ii < Math.min(numSents, rankSents.size()); ii++) {
+                        RankingItem<String> sent = rankSents.get(ii);
+                        int d = Integer.parseInt(sent.getObject().split("-")[0]);
+                        int s = Integer.parseInt(sent.getObject().split("-")[1]);
+                        double score = sent.getPrimaryValue();
+                        writer.write("\t[" + MiscUtils.formatDouble(score) + "] "
+                                + rawSentences[d][s] + "\n");
+                    }
+                    writer.write("\n");
+                }
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing sentences.");
+        }
+    }
+
+    public File getIterationPredictionFolder() {
+        return new File(getSamplerFolderPath(), IterPredictionFolder);
+    }
+
+    public void testSampler(int[][][] newWords) {
+        if (verbose) {
+            logln("Test sampling ...");
+        }
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist");
+        }
+        String[] filenames = reportFolder.list();
+
+        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
+        IOUtils.createFolder(iterPredFolder);
+
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File partialResultFile = new File(iterPredFolder, IOUtils.removeExtension(filename) + ".txt");
+                sampleNewDocuments(
+                        new File(reportFolder, filename),
+                        newWords,
+                        partialResultFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+    }
+
+    private void sampleNewDocuments(
+            File stateFile,
+            int[][][] newWords,
+            String outputResultFile) throws Exception {
+        if (verbose) {
+            logln("\nPerform regression using model from " + stateFile);
+        }
+
+        try {
+            inputModel(stateFile.getAbsolutePath());
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        words = newWords;
+        responses = null; // for evaluation
+        D = words.length;
+
+        sentCount = 0;
+        tokenCount = 0;
+        docTokenCounts = new int[D];
+        for (int d = 0; d < D; d++) {
+            sentCount += words[d].length;
+            for (int s = 0; s < words[d].length; s++) {
+                tokenCount += words[d][s].length;
+                docTokenCounts[d] += words[d][s].length;
+            }
+        }
+
+        logln("--- V = " + V);
+        logln("--- # documents = " + D); // number of groups
+        logln("--- # sentences = " + sentCount);
+        logln("--- # tokens = " + tokenCount);
+
+        // initialize structure for test data
+        initializeDataStructure();
+
+        if (verbose) {
+            logln("Initialized data structure");
+            logln(printGlobalTreeSummary());
+            logln(printLocalRestaurantSummary());
+        }
+
+        // initialize random assignments
+        initializeRandomAssignmentsNewDocuments();
+
+        updateDocumentTopicWeights();
+        updateDocumentLexicalWeights();
+
+        if (verbose) {
+            logln("Initialized random assignments");
+            logln(printGlobalTreeSummary());
+            logln(printLocalRestaurantSummary());
+        }
+
+        if (debug) {
+            validateAssignments("Initialized");
+        }
+
+        // iterate
+        ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
+        for (iter = 0; iter < MAX_ITER; iter++) {
+            for (int d = 0; d < D; d++) {
+                for (int s = 0; s < words[d].length; s++) {
+                    if (words[d].length > 1) // if this document has only 1 sentence, no sampling is needed
+                    {
+                        sampleTableForSentence(d, s, REMOVE, ADD, !OBSERVED, !EXTEND);
+                    }
+
+                    for (int n = 0; n < words[d][s].length; n++) {
+                        sampleLevelForToken(d, s, n, REMOVE, ADD, !OBSERVED);
+                    }
+                }
+
+                for (STable table : localRestaurants[d].getTables()) {
+                    samplePathForTable(d, table, REMOVE, ADD, !OBSERVED, !EXTEND);
+                }
+            }
+
+            if (verbose && iter % LAG == 0) {
+                logln("--- iter = " + iter + " / " + MAX_ITER);
+            }
+
+            if (iter >= BURN_IN && iter % LAG == 0) {
+                this.updateDocumentLexicalWeights();
+                this.updateDocumentTopicWeights();
+
+                double[] predResponses = getRegressionValues();
+                predResponsesList.add(predResponses);
+            }
+        }
+
+        // output result during test time 
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputResultFile);
+        for (int d = 0; d < D; d++) {
+            writer.write(Integer.toString(d));
+
+            for (int ii = 0; ii < predResponsesList.size(); ii++) {
+                writer.write("\t" + predResponsesList.get(ii)[d]);
+            }
+            writer.write("\n");
+        }
+        writer.close();
+    }
+
+    private void initializeRandomAssignmentsNewDocuments() {
+        if (verbose) {
+            logln("--- Initializing random assignments ...");
+        }
+
+        for (int d = 0; d < D; d++) {
+            for (int s = 0; s < words[d].length; s++) {
+                // create a new table for each sentence
+                STable table = new STable(iter, s, null, d,
+                        new TruncatedStickBreaking(L, hyperparams.get(GEM_MEAN),
+                        hyperparams.get(GEM_SCALE)));
+                localRestaurants[d].addTable(table);
+                localRestaurants[d].addCustomerToTable(s, table.getIndex());
+                c[d][s] = table;
+
+                // initialize all tokens at the leaf node first
+                for (int n = 0; n < words[d][s].length; n++) {
+                    z[d][s][n] = L - 1;
+                    table.incrementLevelCount(z[d][s][n]);
+                    sentLevelCounts[d][s][z[d][s][n]]++;
+                }
+            }
+        }
+
+        for (int d = 0; d < D; d++) {
+            for (STable table : localRestaurants[d].getTables()) {
+                samplePathForTable(d, table, !REMOVE, ADD, !OBSERVED, !EXTEND);
+            }
         }
     }
 
@@ -2358,7 +2880,8 @@ public class SHLDA extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp dist/segan.jar " + SHLDA.class.getName() + " -help";
+        return "java -cp dist/segan.jar " + SHLDA.class
+                .getName() + " -help";
     }
 
     public static void run(String[] args) {
@@ -2421,10 +2944,15 @@ public class SHLDA extends AbstractSampler {
                 CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
-            runModel();
+
+            if (cmd.hasOption("cv-folder")) {
+                runCrossValidation();
+            } else {
+                runModel();
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SHLDA -help", options);
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }
@@ -2449,7 +2977,7 @@ public class SHLDA extends AbstractSampler {
         int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
         int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
         double T = CLIUtils.getDoubleArgument(cmd, "T", 1000);
-        
+
         int numTopics = CLIUtils.getIntegerArgument(cmd, "num-topics", 10);
         int numFrames = CLIUtils.getIntegerArgument(cmd, "num-frames", 3);
 
@@ -2458,13 +2986,10 @@ public class SHLDA extends AbstractSampler {
         boolean debug = cmd.hasOption("d");
         InitialState initState = InitialState.PRESET;
 
-        verbose = true;
-        debug = true;
-
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);
@@ -2488,15 +3013,11 @@ public class SHLDA extends AbstractSampler {
 
         double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
 
-        double[] responses = data.getResponses();
-//        if (cmd.hasOption("z")) {
-        ZNormalizer zNorm = new ZNormalizer(responses);
-        for (int i = 0; i < responses.length; i++) {
-            responses[i] = zNorm.normalize(responses[i]);
+        if (cmd.hasOption("z")) {
+            data.zNormalize();
         }
-//        }
 
-        double meanResponse = StatisticsUtils.mean(responses);
+        double meanResponse = StatisticsUtils.mean(data.getResponses());
         double[] defaultMus = new double[L];
         for (int i = 0; i < L; i++) {
             defaultMus[i] = meanResponse;
@@ -2524,12 +3045,13 @@ public class SHLDA extends AbstractSampler {
         sampler.setLog(true);
         sampler.setReport(true);
         sampler.setWordVocab(data.getWordVocab());
-        
+
         sampler.setNumInitTopics(numTopics);
         sampler.setNumInitFrames(numFrames);
 
+        sampler.train(data);
+
         sampler.configure(resultFolder,
-                data.getSentenceWords(), data.getResponses(),
                 V, L, T,
                 alpha,
                 rho,
@@ -2544,13 +3066,167 @@ public class SHLDA extends AbstractSampler {
 
         File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(samplerFolder);
-        sampler.initialize();
-        sampler.iterate();
-        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+//        sampler.initialize();
+//        sampler.iterate();
+//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+
 
 //        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
 //        sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
 //        sampler.outputDocPathAssignments(new File(samplerFolder, "doc-topic.txt"));
 //        sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
+    }
+
+    private static void runCrossValidation() throws Exception {
+        String cvFolder = cmd.getOptionValue("cv-folder");
+        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
+        String runMode = cmd.getOptionValue("run-mode");
+        String resultFolder = cmd.getOptionValue("output");
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        int foldIndex = -1;
+        if (cmd.hasOption("fold")) {
+            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+        }
+
+        // sampling
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        // initialization
+        int numTopics = CLIUtils.getIntegerArgument(cmd, "num-topics", 10);
+        int numFrames = CLIUtils.getIntegerArgument(cmd, "num-frames", 3);
+
+        // parameters
+        int L = CLIUtils.getIntegerArgument(cmd, "tree-height", 3);
+        double T = CLIUtils.getDoubleArgument(cmd, "T", 1000);
+        double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
+        double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
+
+        double[] defaultBetas = new double[L];
+        defaultBetas[0] = 1;
+        for (int i = 1; i < L; i++) {
+            defaultBetas[i] = 1.0 / (i + 1);
+        }
+        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
+
+        double[] defaultGammas = new double[L - 1];
+        for (int i = 0; i < defaultGammas.length; i++) {
+            defaultGammas[i] = 1.0 / (i + 1);
+        }
+        double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
+
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        boolean verbose = cmd.hasOption("v");
+        boolean debug = cmd.hasOption("d");
+        InitialState initState = InitialState.PRESET;
+
+        for (int ii = 0; ii < numFolds; ii++) {
+            if (foldIndex != -1 && ii != foldIndex) {
+                continue;
+            }
+            if (verbose) {
+                System.out.println("\nRunning fold " + foldIndex);
+            }
+
+            Fold fold = new Fold(ii, cvFolder);
+            File foldFolder = new File(resultFolder, fold.getFoldName());
+            ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
+            ResponseTextDataset trainData = foldData[Fold.TRAIN];
+            ResponseTextDataset devData = foldData[Fold.DEV];
+            ResponseTextDataset testData = foldData[Fold.TEST];
+
+            if (cmd.hasOption("z")) {
+                ResponseTextDataset.zNormalize(trainData, devData, testData);
+            }
+
+            if (verbose) {
+                System.out.println("Fold " + fold.getFoldName());
+                System.out.println("--- training: " + trainData.toString());
+                System.out.println("--- development: " + devData.toString());
+                System.out.println("--- test: " + testData.toString());
+                System.out.println();
+            }
+
+            int V = trainData.getWordVocab().size();
+
+            if (cmd.hasOption("z")) {
+                ResponseTextDataset.zNormalize(trainData, devData, testData);
+            }
+
+            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
+            double[] defaultMus = new double[L];
+            for (int i = 0; i < L; i++) {
+                defaultMus[i] = meanResponse;
+            }
+            double[] mus = CLIUtils.getDoubleArrayArgument(cmd, "mus", defaultMus, ",");
+
+            double[] defaultSigmas = new double[L];
+            defaultSigmas[0] = 0.0001; // root node
+            for (int l = 1; l < L; l++) {
+                defaultSigmas[l] = 0.5 * l;
+            }
+            double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
+            double tau_mean = CLIUtils.getDoubleArgument(cmd, "tau-mean", 0.0);
+            double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
+            double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
+            double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+
+            SHLDA sampler = new SHLDA();
+            sampler.setVerbose(verbose);
+            sampler.setDebug(debug);
+            sampler.setLog(true);
+            sampler.setReport(true);
+            sampler.setWordVocab(trainData.getWordVocab());
+
+            sampler.setNumInitTopics(numTopics);
+            sampler.setNumInitFrames(numFrames);
+
+            // train
+            sampler.train(trainData);
+            sampler.configure(foldFolder.getAbsolutePath(),
+                    V, L, T,
+                    alpha,
+                    rho,
+                    gem_mean, gem_scale,
+                    tau_mean, tau_scale,
+                    betas, gammas,
+                    mus, sigmas,
+                    initState,
+                    PathAssumption.MAXIMAL,
+                    paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+
+            File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+            File iterPredFolder = sampler.getIterationPredictionFolder();
+            File teResultFolder = new File(samplerFolder, "te-results");
+            IOUtils.createFolder(samplerFolder);
+
+            if (runMode.equals("train")) {
+                sampler.sample();
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+            } else if (runMode.equals("test")) {
+                IOUtils.createFolder(teResultFolder);
+                sampler.test(testData);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+            } else if (runMode.equals("train-test")) {
+                // train
+                sampler.sample();
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
+//                sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
+//                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
+//                sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
+
+                // test
+                IOUtils.createFolder(teResultFolder);
+                sampler.test(testData);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+//                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
+            } else {
+                throw new RuntimeException("Run mode " + runMode + " is not supported");
+            }
+        }
     }
 }

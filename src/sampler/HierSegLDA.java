@@ -1,7 +1,7 @@
 package sampler;
 
 import core.AbstractSampler;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -632,7 +632,7 @@ public class HierSegLDA extends AbstractSampler {
         verbose = true;
         debug = true;
 
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);

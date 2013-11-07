@@ -6,7 +6,7 @@ import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
 import core.crossvalidation.Instance;
 import core.crossvalidation.RegressionDocumentInstance;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -2739,7 +2739,7 @@ public class SHLDA extends AbstractSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);
@@ -2852,7 +2852,7 @@ public class SHLDA extends AbstractSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);

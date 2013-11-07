@@ -3,21 +3,18 @@ package sampler.supervised.regression;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
-import core.crossvalidation.CrossValidation;
 import core.crossvalidation.Fold;
-import core.crossvalidation.Instance;
-import core.crossvalidation.RegressionDocumentInstance;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
 import sampler.LDA;
-import sampler.supervised.SupervisedSampler;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import util.CLIUtils;
@@ -29,13 +26,12 @@ import util.StatisticsUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
-import util.normalizer.ZNormalizer;
 
 /**
  *
  * @author vietan
  */
-public class SLDA extends AbstractSampler implements SupervisedSampler {
+public class SLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final int ALPHA = 0;
     public static final int BETA = 1;
@@ -60,7 +56,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
     private int numTokens = 0;
     private ArrayList<double[]> regressionParameters;
 
-    public void configure(String folder, int[][] words, double[] y,
+    public void configure(
+            String folder,
             int V, int K,
             double alpha,
             double beta,
@@ -75,12 +72,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         }
 
         this.folder = folder;
-        this.words = words;
-        this.responses = y;
-
         this.K = K;
         this.V = V;
-        this.D = this.words.length;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
@@ -110,10 +103,6 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             System.err.close();
         }
 
-        numTokens = 0;
-        for (int d = 0; d < D; d++) {
-            numTokens += words[d].length;
-        }
         this.report = true;
 
         if (verbose) {
@@ -130,11 +119,20 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
             logln("--- # tokens:\t" + numTokens);
-        }
 
-        if (!debug) {
-            System.err.close();
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
+            int[] histogram = StatisticsUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
         }
+    }
+
+    @Override
+    public String getName() {
+        return this.name;
     }
 
     protected void setName() {
@@ -155,9 +153,20 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
     }
 
     @Override
-    public void trainSampler() {
-        this.initialize();
-        this.iterate();
+    public void train(ResponseTextDataset trainData) {
+        this.words = trainData.getWords();
+        this.responses = trainData.getResponses();
+        this.D = this.words.length;
+
+        this.numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+        }
+    }
+
+    @Override
+    public void test(ResponseTextDataset testData) {
+        this.testSampler(testData.getWords());
     }
 
     @Override
@@ -175,6 +184,12 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         if (debug) {
             validate("Initialized");
         }
+    }
+
+    @Override
+    public void sample() {
+        this.initialize();
+        this.iterate();
     }
 
     private void initializeModelStructure() {
@@ -527,6 +542,17 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             docTopics[d].increment(z[d][n]);
         }
     }
+    
+//    private void updateRegressionParameters() {
+//        double[][] designMatrix = new double[D][K];
+//        for (int d = 0; d < D; d++) {
+//            designMatrix[d] = docTopics[d].getEmpiricalDistribution();
+//        }
+//        
+//        GurobiMLRL2Norm mlr =
+//                new GurobiMLRL2Norm(designMatrix, , lambdas);
+//        double[] weights = mlr.solve();
+//    }
 
     /**
      * Update the regression parameters using L-BFGS. This is to perform a full
@@ -630,7 +656,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
             double mean = StatisticsUtils.dotProduct(regParams, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(newParams.get(RHO)));
+            responseLlh += StatisticsUtils.logNormalProbability(responses[d], mean, 
+                    Math.sqrt(newParams.get(RHO)));
         }
 
         double regParamLlh = 0.0;
@@ -672,12 +699,12 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
     }
 
     @Override
-    public void outputSampler(File samplerFile) {
+    public void output(File samplerFile) {
         this.outputState(samplerFile.getAbsolutePath());
     }
 
     @Override
-    public void inputSampler(File samplerFile) {
+    public void input(File samplerFile) {
         this.inputModel(samplerFile.getAbsolutePath());
     }
 
@@ -968,7 +995,6 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         return new File(getSamplerFolderPath(), IterPredictionFolder);
     }
 
-    @Override
     public void testSampler(int[][] newWords) {
         if (verbose) {
             logln("Test sampling ...");
@@ -1117,6 +1143,9 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         }
 
         // output result during test time
+        if (verbose) {
+            logln("--- Outputing result to " + outputResultFile);
+        }
         GibbsRegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
     }
     // End prediction ----------------------------------------------------------
@@ -1203,6 +1232,10 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         writer.close();
     }
 
+    public static String getHelpString() {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + SLDA.class.getName() + " -help";
+    }
+
     public static void main(String[] args) {
         run(args);
     }
@@ -1256,7 +1289,7 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SLDA -help", options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 
@@ -1268,21 +1301,20 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
 
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SLDA -help", options);
             System.exit(1);
         }
     }
 
-    /**
-     * Run cross validation
-     */
     private static void runCrossValidation() throws Exception {
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
+        String cvFolder = cmd.getOptionValue("cv-folder");
+        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
+        String runMode = cmd.getOptionValue("run-mode");
         String resultFolder = cmd.getOptionValue("output");
-        String formatFolder = cmd.getOptionValue("format-folder");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        int foldIndex = -1;
+        if (cmd.hasOption("fold")) {
+            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+        }
 
         int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
         int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
@@ -1296,92 +1328,53 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
+
         InitialState initState = InitialState.RANDOM;
 
-        String cvFolder = cmd.getOptionValue("cv-folder");
-        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
-        String runMode = cmd.getOptionValue("run-mode");
-
-        if (resultFolder == null) {
-            throw new RuntimeException("Result folder (--output) is not set.");
-        }
-
-        if (verbose) {
-            System.out.println("\nLoading formatted data ...");
-        }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
-        data.setFormatFilename(formatFile);
-        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
-        data.prepareTopicCoherence(numTopWords);
-
-        int V = data.getWordVocab().size();
-        double[] responses = data.getResponses();
-        if (cmd.hasOption("z")) {
-            ZNormalizer zNorm = new ZNormalizer(responses);
-            for (int i = 0; i < responses.length; i++) {
-                responses[i] = zNorm.normalize(responses[i]);
-            }
-            data.setResponses(responses);
-        }
-
-        double meanResponse = StatisticsUtils.mean(responses);
-        double stddevResponse = StatisticsUtils.standardDeviation(responses);
-        double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-
-        ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
-        for (int i = 0; i < data.getDocIds().length; i++) {
-            instanceList.add(new RegressionDocumentInstance(
-                    data.getDocIds()[i],
-                    data.getWords()[i],
-                    data.getResponses()[i]));
-        }
-
-        if (verbose) {
-            System.out.println("\nLoading cross validation info from " + cvFolder);
-        }
-        String cvName = "";
-        CrossValidation<String, RegressionDocumentInstance> crossValidation =
-                new CrossValidation<String, RegressionDocumentInstance>(
-                cvFolder,
-                cvName,
-                instanceList);
-        crossValidation.inputFolds(numFolds);
-        int foldIndex = -1;
-        if (cmd.hasOption("fold")) {
-            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-        }
-
-        for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
-            if (foldIndex != -1 && fold.getIndex() != foldIndex) {
+        for (int ii = 0; ii < numFolds; ii++) {
+            if (foldIndex != -1 && ii != foldIndex) {
                 continue;
             }
             if (verbose) {
                 System.out.println("\nRunning fold " + foldIndex);
             }
 
+            Fold fold = new Fold(ii, cvFolder);
             File foldFolder = new File(resultFolder, fold.getFoldName());
+            ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
+            ResponseTextDataset trainData = foldData[Fold.TRAIN];
+            ResponseTextDataset devData = foldData[Fold.DEV];
+            ResponseTextDataset testData = foldData[Fold.TEST];
+
+            if (cmd.hasOption("z")) {
+                ResponseTextDataset.zNormalize(trainData, devData, testData);
+            }
+            
+            if (verbose) {
+                System.out.println("Fold " + fold.getFoldName());
+                System.out.println("--- training: " + trainData.toString());
+                System.out.println("--- development: " + devData.toString());
+                System.out.println("--- test: " + testData.toString());
+                System.out.println();
+            }
+
+            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
+            double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
+            double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
+            double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
+            double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
 
             SLDA sampler = new SLDA();
             sampler.setVerbose(verbose);
             sampler.setDebug(debug);
             sampler.setLog(true);
             sampler.setReport(true);
-            sampler.setWordVocab(data.getWordVocab());
+            sampler.setWordVocab(trainData.getWordVocab());
 
-            // training data
-            ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
-            int[][] trRevWords = data.getDocWords(trInstIndices);
-            double[] trResponses = data.getResponses(trInstIndices);
-
-            // test data
-            ArrayList<Integer> teInstIndices = fold.getTestingInstances();
-            int[][] teRevWords = data.getDocWords(teInstIndices);
-            double[] teResponses = data.getResponses(teInstIndices);
-
-            sampler.configure(foldFolder.getAbsolutePath(), trRevWords, trResponses,
-                    V, K, alpha, beta,
+            sampler.train(trainData);
+            sampler.configure(foldFolder.getAbsolutePath(),
+                    trainData.getWordVocab().size(), K,
+                    alpha, beta,
                     mu, sigma, rho,
                     initState, paramOpt,
                     burnIn, maxIters, sampleLag, repInterval);
@@ -1391,44 +1384,35 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
             IOUtils.createFolder(samplerFolder);
 
             if (runMode.equals("train")) {
-                sampler.initialize();
-                sampler.iterate();
+                sampler.sample();
                 sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputTopicCoherence(new File(samplerFolder, TopicCoherenceFile), data.getTopicCoherence());
-
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
                 sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
                 sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
             } else if (runMode.equals("test")) {
-                sampler.testSampler(teRevWords);
-
+                sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
-
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("train-test")) {
-                // train
-                sampler.initialize();
-                sampler.iterate();
+                sampler.sample();
                 sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputTopicCoherence(new File(samplerFolder, TopicCoherenceFile), data.getTopicCoherence());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
                 sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
                 sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
 
-                // test
-                sampler.testSampler(teRevWords);
+                sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
+                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else {
-                throw new RuntimeException("Run mode " + runMode + " not supported");
+                throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
         }
     }
-
+    
     /**
      * Run a model on a dataset. This is mainly used for exploratory analysis.
      */
@@ -1457,22 +1441,18 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
         data.prepareTopicCoherence(numTopWords);
 
         int V = data.getWordVocab().size();
-        double[] responses = data.getResponses();
-        if (cmd.hasOption("s")) {
-            ZNormalizer zNorm = new ZNormalizer(responses);
-            for (int i = 0; i < responses.length; i++) {
-                responses[i] = zNorm.normalize(responses[i]);
-            }
+        if (cmd.hasOption("z")) {
+            data.zNormalize();
         }
 
-        double meanResponse = StatisticsUtils.mean(responses);
-        double stddevResponse = StatisticsUtils.standardDeviation(responses);
+        double meanResponse = StatisticsUtils.mean(data.getResponses());
+        double stddevResponse = StatisticsUtils.standardDeviation(data.getResponses());
 
         double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
         double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
@@ -1485,8 +1465,8 @@ public class SLDA extends AbstractSampler implements SupervisedSampler {
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setWordVocab(data.getWordVocab());
-
-        sampler.configure(outputFolder, data.getWords(), data.getResponses(),
+        sampler.train(data);
+        sampler.configure(outputFolder,
                 V, K, alpha, beta, mu, sigma, rho, initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
 

@@ -3,7 +3,7 @@ package sampler.supervised.regression.development;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
-import data.RegressionTextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -2478,7 +2478,7 @@ public class SHLDASampler extends AbstractSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        RegressionTextDataset data = new RegressionTextDataset(datasetName, datasetFolder);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);

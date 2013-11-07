@@ -150,4 +150,24 @@ public class SparseVector {
         Collections.sort(sortedList);
         return sortedList;
     }
+
+    public static String output(SparseVector vector) {
+        StringBuilder str = new StringBuilder();
+        for (int key : vector.getIndices()) {
+            str.append(key).append(",").append(vector.get(key)).append("\t");
+        }
+        return str.toString();
+    }
+
+    public static SparseVector input(String str) {
+        SparseVector vector = new SparseVector();
+        String[] sstr = str.split("\t");
+        for (String s : sstr) {
+            String[] ss = s.split(",");
+            int key = Integer.parseInt(ss[0]);
+            double val = Double.parseDouble(ss[1]);
+            vector.set(key, val);
+        }
+        return vector;
+    }
 }

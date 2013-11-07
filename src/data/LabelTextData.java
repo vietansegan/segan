@@ -175,6 +175,7 @@ public class LabelTextData extends TextDataset {
         }
     }
 
+    @Override
     public void format(File outputFolder) throws Exception {
         format(outputFolder.getAbsolutePath());
     }
