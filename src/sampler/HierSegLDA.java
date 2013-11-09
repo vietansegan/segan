@@ -656,6 +656,5 @@ public class HierSegLDA extends AbstractSampler {
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(ldaFolder, TopWordFile), numTopWords);
-
     }
 }

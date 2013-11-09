@@ -17,6 +17,7 @@ import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.HierSegLDA;
+import sampler.supervised.Regressor;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;
@@ -314,12 +315,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         this.name = str.toString();
     }
 
-    @Override
-    public void train(ResponseTextDataset trainData) {
-        this.words = trainData.getSentenceWords();
-        this.responses = trainData.getResponses();
-        this.D = this.words.length;
-
+    private void computeDataStatistics() {
         sentCount = 0;
         tokenCount = 0;
         docTokenCounts = new int[D];
@@ -332,9 +328,28 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
+    public void train(int[][][] ws, double[] rs) {
+        this.words = ws;
+        this.responses = rs;
+        this.D = this.words.length;
+        this.computeDataStatistics();
+    }
+
+    @Override
+    public void train(ResponseTextDataset trainData) {
+        this.words = trainData.getSentenceWords();
+        this.responses = trainData.getResponses();
+        this.D = this.words.length;
+        this.computeDataStatistics();
+    }
+
+    public void test(int[][][] ws) {
+        testSampler(ws);
+    }
+
     @Override
     public void test(ResponseTextDataset testData) {
-        this.testSampler(testData.getSentenceWords());
+        testSampler(testData.getSentenceWords());
     }
 
     @Override
@@ -473,8 +488,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 z[d][s] = new int[words[d][s].length];
             }
         }
-
-        this.docTopicWeights = new double[D];
     }
 
     /**
@@ -2143,6 +2156,11 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         this.inputModel(new File(reportFolder, "iter-" + MAX_ITER + ".zip").getAbsolutePath());
     }
 
+    public void inputFinalState() {
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        this.inputState(new File(reportFolder, "iter-" + MAX_ITER + ".zip"));
+    }
+
     @Override
     public void outputState(String filepath) {
         if (verbose) {
@@ -2416,7 +2434,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 continue;
             }
 
-            String[] topWords = getTopWords(node.getContent().getDistribution(), numWords);
+            double[] nodeTopic = node.getTopic();
+            String[] topWords = getTopWords(nodeTopic, numWords);
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("   ");
             }
@@ -2444,29 +2463,39 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     }
 
     public void outputSentences(File outputFile, String[][] rawSentences, int numSents) {
+        if (verbose) {
+            logln("--- Outputing sentences to " + outputFile);
+        }
+
         // rank sentences for each path
         HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap =
                 new HashMap<SNode, ArrayList<RankingItem<String>>>();
         for (int d = 0; d < D; d++) {
             for (STable table : localRestaurants[d].getTables()) {
                 SNode pathNode = table.getContent();
-
+                ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(pathNode);
+                if (rankSents == null) {
+                    rankSents = new ArrayList<RankingItem<String>>();
+                }
                 for (int s : table.getCustomers()) {
-                    double score = 0.0;
+                    if (words[d][s].length < 10) {
+                        continue;
+                    }
+
+                    double logprob = 0.0;
                     for (int n = 0; n < words[d][s].length; n++) {
                         if (z[d][s][n] == L - 1) {
-                            score += pathNode.getLogProbability(words[d][s][n]);
+                            logprob += pathNode.getLogProbability(words[d][s][n]);
                         }
                     }
-                    RankingItem<String> rankSent = new RankingItem<String>(d + "-" + s, score);
-
-                    ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(pathNode);
-                    if (rankSents == null) {
-                        rankSents = new ArrayList<RankingItem<String>>();
+                    if (logprob != 0) {
+                        rankSents.add(new RankingItem<String>(d + "-" + s, logprob));
                     }
-                    rankSents.add(rankSent);
-                    pathRankSentMap.put(pathNode, rankSents);
+
+                    // debug
+//                    System.out.println(d + "-" + s + "\t" + logprob);
                 }
+                pathRankSentMap.put(pathNode, rankSents);
             }
         }
 
@@ -2483,7 +2512,14 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 }
 
                 if (isLeafNode(node)) {
-                    writer.write(node.toString() + "\n");
+                    double[] nodeTopic = node.getTopic();
+                    String[] topWords = getTopWords(nodeTopic, 20);
+                    writer.write(node.toString());
+                    for (String topWord : topWords) {
+                        writer.write("\t" + topWord);
+                    }
+                    writer.write("\n");
+
                     ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(node);
                     Collections.sort(rankSents);
                     for (int ii = 0; ii < Math.min(numSents, rankSents.size()); ii++) {
@@ -2965,8 +3001,10 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 //        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
         String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
-        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo/govtrack");
-        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/govtrack/112/model");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", 
+                "/Users/vietan/Dropbox/github/teaparty/data/govtrack");
+        String resultFolder = CLIUtils.getStringArgument(cmd, "output", 
+                "/Users/vietan/Dropbox/github/teaparty/data/govtrack/112/format-teaparty-model");
         String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", "teaparty");
 
@@ -3064,12 +3102,14 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
 
-        File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
-        IOUtils.createFolder(samplerFolder);
+//        File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
+//        IOUtils.createFolder(samplerFolder);
 //        sampler.initialize();
 //        sampler.iterate();
-//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
 
+//        sampler.inputFinalState();
+//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+//        sampler.outputSentences(new File(samplerFolder, "sentences-new.txt"), data.getRawSentences(), 15);
 
 //        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
 //        sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
@@ -3206,6 +3246,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             if (runMode.equals("train")) {
                 sampler.sample();
                 sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
             } else if (runMode.equals("test")) {
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
@@ -3224,6 +3265,49 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 sampler.test(testData);
                 GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
 //                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
+            } else if (runMode.equals("hack")) {
+                sampler.inputFinalState();
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
+
+                int[][] teWords = testData.getWords();
+
+                int D = teWords.length;
+                double[][] desginMatrix = new double[D][V];
+                for (int d = 0; d < D; d++) {
+                    for (int n = 0; n < teWords[d].length; n++) {
+                        desginMatrix[d][teWords[d][n]]++;
+                    }
+                    for (int v = 0; v < V; v++) {
+                        desginMatrix[d][v] /= teWords[d].length;
+                    }
+                }
+
+                double[] predictions = new double[D];
+                for (int d = 0; d < D; d++) {
+                    double predVal = 0.0;
+                    for (int v = 0; v < V; v++) {
+                        if (sampler.lexicalWeights.get(v) != null) {
+                            predVal += desginMatrix[d][v] * sampler.lexicalWeights.get(v);
+                        }
+                    }
+
+                    predictions[d] = predVal;
+                }
+
+                RegressionEvaluation eval = new RegressionEvaluation(
+                        testData.getResponses(), predictions);
+                eval.computeCorrelationCoefficient();
+                eval.computeMeanSquareError();
+                eval.computeRSquared();
+
+                ArrayList<Measurement> measurements = eval.getMeasurements();
+                for (Measurement measurement : measurements) {
+                    System.out.println(measurement.getName()
+                            + "\t" + measurement.getValue()
+                            + "\n");
+                }
+
             } else {
                 throw new RuntimeException("Run mode " + runMode + " is not supported");
             }

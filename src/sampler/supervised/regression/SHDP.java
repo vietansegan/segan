@@ -111,12 +111,30 @@ public class SHDP extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             numTokens += this.words[d].length;
         }
-        logln("--- D = " + D);
-        logln("--- V = " + V);
-        logln("--- # observations = " + numTokens);
+        
+        if (verbose) {
+            logln("--- folder\t" + folder);
+            logln("--- num topics:\t" + K);
+            logln("--- alpha-global:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA_GLOBAL)));
+            logln("--- alpha-local:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA_LOCAL)));
+            logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
+            logln("--- reg mu:\t" + MiscUtils.formatDouble(hyperparams.get(MU)));
+            logln("--- reg sigma:\t" + MiscUtils.formatDouble(hyperparams.get(SIGMA)));
+            logln("--- response rho:\t" + MiscUtils.formatDouble(hyperparams.get(RHO)));
+            logln("--- burn-in:\t" + BURN_IN);
+            logln("--- max iter:\t" + MAX_ITER);
+            logln("--- sample lag:\t" + LAG);
+            logln("--- paramopt:\t" + paramOptimized);
+            logln("--- initialize:\t" + initState);
+            logln("--- # tokens:\t" + numTokens);
 
-        if (!debug) {
-            System.err.close();
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
+            int[] histogram = StatisticsUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
         }
     }
 
@@ -1560,8 +1578,12 @@ public class SHDP extends AbstractSampler {
             return str.toString();
         }
     }
-
-    public static void run(String[] args) {
+    
+    public static String getHelpString() {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + SHDP.class.getName() + " -help";
+    }
+    
+    public static void main(String[] args) {
         try {
             // create the command line parser
             parser = new BasicParser();
@@ -1607,31 +1629,31 @@ public class SHDP extends AbstractSampler {
             options.addOption("d", false, "debug");
             options.addOption("z", false, "standardize (z-score normalization)");
             options.addOption("help", false, "Help");
-
+            
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SHDP -help", options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 
             if (cmd.hasOption("cv-folder")) {
-                runCrossValidation();
+//                runCrossValidation();
             } else {
+//                runModel();
             }
 
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp("java -cp dist/segan.jar sampler.supervised.regression.SLDA -help", options);
             System.exit(1);
         }
     }
 
-    public static void runCrossValidation() throws Exception {
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
+    /*public static void runCrossValidation() throws Exception {
+//        String datasetName = cmd.getOptionValue("dataset");
+//        String datasetFolder = cmd.getOptionValue("data-folder");
         String resultFolder = cmd.getOptionValue("output");
-        String formatFolder = cmd.getOptionValue("format-folder");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+//        String formatFolder = cmd.getOptionValue("format-folder");
+//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
 
         int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
@@ -1647,7 +1669,66 @@ public class SHDP extends AbstractSampler {
         String cvFolder = cmd.getOptionValue("cv-folder");
         int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
         String runMode = cmd.getOptionValue("run-mode");
+        int foldIndex = -1;
+        if (cmd.hasOption("fold")) {
+            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+        }
 
+        for (int ii = 0; ii < numFolds; ii++) {
+            if (foldIndex != -1 && ii != foldIndex) {
+                continue;
+            }
+            if (verbose) {
+                System.out.println("\nRunning fold " + foldIndex);
+            }
+
+            Fold fold = new Fold(ii, cvFolder);
+            File foldFolder = new File(resultFolder, fold.getFoldName());
+            ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
+            ResponseTextDataset trainData = foldData[Fold.TRAIN];
+            ResponseTextDataset devData = foldData[Fold.DEV];
+            ResponseTextDataset testData = foldData[Fold.TEST];
+
+            if (cmd.hasOption("z")) {
+                ResponseTextDataset.zNormalize(trainData, devData, testData);
+            }
+            
+            if (verbose) {
+                System.out.println("Fold " + fold.getFoldName());
+                System.out.println("--- training: " + trainData.toString());
+                System.out.println("--- development: " + devData.toString());
+                System.out.println("--- test: " + testData.toString());
+                System.out.println();
+            }
+
+            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
+            double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
+            double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
+            double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
+            double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+            
+            SHDP sampler = new SHDP();
+            sampler.setVerbose(verbose);
+            sampler.setDebug(debug);
+            sampler.setLog(true);
+            sampler.setReport(true);
+            sampler.setWordVocab(trainData.getWordVocab());
+
+            sampler.train(trainData);
+            sampler.configure(foldFolder.getAbsolutePath(),
+                    trainData.getWordVocab().size(), K,
+                    alpha, beta,
+                    mu, sigma, rho,
+                    initState, paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+
+            File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+            File iterPredFolder = sampler.getIterationPredictionFolder();
+            IOUtils.createFolder(samplerFolder);
+        }
+        
+        
+        
         if (resultFolder == null) {
             throw new RuntimeException("Result folder (--output) is not set.");
         }
@@ -1767,5 +1848,5 @@ public class SHDP extends AbstractSampler {
                 throw new RuntimeException("Run mode " + runMode + " not supported");
             }
         }
-    }
+    }*/
 }

@@ -11,7 +11,7 @@ import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampler.supervised.regression.Regressor;
+import sampler.supervised.Regressor;
 import util.CLIUtils;
 import util.IOUtils;
 import util.evaluation.Measurement;

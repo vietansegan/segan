@@ -41,7 +41,7 @@ class TopicNode:
         self.doc_count = int(count_fields[1])
         self.iter_created = int(count_fields[0])
     
-		#print("Node ids: %s" % str(node_fields))
+        #print("Node ids: %s" % str(node_fields[-1]))
 		#print("Count: %s" % str(count_fields))
 		#print("Word: %s" % str(word_fields))
 		#print("response = %f" % self.response)
@@ -53,7 +53,7 @@ class TopicNode:
         text = ""
         for ii in range(0, 10):
             text += " " + self.words[ii]
-        text += "\n(" + str(self.response) + ", " + str(self.doc_count) + ", " + str(self.token_count) + ")"
+        text += "\n(" + str(self.id).replace('\"', '') + ", " + str(self.response) + ", " + str(self.doc_count) + ", " + str(self.token_count) + ")"
         return '\t%s [color="#%s" label="%s"];' % \
             (self.id, color, text)
 

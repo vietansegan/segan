@@ -15,6 +15,7 @@ import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
 import sampler.LDA;
+import sampler.supervised.Regressor;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import util.CLIUtils;
@@ -41,8 +42,10 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     protected int K;
     protected int V;
     protected int D;
+    // inputs
     protected int[][] words;
     protected double[] responses;
+    // latent variables
     protected int[][] z;
     protected DirMult[] docTopics;
     protected DirMult[] topicWords;
@@ -50,10 +53,12 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     private OLSMultipleLinearRegression regressor;
     private GaussianIndLinearRegObjective optimizable;
     private Optimizer optimizer;
+    // internal
     private int optimizeCount = 0;
     private int convergeCount = 0;
     private int numTokensChanged = 0;
     private int numTokens = 0;
+    
     private ArrayList<double[]> regressionParameters;
 
     public void configure(
@@ -543,22 +548,23 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
     }
     
-//    private void updateRegressionParameters() {
-//        double[][] designMatrix = new double[D][K];
-//        for (int d = 0; d < D; d++) {
-//            designMatrix[d] = docTopics[d].getEmpiricalDistribution();
-//        }
-//        
-//        GurobiMLRL2Norm mlr =
-//                new GurobiMLRL2Norm(designMatrix, , lambdas);
-//        double[] weights = mlr.solve();
-//    }
+    private void updateRegressionParameters() {
+        double[][] designMatrix = new double[D][K];
+        for (int d = 0; d < D; d++) {
+            designMatrix[d] = docTopics[d].getEmpiricalDistribution();
+        }
+        
+        double lambda = 1.0 / hyperparams.get(SIGMA);
+        GurobiMLRL2Norm mlr =
+                new GurobiMLRL2Norm(designMatrix, responses, lambda);
+        regParams = mlr.solve();
+    }
 
     /**
      * Update the regression parameters using L-BFGS. This is to perform a full
      * optimization procedure until convergence.
      */
-    private void updateRegressionParameters() {
+    private void updateRegressionParametersOld() {
         double[][] designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
