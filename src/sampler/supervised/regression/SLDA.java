@@ -548,7 +548,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
     }
     
-    private void updateRegressionParameters() {
+    private void updateRegressionParametersNew() {
         double[][] designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
@@ -564,7 +564,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
      * Update the regression parameters using L-BFGS. This is to perform a full
      * optimization procedure until convergence.
      */
-    private void updateRegressionParametersOld() {
+    private void updateRegressionParameters() {
         double[][] designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();

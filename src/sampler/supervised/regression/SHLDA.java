@@ -3006,7 +3006,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         String resultFolder = CLIUtils.getStringArgument(cmd, "output", 
                 "/Users/vietan/Dropbox/github/teaparty/data/govtrack/112/format-teaparty-model");
         String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", "teaparty");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
 
@@ -3102,14 +3102,14 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
 
-//        File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
-//        IOUtils.createFolder(samplerFolder);
-//        sampler.initialize();
-//        sampler.iterate();
+        File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
+        IOUtils.createFolder(samplerFolder);
+        sampler.initialize();
+        sampler.iterate();
 
 //        sampler.inputFinalState();
-//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-//        sampler.outputSentences(new File(samplerFolder, "sentences-new.txt"), data.getRawSentences(), 15);
+        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        sampler.outputSentences(new File(samplerFolder, "sentences-new.txt"), data.getRawSentences(), 15);
 
 //        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
 //        sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
