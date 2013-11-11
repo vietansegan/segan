@@ -26,4 +26,12 @@ public class AbstractRunner {
                 .withArgName(optName)
                 .create());
     }
+
+    public static void setVerbose(boolean v) {
+        verbose = v;
+    }
+
+    public static void setDebug(boolean d) {
+        debug = d;
+    }
 }

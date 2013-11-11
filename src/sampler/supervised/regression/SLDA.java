@@ -1307,6 +1307,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         } catch (Exception e) {
             e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }

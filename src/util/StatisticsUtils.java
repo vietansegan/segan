@@ -27,6 +27,18 @@ public class StatisticsUtils {
         }
         return disVals;
     }
+    
+    public static ArrayList<Integer> discretize(ArrayList<Double> values, int numClasses) {
+        ArrayList<Integer> disVals = new ArrayList<Integer>();
+        double min = StatisticsUtils.min(values);
+        double max = StatisticsUtils.max(values) + 0.00001;
+        double step = (max - min) / numClasses;
+        for (int i = 0; i < values.size(); i++) {
+            int cls = (int) ((values.get(i) - min) / step);
+            disVals.add(cls);
+        }
+        return disVals;
+    }
 
     public static double factorial(int n) {
         double factorial = 1;

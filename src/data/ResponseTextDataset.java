@@ -289,6 +289,7 @@ public class ResponseTextDataset extends TextDataset {
 
         } catch (Exception e) {
             e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }
@@ -448,17 +449,21 @@ public class ResponseTextDataset extends TextDataset {
         train.setResponses(zNormTrResponse);
 
         // development
-        double[] zNormDeResponse = new double[dev.responses.length];
-        for (int ii = 0; ii < zNormDeResponse.length; ii++) {
-            zNormDeResponse[ii] = zNorm.normalize(dev.responses[ii]);
+        if (dev != null) {
+            double[] zNormDeResponse = new double[dev.responses.length];
+            for (int ii = 0; ii < zNormDeResponse.length; ii++) {
+                zNormDeResponse[ii] = zNorm.normalize(dev.responses[ii]);
+            }
+            dev.setResponses(zNormDeResponse);
         }
-        dev.setResponses(zNormDeResponse);
 
         // test
-        double[] zNormTeResponse = new double[test.responses.length];
-        for (int ii = 0; ii < zNormTeResponse.length; ii++) {
-            zNormTeResponse[ii] = zNorm.normalize(test.responses[ii]);
+        if (test != null) {
+            double[] zNormTeResponse = new double[test.responses.length];
+            for (int ii = 0; ii < zNormTeResponse.length; ii++) {
+                zNormTeResponse[ii] = zNorm.normalize(test.responses[ii]);
+            }
+            test.setResponses(zNormTeResponse);
         }
-        test.setResponses(zNormTeResponse);
     }
 }

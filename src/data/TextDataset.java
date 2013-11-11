@@ -719,6 +719,7 @@ public class TextDataset extends AbstractTokenizeDataset {
 
         } catch (Exception e) {
             e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }

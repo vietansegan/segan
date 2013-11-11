@@ -299,6 +299,7 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
 
         } catch (Exception e) {
             e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }

@@ -2712,6 +2712,37 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             }
         }
     }
+    
+    public void outputHTML(File htmlFile) throws Exception {
+        StringBuilder str = new StringBuilder();
+        str.append("<!DOCTYPE html>\n<html>\n");
+        
+        // header containing styles and javascript functions
+        str.append("<head>\n");
+        
+        // style
+        str.append("<link type=\"text/css\" rel=\"stylesheet\" href=\"framing.css\">\n");
+        
+        // script
+        str.append("<script type=\"text/javascript\" src=\"framing.js\"></script>\n");
+        
+        str.append("</head>\n"); // end head
+        
+        // start body
+        str.append("<body>\n");
+        str.append("<table>\n");
+        str.append("<tbody>\n");
+        
+        str.append("</tbody>\n");
+        str.append("</table>\n");
+        str.append("</body>\n");
+        str.append("</html>");
+        
+        // output to file
+        BufferedWriter writer = IOUtils.getBufferedWriter(htmlFile);
+        writer.write(str.toString());
+        writer.close();
+    }
 
     class SNode extends TopicTreeNode<SNode, DirMult> {
 
