@@ -1,17 +1,18 @@
-COMPILE
+Compile
 -------
     cd <SEGAN_PATH>
     ant jar
     cp -r lib dist/
 
-PROCESS DATA
+Process Data
 ------------
-The main kind of data that segan deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both.
+The main kind of data that `segan` deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both.
 
 The texts can be stored in either a big file (each line is a document) or a folder (each file is a document).
 
 1. Processing text-only data from multiple files from a folder. The filename will be the document id.
-   java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
+
+   `java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process`
 
    - <dataset-name>:	The name of the dataset
    - <input-text-folder>:	The folder that contains input text data, in which each file is one document
