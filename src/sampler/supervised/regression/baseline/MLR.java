@@ -1,12 +1,11 @@
 package sampler.supervised.regression.baseline;
 
-import core.AbstractRunner;
+import core.AbstractRegressor;
 import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.util.ArrayList;
 import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
@@ -14,14 +13,12 @@ import org.apache.commons.cli.Options;
 import sampler.supervised.Regressor;
 import util.CLIUtils;
 import util.IOUtils;
-import util.evaluation.Measurement;
-import util.evaluation.RegressionEvaluation;
 
 /**
  *
  * @author vietan
  */
-public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset> {
+public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
 
     public static enum Regularizer {
 
@@ -29,10 +26,11 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
     }
     private Regularizer regularizer;
     private double[] weights;
-    private double[] predictions;
+//    private double[] predictions;
     private double param;
 
-    public MLR(Regularizer reg, double t) {
+    public MLR(String folder, Regularizer reg, double t) {
+        super(folder);
         this.regularizer = reg;
         this.param = t;
     }
@@ -42,16 +40,8 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
         return "MLR-" + regularizer + "-" + param;
     }
 
-    @Override
-    public void train(ResponseTextDataset trainData) {
-        if (verbose) {
-            System.out.println("Training ...");
-        }
-        int[][] trWords = trainData.getWords();
-        double[] trResponses = trainData.getResponses();
-
+    public void train(int[][] trWords, double[] trResponses, int V) {
         int D = trWords.length;
-        int V = trainData.getWordVocab().size();
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < trWords[d].length; n++) {
@@ -71,27 +61,44 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
         } else {
             throw new RuntimeException(regularizer + " regularization is not supported");
         }
+        output(new File(getRegressorFolder(), MODEL_FILE));
+    }
 
-        if (debug) {
-            double[] predResponses = new double[D];
-            for (int d = 0; d < D; d++) {
-                for (int v = 0; v < V; v++) {
-                    predResponses[d] += designMatrix[d][v] * weights[v];
-                }
+    @Override
+    public void train(ResponseTextDataset trainData) {
+        if (verbose) {
+            System.out.println("Training ...");
+        }
+        int[][] trWords = trainData.getWords();
+        double[] trResponses = trainData.getResponses();
+        int V = trainData.getWordVocab().size();
+        train(trWords, trResponses, V);
+    }
+
+    public double[] test(int[][] teWords, double[] teResponses, int V) {
+        input(new File(getRegressorFolder(), MODEL_FILE));
+        
+        int D = teWords.length;
+        double[][] designMatrix = new double[D][V];
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < teWords[d].length; n++) {
+                designMatrix[d][teWords[d][n]]++;
             }
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trResponses, predResponses);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                System.out.println(measurement.getName()
-                        + "\t" + measurement.getValue()
-                        + "\n");
+            for (int v = 0; v < V; v++) {
+                designMatrix[d][v] /= teWords[d].length;
             }
         }
+
+        double[] predictions = new double[D];
+        for (int d = 0; d < D; d++) {
+            double predVal = 0.0;
+            for (int v = 0; v < V; v++) {
+                predVal += designMatrix[d][v] * this.weights[v];
+            }
+
+            predictions[d] = predVal;
+        }
+        return predictions;
     }
 
     @Override
@@ -99,116 +106,17 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
         if (verbose) {
             System.out.println("Testing ...");
         }
+        String[] teDocIds = testData.getDocIds();
         int[][] teWords = testData.getWords();
-
-        int D = teWords.length;
+        double[] teResponses = testData.getResponses();
         int V = testData.getWordVocab().size();
-        double[][] desginMatrix = new double[D][V];
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < teWords[d].length; n++) {
-                desginMatrix[d][teWords[d][n]]++;
-            }
-            for (int v = 0; v < V; v++) {
-                desginMatrix[d][v] /= teWords[d].length;
-            }
-        }
-
-        predictions = new double[D];
-        for (int d = 0; d < D; d++) {
-            double predVal = 0.0;
-            for (int v = 0; v < V; v++) {
-                predVal += desginMatrix[d][v] * this.weights[v];
-            }
-
-            predictions[d] = predVal;
-        }
         
-        if (debug) {
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    testData.getResponses(), predictions);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                System.out.println(measurement.getName()
-                        + "\t" + measurement.getValue()
-                        + "\n");
-            }
-        }
-    }
-
-    public double[] getPredictions() {
-        return this.predictions;
-    }
-
-    public void outputPrediction(File predictionFile) {
-        if (verbose) {
-            System.out.println("Outputing predictions to " + predictionFile);
-        }
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(predictionFile);
-            writer.write(predictions.length + "\n");
-            for (int d = 0; d < predictions.length; d++) {
-                writer.write(Integer.toString(d)
-                        + "\t" + predictions[d]
-                        + "\n");
-            }
-            writer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while outputing predictions to "
-                    + predictionFile);
-        }
-    }
-
-    public void inputPrediction(File predictionFile) {
-        if (verbose) {
-            System.out.println("Inputing predictions from " + predictionFile);
-        }
-        try {
-            BufferedReader reader = IOUtils.getBufferedReader(predictionFile);
-            int num = Integer.parseInt(reader.readLine());
-            String line;
-            int count = 0;
-            predictions = new double[num];
-            while ((line = reader.readLine()) != null) {
-                predictions[count++] = Double.parseDouble(line.split("\t")[1]);
-            }
-            reader.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while inputing predictions from "
-                    + predictionFile);
-        }
-    }
-
-    public void outputEvaluation(File evaluationFile,
-            double[] trueResponses, double[] predResponses) {
-        if (verbose) {
-            System.out.println("Outputing evaluation to " + evaluationFile);
-        }
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(evaluationFile);
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, predResponses);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write(measurement.getName()
-                        + "\t" + measurement.getValue()
-                        + "\n");
-            }
-            writer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while outputing evaluation to "
-                    + evaluationFile);
-        }
+        double[] predictions = test(teWords, teResponses, V);
+        File predFile = new File(getRegressorFolder(), PREDICTION_FILE + Fold.TestExt);
+        outputPredictions(predFile, teDocIds, teResponses, predictions);
+        
+        File regFile = new File(getRegressorFolder(), RESULT_FILE + Fold.TestExt);
+        outputRegressionResults(regFile, teResponses, predictions);
     }
 
     @Override
@@ -331,16 +239,15 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
 
         MLR mlr;
         if (regularizer.equals("L1")) {
-            mlr = new MLR(Regularizer.L1, param);
+            mlr = new MLR(outputFolder, Regularizer.L1, param);
         } else if (regularizer.equals("L2")) {
-            mlr = new MLR(Regularizer.L2, param);
+            mlr = new MLR(outputFolder, Regularizer.L2, param);
         } else {
             throw new RuntimeException(regularizer + " regularization is not supported");
         }
         File mlrFolder = new File(outputFolder, mlr.getName());
         IOUtils.createFolder(mlrFolder);
         mlr.train(data);
-        mlr.output(new File(mlrFolder, "model"));
     }
 
     private static void runCrossValidation() throws Exception {
@@ -384,9 +291,9 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
 
             MLR mlr;
             if (regularizer.equals("L1")) {
-                mlr = new MLR(Regularizer.L1, param);
+                mlr = new MLR(foldFolder.getAbsolutePath(), Regularizer.L1, param);
             } else if (regularizer.equals("L2")) {
-                mlr = new MLR(Regularizer.L2, param);
+                mlr = new MLR(foldFolder.getAbsolutePath(), Regularizer.L2, param);
             } else {
                 throw new RuntimeException(regularizer + " regularization is not supported");
             }
@@ -394,9 +301,9 @@ public class MLR extends AbstractRunner implements Regressor<ResponseTextDataset
             IOUtils.createFolder(mlrFolder);
             mlr.train(trainData);
             mlr.test(testData);
-            mlr.outputPrediction(new File(mlrFolder, "predictions.txt"));
-            mlr.outputEvaluation(new File(mlrFolder, "evaluation.txt"),
-                    testData.getResponses(), mlr.predictions);
+//            mlr.outputPrediction(new File(mlrFolder, "predictions.txt"));
+//            mlr.outputEvaluation(new File(mlrFolder, "evaluation.txt"),
+//                    testData.getResponses(), mlr.predictions);
         }
     }
 }

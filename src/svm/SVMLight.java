@@ -21,30 +21,43 @@ public class SVMLight {
 
     public static final String Svm2WeightFile = "lib/svm2weight.pl";
     // Inputs
-    private String folderPath;
     private String svmLightLearn;
     private String svmLightClassify;
     // Outputs
     private RankingPerformance<Integer> performance;
 
-    public SVMLight(String folder) {
-        this.folderPath = folder;
-        this.svmLightLearn = "lib/svm_light_windows/svm_learn.exe";
-        this.svmLightClassify = "lib/svm_light_windows/svm_classify.exe";
-
-        IOUtils.createFolder(this.folderPath);
+    public SVMLight() {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.indexOf("win") >= 0) {
+            this.svmLightLearn = "lib/svm_light_windows/svm_learn.exe";
+            this.svmLightClassify = "lib/svm_light_windows/svm_classify.exe";
+        } else if (os.indexOf("mac") >= 0) {
+            this.svmLightLearn = "lib/svm_light_osx/svm_learn";
+            this.svmLightClassify = "lib/svm_light_osx/svm_classify";
+        } else if (os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0) {
+            this.svmLightLearn = "lib/svm_light_linux/svm_learn";
+            this.svmLightClassify = "lib/svm_light_linux/svm_classify";
+        } else {
+            throw new RuntimeException("OS " + os + " not supported.");
+        }
     }
 
-    public SVMLight(String folder, String svmLightLearn, String svmLightClassify) {
-        this.folderPath = folder;
+    public SVMLight(String svmLightLearn, String svmLightClassify) {
         this.svmLightLearn = svmLightLearn;
         this.svmLightClassify = svmLightClassify;
-
-        IOUtils.createFolder(this.folderPath);
     }
 
-    public void learn(String[] options,
-            String trainingFilePath, String modelFile) throws Exception {
+    /**
+     * Train an SVM using SVM Light.
+     *
+     * @param options SVM Light options
+     * @param trainingFile Training file in SVM Light format
+     * @param modelFile File to store the model learned
+     */
+    public void learn(
+            String[] options,
+            File trainingFile,
+            File modelFile) {
         System.out.println("\nStart learning ...");
         String cmd = svmLightLearn;
         if (options != null) {
@@ -53,21 +66,36 @@ public class SVMLight {
             }
         }
 
-        cmd += " " + trainingFilePath + " " + folderPath + modelFile;
-        cmd = cmd.replace("/", "\\"); // for Windows
+        cmd += " " + trainingFile.getAbsolutePath() + " " + modelFile.getAbsolutePath();
+//        cmd = cmd.replace("/", "\\"); // for Windows
         System.out.println("Learn cmd: " + cmd);
-        Process proc = Runtime.getRuntime().exec(cmd);
-        InputStream istr = proc.getInputStream();
-        BufferedReader in = new BufferedReader(new InputStreamReader(istr));
-        String line;
-        while ((line = in.readLine()) != null) {
-            System.out.println(line);
+        try {
+            Process proc = Runtime.getRuntime().exec(cmd);
+            InputStream istr = proc.getInputStream();
+            BufferedReader in = new BufferedReader(new InputStreamReader(istr));
+            String line;
+            while ((line = in.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while learning SVM-Light");
         }
     }
 
-    public void classify(String[] options,
-            String testingFilePath,
-            String modelFile, String resultFile) throws Exception {
+    /**
+     * Run a learned SVM model on unseen data.
+     *
+     * @param options SVM Light options
+     * @param testingFile Test data file in SVM Light format
+     * @param modelFile File storing the learned model
+     * @param resultFile File to store the result
+     */
+    public void classify(
+            String[] options,
+            File testingFile,
+            File modelFile,
+            File resultFile) {
         System.out.println("Start classifying ...");
 
         String cmd = svmLightClassify;
@@ -76,26 +104,59 @@ public class SVMLight {
                 cmd += " " + options[i];
             }
         }
-        cmd += " " + testingFilePath + " " + (folderPath + modelFile) + " " + (folderPath + resultFile);
-        cmd = cmd.replace("/", "\\");
+        cmd += " " + testingFile.getAbsolutePath()
+                + " " + modelFile.getAbsolutePath()
+                + " " + resultFile.getAbsolutePath();
+//        cmd = cmd.replace("/", "\\");
         System.out.println("Classify cmd: " + cmd);
-        Process proc = Runtime.getRuntime().exec(cmd);
+        try {
+            Process proc = Runtime.getRuntime().exec(cmd);
 
-        InputStream istr = proc.getInputStream();
-        BufferedReader in = new BufferedReader(new InputStreamReader(istr));
-        String line;
-        while ((line = in.readLine()) != null) {
-            System.out.println(line);
+            InputStream istr = proc.getInputStream();
+            BufferedReader in = new BufferedReader(new InputStreamReader(istr));
+            String line;
+            while ((line = in.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while classifying SVM-Light");
         }
+    }
+
+    /**
+     * Load the predicted values from a result file.
+     *
+     * @param predFile The result file
+     */
+    public double[] getPredictedValues(File predFile) {
+        ArrayList<Double> list = new ArrayList<Double>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(predFile);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                list.add(Double.parseDouble(line));
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading from " + predFile);
+        }
+
+        double[] predVals = new double[list.size()];
+        for (int ii = 0; ii < predVals.length; ii++) {
+            predVals[ii] = list.get(ii);
+        }
+        return predVals;
     }
 
     /**
      * Evaluate SVM-based ranker (using SVMRank)
      */
-    public void evaluateRanker(String testingFilePath, String resultFile) throws Exception {
+    public void evaluateRanker(File testingFilePath, File resultFile, File evaluateFolder) throws Exception {
         // load ranked result
         RankingItemList<Integer> resultRankingItemList = new RankingItemList<Integer>();
-        BufferedReader reader = IOUtils.getBufferedReader(this.folderPath + resultFile);
+        BufferedReader reader = IOUtils.getBufferedReader(resultFile);
         String line;
         int count = 0;
         while ((line = reader.readLine()) != null) {
@@ -117,14 +178,14 @@ public class SVMLight {
         }
         reader.close();
 
-        performance = new RankingPerformance<Integer>(resultRankingItemList, this.folderPath);
+        performance = new RankingPerformance<Integer>(resultRankingItemList, evaluateFolder.getAbsolutePath());
         performance.computeAndOutputNDCGs(groundtruthRankingItemList);
     }
 
     /**
      * Evaluate SVM-based classifier (using SVMLight)
      */
-    public void evaluateClassifier(String testingFilePath, String resultFile) throws Exception {
+    public void evaluateClassifier(File testingFilePath, File resultFile, File evaluateFolder) throws Exception {
         // Load actual classes
         Set<Integer> positiveSet = new HashSet<Integer>();
         BufferedReader testIn = IOUtils.getBufferedReader(testingFilePath);
@@ -144,7 +205,7 @@ public class SVMLight {
         // Load predicted scores
         RankingItemList<Integer> rankingItemList = new RankingItemList<Integer>();
 
-        BufferedReader resultIn = IOUtils.getBufferedReader(this.folderPath + resultFile);
+        BufferedReader resultIn = IOUtils.getBufferedReader(resultFile);
         count = 0;
         while ((line = resultIn.readLine()) != null) {
             double score = Double.parseDouble(line);
@@ -155,7 +216,7 @@ public class SVMLight {
         rankingItemList.sortDescending();
         System.out.println("# total data points: " + rankingItemList.size());
 
-        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet, this.folderPath);
+        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet, evaluateFolder.getAbsolutePath());
         performance.outputRankingResultsWithGroundtruth();
         performance.computePrecisionsAndRecalls();
         performance.outputPrecisionRecallF1();
@@ -165,10 +226,10 @@ public class SVMLight {
     }
 
     //String testFilePath, String resultFilePath, String outputFilePath
-    public int[][] confusionMatrix(String testingFilePath, String resultFile, String confusionMatrixFile) throws Exception {
+    public int[][] confusionMatrix(File testingFilePath, File resultFile, File confusionMatrixFile) throws Exception {
         int[][] conMatrix = new int[2][2];
         BufferedReader testIn = IOUtils.getBufferedReader(testingFilePath);
-        BufferedReader resultIn = IOUtils.getBufferedReader(this.folderPath + resultFile);
+        BufferedReader resultIn = IOUtils.getBufferedReader(resultFile);
 
         ArrayList<Integer> test = new ArrayList<Integer>();
         ArrayList<Integer> result = new ArrayList<Integer>();
@@ -215,7 +276,7 @@ public class SVMLight {
         }
 
         // output
-        BufferedWriter writer = IOUtils.getBufferedWriter(this.folderPath + confusionMatrixFile);
+        BufferedWriter writer = IOUtils.getBufferedWriter(confusionMatrixFile);
         writer.write(conMatrix[0][0] + "\t" + conMatrix[0][1] + "\n");
         writer.write(conMatrix[1][0] + "\t" + conMatrix[1][1] + "\n");
         writer.close();
@@ -223,10 +284,11 @@ public class SVMLight {
         return conMatrix;
     }
 
-    public double[] getFeatureWeights(String modelFile, String perlSvm2Weight, String featureWeightsFile) throws Exception {
-        File aFile = new File(this.folderPath + modelFile);
+    public double[] getFeatureWeights(File modelFile, File perlSvm2Weight, File featureWeightsFile) throws Exception {
+//        File aFile = new File(this.folderPath + modelFile);
 
-        String cmd = "perl " + perlSvm2Weight + " " + aFile.getAbsolutePath();
+        String cmd = "perl " + perlSvm2Weight.getAbsolutePath()
+                + " " + modelFile.getAbsolutePath();
         System.out.println("Processing command " + cmd);
         Process proc = Runtime.getRuntime().exec(cmd);
         InputStream istr = proc.getInputStream();
@@ -248,7 +310,7 @@ public class SVMLight {
         }
 
         //output
-        BufferedWriter writer = IOUtils.getBufferedWriter(this.folderPath + featureWeightsFile);
+        BufferedWriter writer = IOUtils.getBufferedWriter(featureWeightsFile);
         for (int i = 0; i < weights.length; i++) {
             writer.write(weights[i] + "\n");
         }
@@ -257,9 +319,9 @@ public class SVMLight {
         return weights;
     }
 
-    public double[] loadFeatureWeights(String featureWeightsFile) throws Exception {
+    public double[] loadFeatureWeights(File featureWeightsFile) throws Exception {
         ArrayList<Double> weights = new ArrayList<Double>();
-        BufferedReader reader = IOUtils.getBufferedReader(this.folderPath + featureWeightsFile);
+        BufferedReader reader = IOUtils.getBufferedReader(featureWeightsFile);
         String line;
         while ((line = reader.readLine()) != null) {
             weights.add(Double.parseDouble(line));
@@ -272,24 +334,14 @@ public class SVMLight {
         return featureWeights;
     }
 
-    public void loadClassifierPerformanceMeasure() {
-        this.performance = new RankingPerformance<Integer>(this.folderPath);
-        this.performance.loadAUCAndF1();
-    }
-
-    public void loadRankerPerformanceMeasure() {
-        this.performance = new RankingPerformance<Integer>(this.folderPath);
-        this.performance.inputNDCGs();
-    }
-
-    public void print() {
-        System.out.println("In print");
-    }
-
-    public String getFolderPath() {
-        return this.folderPath;
-    }
-
+//    public void loadClassifierPerformanceMeasure() {
+//        this.performance = new RankingPerformance<Integer>(this.folderPath);
+//        this.performance.loadAUCAndF1();
+//    }
+//    public void loadRankerPerformanceMeasure() {
+//        this.performance = new RankingPerformance<Integer>(this.folderPath);
+//        this.performance.inputNDCGs();
+//    }
     public RankingPerformance<Integer> getPerformanceMeasure() {
         return this.performance;
     }

@@ -16,7 +16,7 @@ import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampler.HierSegLDA;
+import sampler.TwoLevelHierSegLDA;
 import sampler.supervised.Regressor;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
@@ -536,7 +536,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         double beta_1 = 0.1;
         double beta_2 = 0.01;
 
-        HierSegLDA sampler = new HierSegLDA();
+        TwoLevelHierSegLDA sampler = new TwoLevelHierSegLDA();
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setLog(false);
@@ -2265,7 +2265,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             // initialize
             this.initializeModelStructure();
 
-            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(new File(zipFilepath).getName()));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
 
             // lexical weights
@@ -2344,7 +2344,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         // initialize
         this.initializeDataStructure();
 
-        String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+        String filename = IOUtils.removeExtension(IOUtils.getFilename(new File(zipFilepath).getName()));
         BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
 
         String[] sline;
@@ -2462,12 +2462,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
-    public void outputSentences(File outputFile, String[][] rawSentences, int numSents) {
-        if (verbose) {
-            logln("--- Outputing sentences to " + outputFile);
-        }
-
-        // rank sentences for each path
+    private HashMap<SNode, ArrayList<RankingItem<String>>> getRankingSentences() {
         HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap =
                 new HashMap<SNode, ArrayList<RankingItem<String>>>();
         for (int d = 0; d < D; d++) {
@@ -2478,7 +2473,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                     rankSents = new ArrayList<RankingItem<String>>();
                 }
                 for (int s : table.getCustomers()) {
-                    if (words[d][s].length < 10) {
+                    if (words[d][s].length < 10) { // filter out too short sentences
                         continue;
                     }
 
@@ -2489,15 +2484,22 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                         }
                     }
                     if (logprob != 0) {
-                        rankSents.add(new RankingItem<String>(d + "-" + s, logprob));
+                        rankSents.add(new RankingItem<String>(d + "-" + s, logprob / words[d][s].length));
                     }
-
-                    // debug
-//                    System.out.println(d + "-" + s + "\t" + logprob);
                 }
                 pathRankSentMap.put(pathNode, rankSents);
             }
         }
+        return pathRankSentMap;
+    }
+
+    public void outputSentences(File outputFile, String[][] rawSentences, int numSents) {
+        if (verbose) {
+            logln("--- Outputing sentences to " + outputFile);
+        }
+
+        // rank sentences for each path
+        HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap = getRankingSentences();
 
         // print out top sentences
         try {
@@ -2538,6 +2540,134 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing sentences.");
         }
+    }
+
+    public void outputHTML(
+            File htmlFile,
+            String[] docIds,
+            String[][] rawSentences,
+            int numSents,
+            int numWords) throws Exception {
+        if (verbose) {
+            logln("--- Outputing result to HTML file " + htmlFile);
+        }
+
+        // rank sentences for each path
+        HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap = getRankingSentences();
+
+        StringBuilder str = new StringBuilder();
+        str.append("<!DOCTYPE html>\n<html>\n");
+
+        // header containing styles and javascript functions
+        str.append("<head>\n");
+        str.append("<link type=\"text/css\" rel=\"stylesheet\" href=\"framing.css\">\n"); // style
+        str.append("<script type=\"text/javascript\" src=\"framing.js\"></script>\n"); // script
+        str.append("</head>\n"); // end head
+
+        // start body
+        str.append("<body>\n");
+        str.append("<table>\n");
+        str.append("<tbody>\n");
+
+        Stack<SNode> stack = new Stack<SNode>();
+        stack.add(globalTreeRoot);
+
+        while (!stack.isEmpty()) {
+            SNode node = stack.pop();
+
+            ArrayList<RankingItem<SNode>> rankChildren = new ArrayList<RankingItem<SNode>>();
+            for (SNode child : node.getChildren()) {
+                rankChildren.add(new RankingItem<SNode>(child, child.getRegressionParameter()));
+            }
+            Collections.sort(rankChildren);
+            for (RankingItem<SNode> rankChild : rankChildren) {
+                stack.add(rankChild.getObject());
+            }
+
+            double[] nodeTopic = node.getTopic();
+            String[] topWords = getTopWords(nodeTopic, numWords);
+
+            if (node.getLevel() == 1) {
+                str.append("<tr class=\"level").append(node.getLevel()).append("\">\n");
+                str.append("<td>\n")
+                        .append("[Topic ").append(node.getPathString())
+                        .append("] ")
+                        .append(" (")
+                        .append(node.getNumChildren())
+                        .append("; ").append(node.getNumCustomers())
+                        .append("; ").append(node.getContent().getCountSum())
+                        .append("; ").append(formatter.format(node.getRegressionParameter()))
+                        .append(")");
+                for (String topWord : topWords) {
+                    str.append(" ").append(topWord);
+                }
+                str.append("</td>\n");
+                str.append("</tr>\n");
+            } else if (node.getLevel() == 2) {
+                ArrayList<RankingItem<String>> rankSents = pathRankSentMap.get(node);
+                if (rankSents == null || rankSents.size() < 10) {
+                    continue;
+                }
+                Collections.sort(rankSents);
+
+                // node info
+                str.append("<tr class=\"level").append(node.getLevel()).append("\">\n");
+                str.append("<td>\n")
+                        .append("<a style=\"text-decoration:underline;color:blue;\" onclick=\"showme('")
+                        .append(node.getPathString())
+                        .append("');\" id=\"toggleDisplay\">")
+                        .append("[Frame candidate ")
+                        .append(node.getPathString())
+                        .append("]</a>")
+                        .append(" (").append(node.getNumCustomers())
+                        .append("; ").append(node.getContent().getCountSum())
+                        .append("; ").append(formatter.format(node.getRegressionParameter()))
+                        .append(")");
+                for (String topWord : topWords) {
+                    str.append(" ").append(topWord);
+                }
+                str.append("</td>\n");
+                str.append("</tr>\n");
+
+                // sentences
+                str.append("<tr class=\"level").append(L).append("\"")
+                        .append(" id=\"").append(node.getPathString()).append("\"")
+                        .append(" style=\"display:none;\"")
+                        .append(">\n");
+                str.append("<td>\n");
+
+                for (int ii = 0; ii < Math.min(numSents, rankSents.size()); ii++) {
+                    RankingItem<String> sent = rankSents.get(ii);
+                    int d = Integer.parseInt(sent.getObject().split("-")[0]);
+                    int s = Integer.parseInt(sent.getObject().split("-")[1]);
+                    double score = sent.getPrimaryValue();
+
+                    String debateId = docIds[d].substring(0, docIds[d].indexOf("_"));
+                    str.append("<a href=\"")
+                            .append("https://www.govtrack.us/data/us/112/cr/")
+                            .append(debateId).append(".xml")
+                            .append("\" ")
+                            .append("target=\"_blank\">")
+                            .append(docIds[d]).append("_").append(s)
+                            .append("</a> ")
+                            .append(" [").append(MiscUtils.formatDouble(score)).append("] ")
+                            .append(rawSentences[d][s])
+                            .append("<br/>\n");
+                    str.append("</br>");
+                }
+                str.append("</td>\n</tr>\n");
+            }
+        }
+
+        str.append("</tbody>\n");
+        str.append("</table>\n");
+        str.append("</body>\n");
+        str.append("</html>");
+
+        // output to file
+        BufferedWriter writer = IOUtils.getBufferedWriter(htmlFile);
+        writer.write(str.toString());
+        writer.close();
     }
 
     public File getIterationPredictionFolder() {
@@ -2711,37 +2841,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 samplePathForTable(d, table, !REMOVE, ADD, !OBSERVED, !EXTEND);
             }
         }
-    }
-    
-    public void outputHTML(File htmlFile) throws Exception {
-        StringBuilder str = new StringBuilder();
-        str.append("<!DOCTYPE html>\n<html>\n");
-        
-        // header containing styles and javascript functions
-        str.append("<head>\n");
-        
-        // style
-        str.append("<link type=\"text/css\" rel=\"stylesheet\" href=\"framing.css\">\n");
-        
-        // script
-        str.append("<script type=\"text/javascript\" src=\"framing.js\"></script>\n");
-        
-        str.append("</head>\n"); // end head
-        
-        // start body
-        str.append("<body>\n");
-        str.append("<table>\n");
-        str.append("<tbody>\n");
-        
-        str.append("</tbody>\n");
-        str.append("</table>\n");
-        str.append("</body>\n");
-        str.append("</html>");
-        
-        // output to file
-        BufferedWriter writer = IOUtils.getBufferedWriter(htmlFile);
-        writer.write(str.toString());
-        writer.close();
     }
 
     class SNode extends TopicTreeNode<SNode, DirMult> {
@@ -2947,8 +3046,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     }
 
     public static String getHelpString() {
-        return "java -cp dist/segan.jar " + SHLDA.class
-                .getName() + " -help";
+        return "java -cp dist/segan.jar " + SHLDA.class.getName() + " -help";
     }
 
     public static void run(String[] args) {
@@ -3031,11 +3129,19 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 //        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-response");
 //        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
+//        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
+//        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder",
+//                "/Users/vietan/Dropbox/github/teaparty/data/govtrack");
+//        String resultFolder = CLIUtils.getStringArgument(cmd, "output",
+//                "/Users/vietan/Dropbox/github/teaparty/data/govtrack/112/format-teaparty-model");
+//        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
+//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+
         String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
-        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", 
-                "/Users/vietan/Dropbox/github/teaparty/data/govtrack");
-        String resultFolder = CLIUtils.getStringArgument(cmd, "output", 
-                "/Users/vietan/Dropbox/github/teaparty/data/govtrack/112/format-teaparty-model");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder",
+                "L:/Datasets/teaparty/govtrack");
+        String resultFolder = CLIUtils.getStringArgument(cmd, "output",
+                "L:/Datasets/teaparty/govtrack/112/format-teaparty-model");
         String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
@@ -3043,9 +3149,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
         int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
         int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-        double T = CLIUtils.getDoubleArgument(cmd, "T", 1000);
+        double T = CLIUtils.getDoubleArgument(cmd, "T", 500);
 
         int numTopics = CLIUtils.getIntegerArgument(cmd, "num-topics", 10);
         int numFrames = CLIUtils.getIntegerArgument(cmd, "num-frames", 3);
@@ -3053,6 +3159,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
+        verbose = true;
+        debug = true;
         InitialState initState = InitialState.PRESET;
 
         if (verbose) {
@@ -3084,6 +3192,10 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         if (cmd.hasOption("z")) {
             data.zNormalize();
+        }
+        else {
+            System.out.println("--- [WARNING] Running with unnormalized response "
+                    + "variables. Use option -z to perform z-normalization.");
         }
 
         double meanResponse = StatisticsUtils.mean(data.getResponses());
@@ -3135,12 +3247,17 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(samplerFolder);
-        sampler.initialize();
-        sampler.iterate();
+//        sampler.initialize();
+//        sampler.iterate();
 
-//        sampler.inputFinalState();
+        sampler.inputFinalState();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-        sampler.outputSentences(new File(samplerFolder, "sentences-new.txt"), data.getRawSentences(), 15);
+        sampler.outputSentences(new File(samplerFolder, "sentences.txt"), data.getRawSentences(), 15);
+        sampler.outputHTML(new File(samplerFolder, "sentences.html"),
+                data.getDocIds(),
+                data.getRawSentences(),
+                15,
+                15);
 
 //        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
 //        sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));

@@ -18,7 +18,7 @@ import util.SamplerUtils;
  *
  * @author vietan
  */
-public class HierSegLDA extends AbstractSampler {
+public class TwoLevelHierSegLDA extends AbstractSampler {
 
     public static final int ALPHA_1 = 0;
     public static final int ALPHA_2 = 1;
@@ -538,7 +538,7 @@ public class HierSegLDA extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp dist/segan.jar " + HierSegLDA.class.getName() + " -help";
+        return "java -cp dist/segan.jar " + TwoLevelHierSegLDA.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -637,7 +637,7 @@ public class HierSegLDA extends AbstractSampler {
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         data.prepareTopicCoherence(numTopWords);
 
-        HierSegLDA sampler = new HierSegLDA();
+        TwoLevelHierSegLDA sampler = new TwoLevelHierSegLDA();
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setLog(true);

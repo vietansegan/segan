@@ -1,13 +1,8 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package core;
 
-import core.crossvalidation.CrossValidation;
-import core.crossvalidation.Instance;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.ArrayList;
 import util.IOUtils;
 import util.evaluation.ClassificationEvaluation;
@@ -18,139 +13,106 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public abstract class AbstractRegressor<I, T extends Instance<I>> {
+public abstract class AbstractRegressor extends AbstractRunner {
+    public static final String DATA_FILE = "data";
+    public static final String MODEL_FILE = "model";
+    public static final String PREDICTION_FILE = "predictions";
+    public static final String RESULT_FILE = "result";
 
-    public static enum CVPHASE {
-
-        tr, de, te
-    };
-    public static final String TrainingPredictionFile = "pred.tr";
-    public static final String DevelopmentPredictionFile = "pred.de";
-    public static final String TestPredictionFile = "pred.te";
-    public static final String TrainingResultFile = "result.tr";
-    public static final String DevelopmentResultFile = "result.de";
-    public static final String TestResultFile = "result.te";
     protected String folder;
-    protected CrossValidation<I, T> crossValidation;
-    protected boolean train = false;
-    ;
-    protected boolean develop = false;
-    protected boolean test = false;
 
-    public AbstractRegressor(String folder, CrossValidation<I, T> cv) {
+    public AbstractRegressor(String folder) {
         this.folder = folder;
-        this.crossValidation = cv;
     }
 
-    public abstract void regress() throws Exception;
+    public abstract String getName();
 
     public String getFolder() {
         return this.folder;
     }
 
-    public CrossValidation<I, T> getCrossValidation() {
-        return this.crossValidation;
+    public String getRegressorFolder() {
+        return new File(folder, getName()).getAbsolutePath();
     }
 
-    public double[] inputPredictions(String inputFolder, CVPHASE phase) throws Exception {
-        String inputFilepath = inputFolder;
-        if (phase == CVPHASE.tr) {
-            inputFilepath += TrainingPredictionFile;
-        } else if (phase == CVPHASE.de) {
-            inputFilepath += DevelopmentPredictionFile;
-        } else if (phase == CVPHASE.te) {
-            inputFilepath += TestPredictionFile;
-        } else {
-            throw new RuntimeException("Unknown phase");
+    public double[] inputPredictions(File inputFile) throws Exception {
+        if (verbose) {
+            logln(">>> Input predictions to " + inputFile);
         }
-
-        logln(">>> Input predictions to " + inputFilepath);
-        BufferedReader reader = IOUtils.getBufferedReader(inputFilepath);
+        BufferedReader reader = IOUtils.getBufferedReader(inputFile);
         int numInst = Integer.parseInt(reader.readLine());
-//        double[] trueResponses = new double[numInst];
         double[] predResponses = new double[numInst];
         for (int i = 0; i < numInst; i++) {
             String[] sline = reader.readLine().split("\t");
-//            trueResponses[i] = Double.parseDouble(sline[2]);
             predResponses[i] = Double.parseDouble(sline[3]);
         }
         reader.close();
         return predResponses;
     }
 
-    public void outputPredictions(String outputFolder, CVPHASE phase, ArrayList<Integer> instanceIndices,
-            double[] trueValues, double[] predValues) throws Exception {
-        if (instanceIndices.size() != trueValues.length || instanceIndices.size() != predValues.length) {
+    public void outputPredictions(File outputFile,
+            String[] instanceIds,
+            double[] trueValues,
+            double[] predValues) {
+        if (instanceIds.length != trueValues.length || instanceIds.length != predValues.length) {
             throw new RuntimeException("Lengths mismatched");
         }
 
-        String outputFilepath = outputFolder;
-        if (phase == CVPHASE.tr) {
-            outputFilepath += TrainingPredictionFile;
-        } else if (phase == CVPHASE.de) {
-            outputFilepath += DevelopmentPredictionFile;
-        } else if (phase == CVPHASE.te) {
-            outputFilepath += TestPredictionFile;
-        } else {
-            throw new RuntimeException("Unknown phase");
+        if (verbose) {
+            logln(">>> Output predictions to " + outputFile);
         }
-
-        logln(">>> Output predictions to " + outputFilepath);
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFilepath);
-        writer.write(instanceIndices.size() + "\n");
-        for (int i = 0; i < instanceIndices.size(); i++) {
-            writer.write(instanceIndices.get(i)
-                    + "\t" + crossValidation.getInstance(instanceIndices.get(i)).getId()
-                    + "\t" + trueValues[i]
-                    + "\t" + predValues[i]
-                    + "\n");
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(instanceIds.length + "\n");
+            for (int i = 0; i < instanceIds.length; i++) {
+                writer.write(instanceIds[i]
+                        + "\t" + trueValues[i]
+                        + "\t" + predValues[i]
+                        + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing predictions to "
+                    + outputFile);
         }
-        writer.close();
     }
 
-    public ArrayList<Measurement> outputRegressionResults(String outputFolder, CVPHASE phase, double[] trueValues, double[] predValues) throws Exception {
-        String outputFilepath = outputFolder;
-        if (phase == CVPHASE.tr) {
-            outputFilepath += TrainingResultFile;
-        } else if (phase == CVPHASE.de) {
-            outputFilepath += DevelopmentResultFile;
-        } else if (phase == CVPHASE.te) {
-            outputFilepath += TestResultFile;
-        } else {
-            throw new RuntimeException("Unknown phase");
-        }
-
+    public ArrayList<Measurement> outputRegressionResults(
+            File outputFile,
+            double[] trueValues, double[] predValues) {
         // output different measurements
-        logln(">>> Output regression results to " + outputFilepath);
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFilepath);
-        RegressionEvaluation eval = new RegressionEvaluation(trueValues, predValues);
-        eval.computeCorrelationCoefficient();
-        eval.computeMeanSquareError();
-        eval.computeRSquared();
-        eval.computePredictiveRSquared();
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement m : measurements) {
-            writer.write(m.getName() + "\t" + m.getValue() + "\n");
+        if (verbose) {
+            logln(">>> Output regression results to " + outputFile);
         }
-        writer.close();
+        ArrayList<Measurement> measurements = null;
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            RegressionEvaluation eval = new RegressionEvaluation(trueValues, predValues);
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeRSquared();
+            eval.computePredictiveRSquared();
+            measurements = eval.getMeasurements();
+            for (Measurement m : measurements) {
+                writer.write(m.getName() + "\t" + m.getValue() + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing regression results to "
+                    + outputFile);
+        }
         return measurements;
     }
 
-    public ArrayList<Measurement> outputClassificationResults(String outputFolder, CVPHASE phase, int[] trueClasses, int[] predClasses) throws Exception {
-        String outputFilepath = outputFolder + "classify-";
-        if (phase == CVPHASE.tr) {
-            outputFilepath += TrainingResultFile;
-        } else if (phase == CVPHASE.de) {
-            outputFilepath += DevelopmentResultFile;
-        } else if (phase == CVPHASE.te) {
-            outputFilepath += TestResultFile;
-        } else {
-            throw new RuntimeException("Unknown phase");
-        }
-
+    public ArrayList<Measurement> outputClassificationResults(File outputFile,
+            int[] trueClasses, int[] predClasses) throws Exception {
         // output different measurements
-        logln(">>> Output classification results to " + outputFilepath);
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFilepath);
+        if (verbose) {
+            logln(">>> Output classification results to " + outputFile);
+        }
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
         ClassificationEvaluation eval = new ClassificationEvaluation(trueClasses, predClasses);
         eval.computePRF1();
         ArrayList<Measurement> measurements = eval.getMeasurements();
@@ -159,18 +121,6 @@ public abstract class AbstractRegressor<I, T extends Instance<I>> {
         }
         writer.close();
         return measurements;
-    }
-
-    public void setTrain(boolean train) {
-        this.train = train;
-    }
-
-    public void setDevelop(boolean develop) {
-        this.develop = develop;
-    }
-
-    public void setTest(boolean test) {
-        this.test = test;
     }
 
     public static void log(String msg) {
