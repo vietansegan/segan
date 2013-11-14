@@ -6,24 +6,24 @@ Compile
 
 Process Data
 ------------
-The main kind of data that `segan` deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both.
+The main kind of data that `segan` deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both. The texts can be stored in either a big file (each line is a document) or a folder (each file is a document).
 
-The texts can be stored in either a big file (each line is a document) or a folder (each file is a document).
+Processing text-only data from multiple files from a folder. The filename will be the document id.
 
-1. Processing text-only data from multiple files from a folder. The filename will be the document id.
+    java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
 
-   `java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process`
+   - `<dataset-name>`:	The name of the dataset
+   - `<input-text-folder>`:	The folder that contains input text data, in which each file is one document
+   - `<data-folder>`:	The folder where the processed data will be stored
+   - `<format-folder>`:	The subfolder that the processed data will be stored. More specifically, after running this, the processed data will be stored in `<output-folder>/<dataset-name>/<format-folder>`.
 
-   - <dataset-name>:	The name of the dataset
-   - <input-text-folder>:	The folder that contains input text data, in which each file is one document
-   - <data-folder>:	The folder where the processed data will be stored
-   - <format-folder>:	The subfolder that the processed data will be stored. More specifically, after running this, the processed data will be stored in "<output-folder>/<dataset-name>/<format-folder>"
-   
-   Run "java -cp dist/segan.jar data.TextDataset -help" for other options.
+For other options, use `-help`. For example
 
-2. Processing text-only data from a single file, in which each line is a document with the following format: <doc_id>\t<doc_content>\n
+    java -cp dist/segan.jar data.TextDataset -help
 
-   java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
+Processing text-only data from a single file, in which each line is a document with the following format: `<doc_id>\t<doc_content>\n`:
+
+    java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
 
    Other options:
    --format-file:	By default, all processed data files will be named <dataset-name>.<extension>, e.g., <dataset-name>.dat, <dataset-name>.wvoc etc. If you want to rename the formatted file, use this option.
