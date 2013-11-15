@@ -466,4 +466,37 @@ public class ResponseTextDataset extends TextDataset {
             test.setResponses(zNormTeResponse);
         }
     }
+
+    public static double[][] zNormalize(
+            double[] trResponses,
+            double[] deResponses,
+            double[] teResponses) {
+        double[][] normResponses = new double[3][];
+        ZNormalizer zNorm = new ZNormalizer(trResponses);
+        // train
+        double[] zNormTrResponse = new double[trResponses.length];
+        for (int ii = 0; ii < zNormTrResponse.length; ii++) {
+            zNormTrResponse[ii] = zNorm.normalize(trResponses[ii]);
+        }
+        normResponses[Fold.TRAIN] = zNormTrResponse;
+
+        // dev
+        if (deResponses != null) {
+            double[] zNormDeResponse = new double[deResponses.length];
+            for (int ii = 0; ii < zNormDeResponse.length; ii++) {
+                zNormDeResponse[ii] = zNorm.normalize(deResponses[ii]);
+            }
+            normResponses[Fold.DEV] = zNormDeResponse;
+        }
+        
+        // test
+        if (teResponses != null) {
+            double[] zNormTeResponse = new double[teResponses.length];
+            for (int ii = 0; ii < zNormTeResponse.length; ii++) {
+                zNormTeResponse[ii] = zNorm.normalize(teResponses[ii]);
+            }
+            normResponses[Fold.TEST] = zNormTeResponse;
+        }
+        return normResponses;
+    }
 }

@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package svm;
 
 /**
@@ -67,7 +63,6 @@ public class SVMLight {
         }
 
         cmd += " " + trainingFile.getAbsolutePath() + " " + modelFile.getAbsolutePath();
-//        cmd = cmd.replace("/", "\\"); // for Windows
         System.out.println("Learn cmd: " + cmd);
         try {
             Process proc = Runtime.getRuntime().exec(cmd);
@@ -107,7 +102,6 @@ public class SVMLight {
         cmd += " " + testingFile.getAbsolutePath()
                 + " " + modelFile.getAbsolutePath()
                 + " " + resultFile.getAbsolutePath();
-//        cmd = cmd.replace("/", "\\");
         System.out.println("Classify cmd: " + cmd);
         try {
             Process proc = Runtime.getRuntime().exec(cmd);
@@ -216,7 +210,8 @@ public class SVMLight {
         rankingItemList.sortDescending();
         System.out.println("# total data points: " + rankingItemList.size());
 
-        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet, evaluateFolder.getAbsolutePath());
+        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet, 
+                evaluateFolder.getAbsolutePath());
         performance.outputRankingResultsWithGroundtruth();
         performance.computePrecisionsAndRecalls();
         performance.outputPrecisionRecallF1();
@@ -226,7 +221,8 @@ public class SVMLight {
     }
 
     //String testFilePath, String resultFilePath, String outputFilePath
-    public int[][] confusionMatrix(File testingFilePath, File resultFile, File confusionMatrixFile) throws Exception {
+    public int[][] confusionMatrix(File testingFilePath, File resultFile, 
+            File confusionMatrixFile) throws Exception {
         int[][] conMatrix = new int[2][2];
         BufferedReader testIn = IOUtils.getBufferedReader(testingFilePath);
         BufferedReader resultIn = IOUtils.getBufferedReader(resultFile);
@@ -284,8 +280,8 @@ public class SVMLight {
         return conMatrix;
     }
 
-    public double[] getFeatureWeights(File modelFile, File perlSvm2Weight, File featureWeightsFile) throws Exception {
-//        File aFile = new File(this.folderPath + modelFile);
+    public double[] getFeatureWeights(File modelFile, File perlSvm2Weight, 
+            File featureWeightsFile) throws Exception {
 
         String cmd = "perl " + perlSvm2Weight.getAbsolutePath()
                 + " " + modelFile.getAbsolutePath();
@@ -296,7 +292,6 @@ public class SVMLight {
         String line;
         ArrayList<String> w = new ArrayList<String>();
         while ((line = in.readLine()) != null) {
-//            System.out.println(line);
             String[] sline = line.split(":");
             if (sline.length > 1) {
                 w.add(sline[1]);
@@ -334,14 +329,6 @@ public class SVMLight {
         return featureWeights;
     }
 
-//    public void loadClassifierPerformanceMeasure() {
-//        this.performance = new RankingPerformance<Integer>(this.folderPath);
-//        this.performance.loadAUCAndF1();
-//    }
-//    public void loadRankerPerformanceMeasure() {
-//        this.performance = new RankingPerformance<Integer>(this.folderPath);
-//        this.performance.inputNDCGs();
-//    }
     public RankingPerformance<Integer> getPerformanceMeasure() {
         return this.performance;
     }

@@ -1,5 +1,6 @@
 package sampler.supervised.regression;
 
+import regression.RegressorUtils;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
@@ -1504,7 +1505,7 @@ public class SHDP extends AbstractSampler {
         }
 
         // output result during test time
-        GibbsRegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
+        RegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
         return finalPredResponses;
     }
 

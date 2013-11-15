@@ -14,8 +14,9 @@ import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
+import regression.RegressorUtils;
 import sampler.LDA;
-import sampler.supervised.Regressor;
+import regression.Regressor;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import util.CLIUtils;
@@ -156,11 +157,10 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
     }
-
-    @Override
-    public void train(ResponseTextDataset trainData) {
-        this.words = trainData.getWords();
-        this.responses = trainData.getResponses();
+    
+    public void train(int[][] ws, double[] rs) {
+        this.words = ws;
+        this.responses = rs;
         this.D = this.words.length;
 
         this.numTokens = 0;
@@ -170,8 +170,17 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     }
 
     @Override
+    public void train(ResponseTextDataset trainData) {
+        train(trainData.getWords(), trainData.getResponses());
+    }
+
+    public void test(int[][] ws) {
+        testSampler(ws);
+    }
+    
+    @Override
     public void test(ResponseTextDataset testData) {
-        this.testSampler(testData.getWords());
+        testSampler(testData.getWords());
     }
 
     @Override
@@ -1152,7 +1161,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        GibbsRegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
+        RegressorUtils.outputSingleModelPredictions(
+                new File(outputResultFile), 
+                predResponsesList);
     }
     // End prediction ----------------------------------------------------------
 
@@ -1400,7 +1411,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("train-test")) {
                 sampler.sample();
@@ -1412,7 +1423,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else {
                 throw new RuntimeException("Run mode " + runMode + " is not supported");

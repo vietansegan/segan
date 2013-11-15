@@ -16,8 +16,9 @@ import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import regression.RegressorUtils;
 import sampler.TwoLevelHierSegLDA;
-import sampler.supervised.Regressor;
+import regression.Regressor;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;
@@ -39,7 +40,7 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class SHLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
+public class SHLDA<X extends ResponseTextDataset> extends AbstractSampler implements Regressor<X> {
 
     public static final Double WEIGHT_THRESHOLD = 10e-2;
     public static final int PSEUDO_TABLE_INDEX = -1;
@@ -64,38 +65,38 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     protected int D; // number of documents
     protected double T; // regularizer's parameter
     // input statistics
-    private int sentCount;
-    private int tokenCount;
-    private int[] docTokenCounts;
-    private double logAlpha;
-    private double sqrtRho;
-    private double[] sqrtSigmas;
-    private double[] logGammas;
-    private PathAssumption pathAssumption;
+    protected int sentCount;
+    protected int tokenCount;
+    protected int[] docTokenCounts;
+    protected double logAlpha;
+    protected double sqrtRho;
+    protected double[] sqrtSigmas;
+    protected double[] logGammas;
+    protected PathAssumption pathAssumption;
     // latent variables
-    private STable[][] c; // path assigned to sentences
-    private int[][][] z; // level assigned to tokens
+    protected STable[][] c; // path assigned to sentences
+    protected int[][][] z; // level assigned to tokens
     // state structure
-    private SNode globalTreeRoot; // tree
-    private Restaurant<STable, Integer, SNode>[] localRestaurants; // franchise
+    protected SNode globalTreeRoot; // tree
+    protected Restaurant<STable, Integer, SNode>[] localRestaurants; // franchise
     // state statistics stored
-    private SparseVector lexicalWeights;
-    private ArrayList<Integer> lexicalList;
-    private int[][][] sentLevelCounts;
-    private double[] docLexicalWeights;
-    private double[] docTopicWeights;
-    private double[][] docLexicalDesignMatrix;
+    protected SparseVector lexicalWeights;
+    protected ArrayList<Integer> lexicalList;
+    protected int[][][] sentLevelCounts;
+    protected double[] docLexicalWeights;
+    protected double[] docTopicWeights;
+    protected double[][] docLexicalDesignMatrix;
     // over time
-    private ArrayList<double[]> lexicalWeightsOverTime;
+    protected ArrayList<double[]> lexicalWeightsOverTime;
     // auxiliary
-    private double[] uniform;
-    private TruncatedStickBreaking emptyStick;
-    private int numTokenAsgnsChange;
-    private int numSentAsntsChange;
-    private int numTableAsgnsChange;
+    protected double[] uniform;
+    protected TruncatedStickBreaking emptyStick;
+    protected int numTokenAsgnsChange;
+    protected int numSentAsntsChange;
+    protected int numTableAsgnsChange;
     // for initialization
-    private int numFirstTopics = 15; // # first-level topics
-    private int numSecondTopics = 3; // # second-level topics per first-level topic
+    protected int numFirstTopics = 15; // # first-level topics
+    protected int numSecondTopics = 3; // # second-level topics per first-level topic
 
     public void configure(String folder,
             int V, int L,
@@ -292,7 +293,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 .append("_gm-").append(formatter.format(hyperparams.get(GEM_MEAN)))
                 .append("_gs-").append(formatter.format(hyperparams.get(GEM_SCALE)))
                 .append("_tm-").append(formatter.format(hyperparams.get(TAU_MEAN)))
-                .append("_ts-").append(formatter.format(hyperparams.get(TAU_SCALE)));
+                .append("_ts-").append(formatter.format(hyperparams.get(TAU_SCALE)))
+                .append("_").append(numFirstTopics).append("_").append(numSecondTopics);
         int count = TAU_SCALE + 1;
         str.append("_b");
         for (int i = 0; i < betas.length; i++) {
@@ -336,7 +338,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     }
 
     @Override
-    public void train(ResponseTextDataset trainData) {
+    public void train(X trainData) {
         this.words = trainData.getSentenceWords();
         this.responses = trainData.getResponses();
         this.D = this.words.length;
@@ -348,7 +350,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     }
 
     @Override
-    public void test(ResponseTextDataset testData) {
+    public void test(X testData) {
         testSampler(testData.getSentenceWords());
     }
 
@@ -456,7 +458,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Initialize model structure.
      */
-    private void initializeModelStructure() {
+    protected void initializeModelStructure() {
         DirMult dmModel = new DirMult(V, betas[0] * V, uniform);
         double regParam = 0.0;
         this.globalTreeRoot = new SNode(iter, 0, 0, dmModel, regParam, null);
@@ -468,7 +470,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Initialize data-specific structures.
      */
-    private void initializeDataStructure() {
+    protected void initializeDataStructure() {
         this.localRestaurants = new Restaurant[D];
         for (int d = 0; d < D; d++) {
             this.localRestaurants[d] = new Restaurant<STable, Integer, SNode>();
@@ -478,6 +480,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         for (int d = 0; d < D; d++) {
             this.sentLevelCounts[d] = new int[words[d].length][L];
         }
+
+        STable table = new STable(iter, iter, globalTreeRoot, INIT, emptyStick);
 
         this.c = new STable[D][];
         this.z = new int[D][][];
@@ -493,7 +497,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Initialize assignments.
      */
-    private void initializeAssignments() {
+    protected void initializeAssignments() {
         switch (initState) {
             case RANDOM:
                 this.initializeRandomAssignments();
@@ -506,7 +510,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
-    private void initializerHierSegLDAAssignments() {
+    protected void initializerHierSegLDAAssignments() {
         if (verbose) {
             logln("--- Initializing assignments using hierarchical segmented LDA ...");
         }
@@ -527,9 +531,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             empBackgroundTopic[v] /= tokenCount;
         }
 
-        int init_burnin = 100;
-        int init_maxiter = 200;
-        int init_samplelag = 50;
+        int init_burnin = 10;
+        int init_maxiter = 20;
+        int init_samplelag = 5;
 
         double alpha_1 = 0.1;
         double alpha_2 = 0.01;
@@ -553,7 +557,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         try {
             File initFile = new File(this.folder, "hslda-init-"
                     + numFirstTopics + "-"
-                    + numSecondTopics + ".txt");
+                    + numSecondTopics + ".zip");
             if (initFile.exists()) {
                 sampler.inputState(initFile);
             } else {
@@ -652,7 +656,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
-    private void initializeRandomAssignments() {
+    protected void initializeRandomAssignments() {
         if (verbose) {
             logln("--- Initializing random assignments ...");
         }
@@ -847,37 +851,43 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             if (report) {
                 // weights over time
-                BufferedWriter writer = IOUtils.getBufferedWriter(
-                        new File(getSamplerFolderPath(), "weights-over-time.txt"));
-                for (int v = 0; v < V; v++) {
-                    writer.write(v + "\t" + wordVocab.get(v));
-                    for (int i = 0; i < this.lexicalWeightsOverTime.size(); i++) {
-                        writer.write("\t" + this.lexicalWeightsOverTime.get(i)[v]);
-                    }
-                    writer.write("\n");
-                }
-                writer.close();
+                outputLexicalWeightsOverTime(new File(getSamplerFolderPath(), "weights-over-time.txt"));
 
                 // average weights
-                writer = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "weights.txt"));
-                for (int v = 0; v < V; v++) {
-                    ArrayList<Double> ws = new ArrayList<Double>();
-                    for (int ii = 0; ii < lexicalWeightsOverTime.size(); ii++) {
-                        ws.add(lexicalWeightsOverTime.get(ii)[v]);
-                    }
-                    writer.write(v
-                            + "\t" + wordVocab.get(v)
-                            + "\t" + StatisticsUtils.mean(ws)
-                            + "\t" + StatisticsUtils.standardDeviation(ws)
-                            + "\n");
-                }
-
-                writer.close();
+                outputAverageLexicalWeights(new File(getSamplerFolderPath(), "weights.txt"));
             }
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    protected void outputAverageLexicalWeights(File avgLexWeightFile) throws Exception {
+        BufferedWriter writer = IOUtils.getBufferedWriter(avgLexWeightFile);
+        for (int v = 0; v < V; v++) {
+            ArrayList<Double> ws = new ArrayList<Double>();
+            for (int ii = 0; ii < lexicalWeightsOverTime.size(); ii++) {
+                ws.add(lexicalWeightsOverTime.get(ii)[v]);
+            }
+            writer.write(v
+                    + "\t" + wordVocab.get(v)
+                    + "\t" + StatisticsUtils.mean(ws)
+                    + "\t" + StatisticsUtils.standardDeviation(ws)
+                    + "\n");
+        }
+        writer.close();
+    }
+
+    protected void outputLexicalWeightsOverTime(File lexWeightFile) throws Exception {
+        BufferedWriter writer = IOUtils.getBufferedWriter(lexWeightFile);
+        for (int v = 0; v < V; v++) {
+            writer.write(v + "\t" + wordVocab.get(v));
+            for (int i = 0; i < this.lexicalWeightsOverTime.size(); i++) {
+                writer.write("\t" + this.lexicalWeightsOverTime.get(i)[v]);
+            }
+            writer.write("\n");
+        }
+        writer.close();
     }
 
     public double[] getRegressionValues() {
@@ -896,7 +906,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      *
      * @param leafNode The leaf node of the path
      */
-    private void addTableToPath(SNode leafNode) {
+    void addTableToPath(SNode leafNode) {
         SNode node = leafNode;
         while (node != null) {
             node.incrementNumCustomers();
@@ -916,7 +926,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * and the lowest parent node on the path that has non-zero number of
      * customers will be returned.
      */
-    private SNode removeTableFromPath(SNode leafNode) {
+    SNode removeTableFromPath(SNode leafNode) {
         SNode retNode = leafNode;
         SNode node = leafNode;
         while (node != null) {
@@ -936,7 +946,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param leafNode The leaf node identifying the path
      * @param observations The observations per level
      */
-    private SNode[] addObservationsToPath(SNode leafNode, SparseCount[] observations) {
+    SNode[] addObservationsToPath(SNode leafNode, SparseCount[] observations) {
         SNode[] path = getPathFromNode(leafNode);
         for (int l = 0; l < L; l++) {
             addObservationsToNode(path[l], observations[l]);
@@ -950,7 +960,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param leafNode The leaf node identifying the path
      * @param observations The observations per level
      */
-    private SNode[] removeObservationsFromPath(SNode leafNode, SparseCount[] observations) {
+    SNode[] removeObservationsFromPath(SNode leafNode, SparseCount[] observations) {
         SNode[] path = getPathFromNode(leafNode);
         for (int l = 0; l < L; l++) {
             removeObservationsFromNode(path[l], observations[l]);
@@ -964,7 +974,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param node The node
      * @param observations The set of observations
      */
-    private void removeObservationsFromNode(SNode node, SparseCount observations) {
+    void removeObservationsFromNode(SNode node, SparseCount observations) {
         for (int obs : observations.getIndices()) {
             int count = observations.getCount(obs);
             node.getContent().changeCount(obs, -count);
@@ -977,14 +987,14 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param node The node
      * @param observations The set of observations
      */
-    private void addObservationsToNode(SNode node, SparseCount observations) {
+    void addObservationsToNode(SNode node, SparseCount observations) {
         for (int obs : observations.getIndices()) {
             int count = observations.getCount(obs);
             node.getContent().changeCount(obs, count);
         }
     }
 
-    private SNode createNewPath(SNode internalNode) {
+    SNode createNewPath(SNode internalNode) {
         SNode node = internalNode;
         for (int l = internalNode.getLevel(); l < L - 1; l++) {
             node = this.createNode(node);
@@ -997,7 +1007,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      *
      * @param parent The parent node
      */
-    private SNode createNode(SNode parent) {
+    SNode createNode(SNode parent) {
         int nextChildIndex = parent.getNextChildIndex();
         int level = parent.getLevel() + 1;
         DirMult dmm = new DirMult(V, betas[level] * V, uniform);
@@ -1013,7 +1023,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param d The document index
      * @param s The sentence index
      */
-    private SparseCount[] getSentObsCountPerLevel(int d, int s) {
+    protected SparseCount[] getSentObsCountPerLevel(int d, int s) {
         SparseCount[] counts = new SparseCount[L];
         for (int ll = 0; ll < L; ll++) {
             counts[ll] = new SparseCount();
@@ -1032,7 +1042,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param d The document index
      * @param table The table
      */
-    private SparseCount[] getTableObsCountPerLevel(int d, STable table) {
+    SparseCount[] getTableObsCountPerLevel(int d, STable table) {
         // observations of sentences currently being assign to this table
         SparseCount[] obsCountPerLevel = new SparseCount[L];
         for (int l = 0; l < L; l++) {
@@ -1059,7 +1069,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param add Whether the new assignment should be added
      * @param observed Whether the response variable is observed
      */
-    private void sampleLevelForToken(
+    protected void sampleLevelForToken(
             int d, int s, int n,
             boolean remove, boolean add,
             boolean observed) {
@@ -1120,7 +1130,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param observed Whether the response is observed
      * @param extend Whether the structure is extendable
      */
-    private void sampleTableForSentence(int d, int s,
+    protected void sampleTableForSentence(int d, int s,
             boolean remove, boolean add,
             boolean observed, boolean extend) {
         STable curTable = c[d][s];
@@ -1373,7 +1383,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Sample topics of each tree node
      */
-    private void sampleTopics() {
+    protected void sampleTopics() {
         // get all leaves of the tree
         ArrayList<SNode> leaves = new ArrayList<SNode>();
         Stack<SNode> stack = new Stack<SNode>();
@@ -1434,7 +1444,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Optimize lexical regression parameters.
      */
-    private void optimizeLexicalRegressionParameters() {
+    protected void optimizeLexicalRegressionParameters() {
         // adjusted response vector
         double[] responseVector = new double[D];
         for (int d = 0; d < D; d++) {
@@ -1454,7 +1464,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     /**
      * Optimize topic regression parameters.
      */
-    private void optimizeTopicRegressionParameters() {
+    protected void optimizeTopicRegressionParameters() {
         ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
         int numNodes = flattenTree.size();
 
@@ -1500,7 +1510,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         this.updateDocumentTopicWeights();
     }
 
-    private ArrayList<SNode> flattenTreeWithoutRoot() {
+    ArrayList<SNode> flattenTreeWithoutRoot() {
         ArrayList<SNode> flattenTree = new ArrayList<SNode>();
         Stack<SNode> stack = new Stack<SNode>();
         stack.add(globalTreeRoot);
@@ -1523,7 +1533,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param wordLlhs Path word log likelihoods
      * @param resLlhs Path response variable log likelihoods
      */
-    private SNode samplePath(
+    SNode samplePath(
             HashMap<SNode, Double> logPriors,
             HashMap<SNode, Double> wordLlhs,
             HashMap<SNode, Double> resLlhs,
@@ -1574,7 +1584,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param pathWordLogLikelihoods The word likelihoods
      * @param pathResLogLikelihoods The response variable likelihoods
      */
-    private double computeMarginals(
+    double computeMarginals(
             HashMap<SNode, Double> pathLogPriors,
             HashMap<SNode, Double> pathWordLogLikelihoods,
             HashMap<SNode, Double> pathResLogLikelihoods,
@@ -1699,7 +1709,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param tokenCountPerLevel Token counts per level
      * @param parentDataLlh The value passed from the parent node
      */
-    private void computePathWordLogLikelihood(
+    void computePathWordLogLikelihood(
             HashMap<SNode, Double> nodeDataLlhs,
             SNode curNode,
             SparseCount[] tokenCountPerLevel,
@@ -1737,7 +1747,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param curNode Current node in the recursive call
      * @param parentLogProb The log probability passed from the parent node
      */
-    private void computePathLogPrior(
+    void computePathLogPrior(
             HashMap<SNode, Double> nodeLogProbs,
             SNode curNode,
             double parentLogProb) {
@@ -1761,7 +1771,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param s The sentence index
      * @return The regression sum of the sentence
      */
-    private double computeTopicWeight(int d, int s) {
+    protected double computeTopicWeight(int d, int s) {
         double regSum = 0.0;
         SNode[] path = getPathFromNode(c[d][s].getContent());
         for (int l = 0; l < path.length; l++) {
@@ -1776,7 +1786,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * @param node The given node
      * @return An array containing the path
      */
-    private SNode[] getPathFromNode(SNode node) {
+    SNode[] getPathFromNode(SNode node) {
         SNode[] path = new SNode[node.getLevel() + 1];
         SNode curNode = node;
         int l = node.getLevel();
@@ -1792,7 +1802,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      *
      * @param node The node
      */
-    private boolean isLeafNode(SNode node) {
+    boolean isLeafNode(SNode node) {
         return node.getLevel() == L - 1;
     }
 
@@ -1823,7 +1833,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         return node;
     }
 
-    private void outputWeights(File outputFile, double[] ws) throws Exception {
+    protected void outputWeights(File outputFile, double[] ws) throws Exception {
         if (verbose) {
             logln("--- Writing weights to file " + outputFile);
         }
@@ -1834,7 +1844,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         writer.close();
     }
 
-    private double[] inputWeights(File inputFile) throws Exception {
+    protected double[] inputWeights(File inputFile) throws Exception {
         if (verbose) {
             logln("--- Reading weights from file " + inputFile);
         }
@@ -1965,7 +1975,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         validateAssignments(msg);
     }
 
-    private void validateModel(String msg) {
+    protected void validateModel(String msg) {
         Stack<SNode> stack = new Stack<SNode>();
         stack.add(globalTreeRoot);
         while (!stack.isEmpty()) {
@@ -1992,7 +2002,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
-    private void validateAssignments(String msg) {
+    protected void validateAssignments(String msg) {
         for (int d = 0; d < D; d++) {
             int totalCusts = 0;
             for (STable table : localRestaurants[d].getTables()) {
@@ -2198,7 +2208,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                     assignStr.append(table.getIndex()).append("\n");
                     assignStr.append(table.getIterationCreated()).append("\n");
                     assignStr.append(table.getContent().getPathString()).append("\n");
-                    assignStr.append(TruncatedStickBreaking.output(table.levelDist)).append("\n");
+                    assignStr.append(TruncatedStickBreaking.output(table.getLevelDistribution())).append("\n");
                 }
             }
 
@@ -2256,7 +2266,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      *
      * @param zipFilepath Path to the compressed state file (.zip)
      */
-    private void inputModel(String zipFilepath) {
+    void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath + "\n");
         }
@@ -2265,7 +2275,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             // initialize
             this.initializeModelStructure();
 
-            String filename = IOUtils.removeExtension(IOUtils.getFilename(new File(zipFilepath).getName()));
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
 
             // lexical weights
@@ -2336,7 +2346,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      *
      * @param zipFilepath Path to the compressed state file (.zip)
      */
-    private void inputAssignments(String zipFilepath) throws Exception {
+    void inputAssignments(String zipFilepath) throws Exception {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath + "\n");
         }
@@ -2344,7 +2354,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         // initialize
         this.initializeDataStructure();
 
-        String filename = IOUtils.removeExtension(IOUtils.getFilename(new File(zipFilepath).getName()));
+        String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
         BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
 
         String[] sline;
@@ -2419,7 +2429,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             ArrayList<RankingItem<SNode>> rankChildren = new ArrayList<RankingItem<SNode>>();
             for (SNode child : node.getChildren()) {
-                rankChildren.add(new RankingItem<SNode>(child, child.regression));
+                rankChildren.add(new RankingItem<SNode>(child, child.getRegressionParameter()));
             }
             Collections.sort(rankChildren);
             for (RankingItem<SNode> item : rankChildren) {
@@ -2674,7 +2684,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         return new File(getSamplerFolderPath(), IterPredictionFolder);
     }
 
-    public void testSampler(int[][][] newWords) {
+    private void testSampler(int[][][] newWords) {
         if (verbose) {
             logln("Test sampling ...");
         }
@@ -2843,204 +2853,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
-    class SNode extends TopicTreeNode<SNode, DirMult> {
-
-        private final int born;
-        private int numCustomers;
-        private double regression;
-
-        SNode(int iter, int index, int level,
-                DirMult content,
-                double regParam,
-                SNode parent) {
-            super(index, level, content, parent);
-            this.born = iter;
-            this.numCustomers = 0;
-            this.regression = regParam;
-        }
-
-        public int getIterationCreated() {
-            return this.born;
-        }
-
-        /**
-         * Get the log probability of a set of observations given the topic at
-         * this node.
-         *
-         * @param obs The set of observations
-         */
-        public double getLogProbability(SparseCount obs) {
-            if (this.getTopic() == null) {
-                return this.content.getLogLikelihood(obs.getObservations());
-            } else {
-                double val = 0.0;
-                for (int o : obs.getIndices()) {
-                    val += obs.getCount(o) * this.getLogProbability(o);
-                }
-                return val;
-            }
-        }
-
-        double getLogJointProbability(double gamma) {
-            ArrayList<Integer> numChildrenCusts = new ArrayList<Integer>();
-            for (SNode child : this.getChildren()) {
-                numChildrenCusts.add(child.getNumCustomers());
-            }
-            return SamplerUtils.getAssignmentJointLogProbability(numChildrenCusts, gamma);
-        }
-
-        public double getRegressionParameter() {
-            return this.regression;
-        }
-
-        public void setRegressionParameter(double reg) {
-            this.regression = reg;
-        }
-
-        public int getNumCustomers() {
-            return this.numCustomers;
-        }
-
-        public void decrementNumCustomers() {
-            this.numCustomers--;
-        }
-
-        public void incrementNumCustomers() {
-            this.numCustomers++;
-        }
-
-        public void changeNumCustomers(int delta) {
-            this.numCustomers += delta;
-        }
-
-        public boolean isEmpty() {
-            return this.numCustomers == 0;
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder str = new StringBuilder();
-            str.append("[")
-                    .append(getPathString())
-                    .append(" (").append(born).append(")")
-                    .append(" #ch = ").append(getNumChildren())
-                    .append(", #c = ").append(getNumCustomers())
-                    .append(", #o = ").append(getContent().getCountSum())
-                    .append(", reg = ").append(MiscUtils.formatDouble(regression))
-                    .append("]");
-            return str.toString();
-        }
-
-        void validate(String msg) {
-            int maxChildIndex = PSEUDO_NODE_INDEX;
-            for (SNode child : this.getChildren()) {
-                if (maxChildIndex < child.getIndex()) {
-                    maxChildIndex = child.getIndex();
-                }
-            }
-
-            for (int i = 0; i < maxChildIndex; i++) {
-                if (!inactiveChildren.contains(i) && !isChild(i)) {
-                    throw new RuntimeException(msg + ". Child inactive indices"
-                            + " have not been updated. Node: " + this.toString()
-                            + ". Index " + i + " is neither active nor inactive");
-                }
-            }
-        }
-    }
-
-    class STable extends FullTable<Integer, SNode> {
-
-        private final int born;
-        private final int restIndex;
-        private TruncatedStickBreaking levelDist;
-
-        public STable(int iter, int index,
-                SNode content, int restId,
-                TruncatedStickBreaking levelDist) {
-            super(index, content);
-            this.born = iter;
-            this.restIndex = restId;
-            this.levelDist = levelDist;
-        }
-
-        public TruncatedStickBreaking getLevelDistribution() {
-            return this.levelDist;
-        }
-
-        public void decrementLevelCount(int l) {
-            this.levelDist.decrement(l);
-        }
-
-        public void incrementLevelCount(int l) {
-            this.levelDist.increment(l);
-        }
-
-        public void changeLevelCount(int l, int delta) {
-            this.levelDist.changeCount(l, delta);
-        }
-
-        public void decreaseLevelCounts(int[] ls) {
-            for (int ll = 0; ll < ls.length; ll++) {
-                this.levelDist.changeCount(ll, -ls[ll]);
-            }
-        }
-
-        public void increaseLevelCounts(int[] ls) {
-            for (int ll = 0; ll < ls.length; ll++) {
-                this.levelDist.changeCount(ll, ls[ll]);
-            }
-        }
-
-        public int getRestaurantIndex() {
-            return this.restIndex;
-        }
-
-        public boolean containsCustomer(int c) {
-            return this.customers.contains(c);
-        }
-
-        public int getIterationCreated() {
-            return this.born;
-        }
-
-        public String getTableId() {
-            return restIndex + ":" + index;
-        }
-
-        @Override
-        public int hashCode() {
-            String hashCodeStr = getTableId();
-            return hashCodeStr.hashCode();
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if ((obj == null) || (this.getClass() != obj.getClass())) {
-                return false;
-            }
-            STable r = (STable) (obj);
-
-            return r.index == this.index
-                    && r.restIndex == this.restIndex;
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder str = new StringBuilder();
-            str.append("[")
-                    .append(getTableId())
-                    .append(", ").append(born)
-                    .append(", ").append(getNumCustomers())
-                    .append("]")
-                    .append(" >> ").append(getContent() == null ? "null" : getContent().toString());
-            return str.toString();
-        }
-    }
-
     public static void main(String[] args) {
         run(args);
     }
@@ -3192,8 +3004,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         if (cmd.hasOption("z")) {
             data.zNormalize();
-        }
-        else {
+        } else {
             System.out.println("--- [WARNING] Running with unnormalized response "
                     + "variables. Use option -z to perform z-normalization.");
         }
@@ -3339,10 +3150,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             int V = trainData.getWordVocab().size();
 
-            if (cmd.hasOption("z")) {
-                ResponseTextDataset.zNormalize(trainData, devData, testData);
-            }
-
             double meanResponse = StatisticsUtils.mean(trainData.getResponses());
             double[] defaultMus = new double[L];
             for (int i = 0; i < L; i++) {
@@ -3398,7 +3205,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             } else if (runMode.equals("test")) {
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
             } else if (runMode.equals("train-test")) {
                 // train
                 sampler.sample();
@@ -3411,7 +3218,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 // test
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getResponses());
+                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
 //                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("hack")) {
                 sampler.inputFinalState();
@@ -3460,5 +3267,203 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
         }
+    }
+}
+
+class SNode extends TopicTreeNode<SNode, DirMult> {
+
+    private final int born;
+    private int numCustomers;
+    private double regression;
+
+    SNode(int iter, int index, int level,
+            DirMult content,
+            double regParam,
+            SNode parent) {
+        super(index, level, content, parent);
+        this.born = iter;
+        this.numCustomers = 0;
+        this.regression = regParam;
+    }
+
+    public int getIterationCreated() {
+        return this.born;
+    }
+
+    /**
+     * Get the log probability of a set of observations given the topic at this
+     * node.
+     *
+     * @param obs The set of observations
+     */
+    public double getLogProbability(SparseCount obs) {
+        if (this.getTopic() == null) {
+            return this.content.getLogLikelihood(obs.getObservations());
+        } else {
+            double val = 0.0;
+            for (int o : obs.getIndices()) {
+                val += obs.getCount(o) * this.getLogProbability(o);
+            }
+            return val;
+        }
+    }
+
+    double getLogJointProbability(double gamma) {
+        ArrayList<Integer> numChildrenCusts = new ArrayList<Integer>();
+        for (SNode child : this.getChildren()) {
+            numChildrenCusts.add(child.getNumCustomers());
+        }
+        return SamplerUtils.getAssignmentJointLogProbability(numChildrenCusts, gamma);
+    }
+
+    public double getRegressionParameter() {
+        return this.regression;
+    }
+
+    public void setRegressionParameter(double reg) {
+        this.regression = reg;
+    }
+
+    public int getNumCustomers() {
+        return this.numCustomers;
+    }
+
+    public void decrementNumCustomers() {
+        this.numCustomers--;
+    }
+
+    public void incrementNumCustomers() {
+        this.numCustomers++;
+    }
+
+    public void changeNumCustomers(int delta) {
+        this.numCustomers += delta;
+    }
+
+    public boolean isEmpty() {
+        return this.numCustomers == 0;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder str = new StringBuilder();
+        str.append("[")
+                .append(getPathString())
+                .append(" (").append(born).append(")")
+                .append(" #ch = ").append(getNumChildren())
+                .append(", #c = ").append(getNumCustomers())
+                .append(", #o = ").append(getContent().getCountSum())
+                .append(", reg = ").append(MiscUtils.formatDouble(regression))
+                .append("]");
+        return str.toString();
+    }
+
+    void validate(String msg) {
+        int maxChildIndex = SHLDA.PSEUDO_NODE_INDEX;
+        for (SNode child : this.getChildren()) {
+            if (maxChildIndex < child.getIndex()) {
+                maxChildIndex = child.getIndex();
+            }
+        }
+
+        for (int i = 0; i < maxChildIndex; i++) {
+            if (!inactiveChildren.contains(i) && !isChild(i)) {
+                throw new RuntimeException(msg + ". Child inactive indices"
+                        + " have not been updated. Node: " + this.toString()
+                        + ". Index " + i + " is neither active nor inactive");
+            }
+        }
+    }
+}
+
+class STable extends FullTable<Integer, SNode> {
+
+    private final int born;
+    private final int restIndex;
+    private TruncatedStickBreaking levelDist;
+
+    public STable(int iter, int index,
+            SNode content, int restId,
+            TruncatedStickBreaking levelDist) {
+        super(index, content);
+        this.born = iter;
+        this.restIndex = restId;
+        this.levelDist = levelDist;
+    }
+
+    public TruncatedStickBreaking getLevelDistribution() {
+        return this.levelDist;
+    }
+
+    public void decrementLevelCount(int l) {
+        this.levelDist.decrement(l);
+    }
+
+    public void incrementLevelCount(int l) {
+        this.levelDist.increment(l);
+    }
+
+    public void changeLevelCount(int l, int delta) {
+        this.levelDist.changeCount(l, delta);
+    }
+
+    public void decreaseLevelCounts(int[] ls) {
+        for (int ll = 0; ll < ls.length; ll++) {
+            this.levelDist.changeCount(ll, -ls[ll]);
+        }
+    }
+
+    public void increaseLevelCounts(int[] ls) {
+        for (int ll = 0; ll < ls.length; ll++) {
+            this.levelDist.changeCount(ll, ls[ll]);
+        }
+    }
+
+    public int getRestaurantIndex() {
+        return this.restIndex;
+    }
+
+    public boolean containsCustomer(int c) {
+        return this.customers.contains(c);
+    }
+
+    public int getIterationCreated() {
+        return this.born;
+    }
+
+    public String getTableId() {
+        return restIndex + ":" + index;
+    }
+
+    @Override
+    public int hashCode() {
+        String hashCodeStr = getTableId();
+        return hashCodeStr.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if ((obj == null) || (this.getClass() != obj.getClass())) {
+            return false;
+        }
+        STable r = (STable) (obj);
+
+        return r.index == this.index
+                && r.restIndex == this.restIndex;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder str = new StringBuilder();
+        str.append("[")
+                .append(getTableId())
+                .append(", ").append(born)
+                .append(", ").append(getNumCustomers())
+                .append("]")
+                .append(" >> ").append(getContent() == null ? "null" : getContent().toString());
+        return str.toString();
     }
 }

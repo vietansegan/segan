@@ -1,0 +1,146 @@
+package regression;
+
+import core.AbstractRunner;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import util.IOUtils;
+import util.RankingItem;
+import util.RankingItemList;
+import util.evaluation.ClassificationEvaluation;
+import util.evaluation.Measurement;
+import util.evaluation.RankingPerformance;
+
+/**
+ *
+ * @author vietan
+ */
+public abstract class AbstractRegressor extends AbstractRunner {
+    public static final String DATA_FILE = "data";
+    public static final String MODEL_FILE = "model";
+    public static final String PREDICTION_FILE = "predictions";
+    public static final String RESULT_FILE = "result";
+
+    protected String folder;
+
+    public AbstractRegressor(String folder) {
+        this.folder = folder;
+    }
+
+    public abstract String getName();
+
+    public String getFolder() {
+        return this.folder;
+    }
+
+    public String getRegressorFolder() {
+        return new File(folder, getName()).getAbsolutePath();
+    }
+
+    public double[] inputPredictions(File inputFile) {
+        if (verbose) {
+            logln(">>> Input predictions to " + inputFile);
+        }
+        return RegressorUtils.inputPredictions(inputFile);
+    }
+
+    /**
+     * Output predictions.
+     *
+     * @param outputFile The output file
+     * @param instanceIds List of instance IDs
+     * @param trueValues List of true values
+     * @param predValues List of predicted values
+     *
+     */
+    public void outputPredictions(
+            File outputFile,
+            String[] instanceIds,
+            double[] trueValues,
+            double[] predValues) {
+        if (verbose) {
+            logln(">>> Output predictions to " + outputFile);
+        }
+        RegressorUtils.outputPredictions(outputFile, instanceIds, trueValues, predValues);
+    }
+
+    /** Output regression results.
+     * @param outputFile The output file
+     * @param trueValues List of true values
+     * @param predValues List of predicted values
+     */
+    public ArrayList<Measurement> outputRegressionResults(
+            File outputFile,
+            double[] trueValues, 
+            double[] predValues) {
+        // output different measurements
+        if (verbose) {
+            logln(">>> Output regression results to " + outputFile);
+        }
+        return RegressorUtils.outputRegressionResults(outputFile, trueValues, predValues);
+    }
+
+    public ArrayList<Measurement> outputClassificationResults(
+            File outputFile,
+            int[] trueClasses, 
+            int[] predClasses) throws Exception {
+        // output different measurements
+        if (verbose) {
+            logln(">>> Output classification results to " + outputFile);
+        }
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        ClassificationEvaluation eval = new ClassificationEvaluation(trueClasses, predClasses);
+        eval.computePRF1();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement m : measurements) {
+            writer.write(m.getName() + "\t" + m.getValue() + "\n");
+        }
+        writer.close();
+        return measurements;
+    }
+
+    public void outputRankingPerformance(
+            File rankFolder,
+            String[] instanceIds,
+            double[] trueValues,
+            double[] predValues,
+            double threshold) {
+        IOUtils.createFolder(rankFolder);
+        RankingItemList<String> preds = new RankingItemList<String>();
+        for(int ii=0; ii<instanceIds.length; ii++) {
+            preds.addRankingItem(new RankingItem<String>(instanceIds[ii], predValues[ii]));
+        }
+        preds.sortDescending();
+        
+        Set<String> groundtruth = new HashSet<String>();
+        for(int ii=0; ii<instanceIds.length; ii++){
+            if(trueValues[ii] >= threshold)
+                groundtruth.add(instanceIds[ii]);
+        }
+        
+        RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds, 
+                groundtruth, rankFolder.getAbsolutePath());
+        rankPerf.computePrecisionsAndRecalls();
+        rankPerf.outputPrecisionRecallF1();
+        
+        rankPerf.outputAUCListFile();
+        rankPerf.outputRankingResultsWithGroundtruth();
+        
+        rankPerf.computeAUC();
+        rankPerf.outputAUC();
+        
+        
+        
+    }
+    
+    public static void log(String msg) {
+        System.out.print("[LOG] " + msg);
+    }
+
+    public static void logln(String msg) {
+        System.out.println("[LOG] " + msg);
+    }
+}

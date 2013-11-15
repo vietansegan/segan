@@ -1,48 +1,44 @@
-package sampler.supervised.regression.baseline;
+package regression;
 
-import core.AbstractRegressor;
+import regression.AbstractRegressor;
 import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import optimization.GurobiMLRL1Norm;
+import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampler.supervised.Regressor;
-import svm.SVMLight;
-import svm.SVMUtils;
 import util.CLIUtils;
+import util.IOUtils;
 
 /**
  *
  * @author vietan
  */
-public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
+public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
 
-    private SVMLight svm;
+    public static enum Regularizer {
 
-    public SVR(String folder) {
+        L1, L2
+    }
+    private Regularizer regularizer;
+    private double[] weights;
+    private double param;
+
+    public MLR(String folder, Regularizer reg, double t) {
         super(folder);
-        svm = new SVMLight();
+        this.regularizer = reg;
+        this.param = t;
     }
 
     @Override
     public String getName() {
-        return "SVR";
+        return "MLR-" + regularizer + "-" + param;
     }
 
-    public SVMLight getSVM() {
-        return svm;
-    }
-
-    @Override
-    public void input(File inputFile) {
-    }
-
-    @Override
-    public void output(File outputFile) {
-    }
-
-    public void train(int[][] trWords, double[] trResponses, int V,
-            File trainFile, File modelFile) {
+    public void train(int[][] trWords, double[] trResponses, int V) {
         int D = trWords.length;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
@@ -53,42 +49,33 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
                 designMatrix[d][v] /= trWords[d].length;
             }
         }
-        SVMUtils.outputSVMLightFormat(trainFile, designMatrix, trResponses);
 
-        String[] opts = {"-z r"};
-        try {
-            svm.learn(opts, trainFile, modelFile);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while training");
+        if (regularizer == Regularizer.L1) {
+            GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, trResponses, param);
+            this.weights = mlr.solve();
+        } else if (regularizer == Regularizer.L2) {
+            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trResponses, param);
+            this.weights = mlr.solve();
+        } else {
+            throw new RuntimeException(regularizer + " regularization is not supported");
         }
+        output(new File(getRegressorFolder(), MODEL_FILE));
     }
 
     @Override
-    public void train(D trainData) {
+    public void train(ResponseTextDataset trainData) {
         if (verbose) {
             System.out.println("Training ...");
         }
         int[][] trWords = trainData.getWords();
         double[] trResponses = trainData.getResponses();
         int V = trainData.getWordVocab().size();
-        File trainFile = new File(getRegressorFolder(), DATA_FILE + Fold.TrainingExt);
-        File modelFile = new File(getRegressorFolder(), MODEL_FILE);
-        train(trWords, trResponses, V, trainFile, modelFile);
+        train(trWords, trResponses, V);
     }
 
-    public void test(File testFile, File modelFile, File resultFile) {
-        String[] opts = null;
-        try {
-            svm.classify(opts, testFile, modelFile, resultFile);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while training");
-        }
-    }
-
-    public void test(int[][] teWords, double[] teResponses, int V,
-            File testFile, File modelFile, File resultFile) {
+    public double[] test(int[][] teWords, double[] teResponses, int V) {
+        input(new File(getRegressorFolder(), MODEL_FILE));
+        
         int D = teWords.length;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
@@ -99,36 +86,80 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
                 designMatrix[d][v] /= teWords[d].length;
             }
         }
-        SVMUtils.outputSVMLightFormat(testFile, designMatrix, teResponses);
 
-        test(testFile, modelFile, resultFile);
+        double[] predictions = new double[D];
+        for (int d = 0; d < D; d++) {
+            double predVal = 0.0;
+            for (int v = 0; v < V; v++) {
+                predVal += designMatrix[d][v] * this.weights[v];
+            }
+
+            predictions[d] = predVal;
+        }
+        return predictions;
     }
 
     @Override
-    public void test(D testData) {
+    public void test(ResponseTextDataset testData) {
         if (verbose) {
             System.out.println("Testing ...");
         }
         String[] teDocIds = testData.getDocIds();
         int[][] teWords = testData.getWords();
         double[] teResponses = testData.getResponses();
-
         int V = testData.getWordVocab().size();
-        File testFile = new File(getRegressorFolder(), DATA_FILE + Fold.TestExt);
-        File modelFile = new File(getRegressorFolder(), MODEL_FILE);
-        File resultFile = new File(getRegressorFolder(), "svm-" + PREDICTION_FILE + Fold.TestExt);
-        test(teWords, teResponses, V, testFile, modelFile, resultFile);
-
+        
+        double[] predictions = test(teWords, teResponses, V);
         File predFile = new File(getRegressorFolder(), PREDICTION_FILE + Fold.TestExt);
-        double[] predictions = svm.getPredictedValues(resultFile);
         outputPredictions(predFile, teDocIds, teResponses, predictions);
-
+        
         File regFile = new File(getRegressorFolder(), RESULT_FILE + Fold.TestExt);
         outputRegressionResults(regFile, teResponses, predictions);
     }
 
+    @Override
+    public void output(File file) {
+        if (verbose) {
+            System.out.println("Outputing model to " + file);
+        }
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            writer.write(weights.length + "\n");
+            for (int ii = 0; ii < weights.length; ii++) {
+                writer.write(weights[ii] + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
+        }
+    }
+
+    @Override
+    public void input(File file) {
+        if (verbose) {
+            System.out.println("Inputing model from " + file);
+        }
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(file);
+            int V = Integer.parseInt(reader.readLine());
+            this.weights = new double[V];
+            for (int ii = 0; ii < V; ii++) {
+                this.weights[ii] = Double.parseDouble(reader.readLine());
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading from " + file);
+        }
+    }
+
+    public double[] getWeights() {
+        return this.weights;
+    }
+
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + SVR.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + MLR.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -151,6 +182,9 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
             addOption("num-folds", "Number of folds");
             addOption("fold", "The cross-validation fold to run");
             addOption("run-mode", "Running mode");
+
+            addOption("regularizer", "Regularizer (L1, L2)");
+            addOption("param", "Parameter");
 
             options.addOption("v", false, "verbose");
             options.addOption("d", false, "debug");
@@ -183,6 +217,9 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
         String formatFolder = cmd.getOptionValue("format-folder");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
+        String regularizer = cmd.getOptionValue("regularizer");
+        double param = Double.parseDouble(cmd.getOptionValue("param"));
+
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
@@ -198,8 +235,17 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
             System.out.println("--- Loaded. " + data.toString());
         }
 
-        SVR svr = new SVR(outputFolder);
-        svr.train(data);
+        MLR mlr;
+        if (regularizer.equals("L1")) {
+            mlr = new MLR(outputFolder, Regularizer.L1, param);
+        } else if (regularizer.equals("L2")) {
+            mlr = new MLR(outputFolder, Regularizer.L2, param);
+        } else {
+            throw new RuntimeException(regularizer + " regularization is not supported");
+        }
+        File mlrFolder = new File(outputFolder, mlr.getName());
+        IOUtils.createFolder(mlrFolder);
+        mlr.train(data);
     }
 
     private static void runCrossValidation() throws Exception {
@@ -207,6 +253,8 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
         int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
         String resultFolder = cmd.getOptionValue("output");
 
+        String regularizer = cmd.getOptionValue("regularizer");
+        double param = Double.parseDouble(cmd.getOptionValue("param"));
         int foldIndex = -1;
         if (cmd.hasOption("fold")) {
             foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
@@ -239,9 +287,18 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
                 System.out.println();
             }
 
-            SVR svr = new SVR(foldFolder.getAbsolutePath());
-            svr.train(trainData);
-            svr.test(testData);
+            MLR mlr;
+            if (regularizer.equals("L1")) {
+                mlr = new MLR(foldFolder.getAbsolutePath(), Regularizer.L1, param);
+            } else if (regularizer.equals("L2")) {
+                mlr = new MLR(foldFolder.getAbsolutePath(), Regularizer.L2, param);
+            } else {
+                throw new RuntimeException(regularizer + " regularization is not supported");
+            }
+            File mlrFolder = new File(foldFolder, mlr.getName());
+            IOUtils.createFolder(mlrFolder);
+            mlr.train(trainData);
+            mlr.test(testData);
         }
     }
 }

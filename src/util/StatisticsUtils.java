@@ -162,6 +162,22 @@ public class StatisticsUtils {
         }
         return sum;
     }
+    
+    public static int[] bin(double[] data, int numBins, double min, double max) {
+        int[] bins = new int[numBins];
+        
+        double stepSize = (max - min) / numBins;
+
+        for (double value : data) {
+            int binIndex = (int) ((value - min) / stepSize);
+            if (binIndex == numBins) { // correct for the max value
+                binIndex = numBins - 1;
+            }
+            bins[binIndex]++;
+        }
+
+        return bins;
+    }
 
     public static int[] bin(double[] data, int numBins) {
         int[] bins = new int[numBins];

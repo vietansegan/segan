@@ -251,8 +251,7 @@ public class IOUtils {
      * @return The file name
      */
     public static String getFilename(String filepath) {
-        String[] dirs = filepath.split("/");
-        return dirs[dirs.length - 1];
+        return new File(filepath).getName();
     }
 
     /**

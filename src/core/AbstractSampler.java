@@ -291,7 +291,7 @@ public abstract class AbstractSampler {
     }
 
     public void outputSampledHyperparameters(File file) throws Exception {
-        this.outputSampledHyperparameters(file.getAbsoluteFile());
+        this.outputSampledHyperparameters(file.getAbsolutePath());
     }
 
     public void outputSampledHyperparameters(String filepath) {

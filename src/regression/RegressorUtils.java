@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package regression;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -13,12 +13,104 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class GibbsRegressorUtils {
+public class RegressorUtils {
 
     public static final String SINGLE_FINAL = "single-final.txt";
     public static final String SINGLE_AVG = "single-avg.txt";
     public static final String MULTIPLE_FINAL = "multiple-final.txt";
     public static final String MULTIPLE_AVG = "multiple-avg.txt";
+
+    /**
+     * Input predictions.
+     *
+     * @param inputFile The input file
+     */
+    public static double[] inputPredictions(File inputFile) {
+        double[] predResponses = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            int numInst = Integer.parseInt(reader.readLine());
+            predResponses = new double[numInst];
+            for (int i = 0; i < numInst; i++) {
+                String[] sline = reader.readLine().split("\t");
+                predResponses[i] = Double.parseDouble(sline[3]);
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading predictions from "
+                    + inputFile);
+        }
+        return predResponses;
+    }
+
+    /**
+     * Output predictions.
+     *
+     * @param outputFile The output file
+     * @param instanceIds List of instance IDs
+     * @param trueValues List of true values
+     * @param predValues List of predicted values
+     *
+     */
+    public static void outputPredictions(
+            File outputFile,
+            String[] instanceIds,
+            double[] trueValues,
+            double[] predValues) {
+        if (instanceIds.length != trueValues.length
+                || instanceIds.length != predValues.length) {
+            throw new RuntimeException("Lengths mismatched");
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(instanceIds.length + "\n");
+            for (int i = 0; i < instanceIds.length; i++) {
+                writer.write(instanceIds[i]
+                        + "\t" + trueValues[i]
+                        + "\t" + predValues[i]
+                        + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing predictions to "
+                    + outputFile);
+        }
+    }
+
+    /**
+     * Output regression results.
+     *
+     * @param outputFile The output file
+     * @param trueValues List of true values
+     * @param predValues List of predicted values
+     */
+    public static ArrayList<Measurement> outputRegressionResults(
+            File outputFile,
+            double[] trueValues,
+            double[] predValues) {
+        ArrayList<Measurement> measurements = null;
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            RegressionEvaluation eval = new RegressionEvaluation(trueValues, predValues);
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeRSquared();
+            eval.computePredictiveRSquared();
+            measurements = eval.getMeasurements();
+            for (Measurement m : measurements) {
+                writer.write(m.getName() + "\t" + m.getValue() + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing regression results to "
+                    + outputFile);
+        }
+        return measurements;
+    }
 
     /**
      * Output the predictions of a single model (learning at an iteration during
@@ -88,15 +180,15 @@ public class GibbsRegressorUtils {
      * @param outputFolder Output folder
      * @param trueResponses Ground truth responses
      */
-    public static void evaluate(
+    public static double[] evaluate(
             File iterPredFolder,
             File outputFolder,
+            String[] docIds,
             double[] trueResponses) {
-        computeSingleFinal(iterPredFolder, outputFolder, trueResponses);
-        computeSingleAverage(iterPredFolder, outputFolder, trueResponses);
-        computeMultipleFinal(iterPredFolder, outputFolder, trueResponses);
-        computeMultipleAverage(iterPredFolder, outputFolder, trueResponses);
-
+        computeSingleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
+        computeSingleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
+        computeMultipleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
+        return computeMultipleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
     }
 
     /**
@@ -112,12 +204,10 @@ public class GibbsRegressorUtils {
     public static void computeSingleFinal(
             File iterPredFolder,
             File outputFolder,
+            String[] docIds,
             double[] trueResponses) {
         try {
-            File outputFile = new File(outputFolder, SINGLE_FINAL);
             String[] filenames = iterPredFolder.list();
-
-            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
 
@@ -130,20 +220,10 @@ public class GibbsRegressorUtils {
                 for (int d = 0; d < finalPred.length; d++) {
                     finalPred[d] = predictions[d][predictions[0].length - 1];
                 }
-                RegressionEvaluation eval = new RegressionEvaluation(
-                        trueResponses, finalPred);
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
 
-                writer.write(filename);
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-                for (Measurement measurement : measurements) {
-                    writer.write("\t" + measurement.getValue());
-                }
-                writer.write("\n");
+                outputPredictions(new File(outputFolder, SINGLE_FINAL + "-" + filename + ".pred"), docIds, trueResponses, finalPred);
+                outputRegressionResults(new File(outputFolder, SINGLE_FINAL + "-" + filename + ".result"), trueResponses, finalPred);
             }
-            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-final");
@@ -162,15 +242,14 @@ public class GibbsRegressorUtils {
     public static void computeSingleAverage(
             File iterPredFolder,
             File outputFolder,
+            String[] docIds,
             double[] trueResponses) {
         try {
-            File outputFile = new File(outputFolder, SINGLE_AVG);
             String[] filenames = iterPredFolder.list();
-
-            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
 
+                // load predicted values
                 double[][] predictions = inputSingleModelPredictions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
@@ -181,20 +260,9 @@ public class GibbsRegressorUtils {
                     avgPred[d] = StatisticsUtils.mean(predictions[d]);
                 }
 
-                RegressionEvaluation eval = new RegressionEvaluation(
-                        trueResponses, avgPred);
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-
-                writer.write(filename);
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-                for (Measurement measurement : measurements) {
-                    writer.write("\t" + measurement.getValue());
-                }
-                writer.write("\n");
+                outputPredictions(new File(outputFolder, SINGLE_AVG + "-" + filename + ".pred"), docIds, trueResponses, avgPred);
+                outputRegressionResults(new File(outputFolder, SINGLE_AVG + "-" + filename + ".result"), trueResponses, avgPred);
             }
-            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-avg.");
@@ -213,11 +281,10 @@ public class GibbsRegressorUtils {
     public static void computeMultipleFinal(
             File iterPredFolder,
             File outputFolder,
+            String[] docIds,
             double[] trueResponses) {
         try {
-            File outputFile = new File(outputFolder, MULTIPLE_FINAL);
             String[] filenames = iterPredFolder.list();
-
             double[] predResponses = new double[trueResponses.length];
             int numModels = filenames.length;
 
@@ -237,19 +304,8 @@ public class GibbsRegressorUtils {
                 predResponses[d] /= numModels;
             }
 
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, predResponses);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-            writer.close();
+            outputPredictions(new File(outputFolder, MULTIPLE_FINAL + ".pred"), docIds, trueResponses, predResponses);
+            outputRegressionResults(new File(outputFolder, MULTIPLE_FINAL + ".result"), trueResponses, predResponses);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-final.");
@@ -264,15 +320,16 @@ public class GibbsRegressorUtils {
      * @param outputFolder The output folder
      * @param trueResponses The true values
      */
-    public static void computeMultipleAverage(
+    public static double[] computeMultipleAverage(
             File iterPredFolder,
             File outputFolder,
+            String[] docIds,
             double[] trueResponses) {
+        double[] predResponses = null;
         try {
-            File outputFile = new File(outputFolder, MULTIPLE_AVG);
             String[] filenames = iterPredFolder.list();
 
-            double[] predResponses = new double[trueResponses.length];
+            predResponses = new double[trueResponses.length];
             int numModels = filenames.length;
 
             for (int i = 0; i < filenames.length; i++) {
@@ -291,22 +348,12 @@ public class GibbsRegressorUtils {
                 predResponses[d] /= numModels;
             }
 
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, predResponses);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-
-            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-            writer.close();
+            outputPredictions(new File(outputFolder, MULTIPLE_AVG + ".pred"), docIds, trueResponses, predResponses);
+            outputRegressionResults(new File(outputFolder, MULTIPLE_AVG + ".result"), trueResponses, predResponses);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-avg.");
         }
+        return predResponses;
     }
 }

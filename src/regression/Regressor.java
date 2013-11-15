@@ -1,4 +1,4 @@
-package sampler.supervised;
+package regression;
 
 import data.ResponseTextDataset;
 import java.io.File;
