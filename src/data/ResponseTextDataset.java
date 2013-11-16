@@ -43,6 +43,13 @@ public class ResponseTextDataset extends TextDataset {
         this.responses = responses;
     }
 
+    public void setResponses(ArrayList<Double> res) {
+        this.responses = new double[res.size()];
+        for (int ii = 0; ii < res.size(); ii++) {
+            this.responses[ii] = res.get(ii);
+        }
+    }
+
     public double[] getResponses(ArrayList<Integer> instances) {
         double[] res = new double[instances.size()];
         for (int i = 0; i < res.length; i++) {
@@ -488,7 +495,7 @@ public class ResponseTextDataset extends TextDataset {
             }
             normResponses[Fold.DEV] = zNormDeResponse;
         }
-        
+
         // test
         if (teResponses != null) {
             double[] zNormTeResponse = new double[teResponses.length];

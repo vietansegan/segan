@@ -57,13 +57,21 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
         return this.authors;
     }
 
-    public void setAuthorPropertyValues(String authorId, String propName, String propVal) {
+    public void setAuthorProperty(String authorId, String propName, String propVal) {
         Author author = authorTable.get(authorId);
         if (author == null) {
             author = new Author(authorId);
         }
         author.addProperty(propName, propVal);
         authorTable.put(authorId, author);
+    }
+
+    public String getAuthorProperty(String authorId, String propName) {
+        Author author = authorTable.get(authorId);
+        if (author == null) {
+            return null;
+        }
+        return author.getProperty(propName);
     }
 
     public void setAuthorList(ArrayList<String> authorList) {
@@ -89,7 +97,7 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
     public double[] getAuthorResponses() {
         return this.authorResponses;
     }
-    
+
     public void setAuthorResponses(double[] ar) {
         this.authorResponses = ar;
     }
@@ -287,7 +295,7 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
     public void loadFormattedData(String fFolder) {
         try {
             super.loadFormattedData(fFolder);
-            this.loadAuthorVocab(new File(fFolder, formatFilename + speakerVocabExt));
+            inputAuthorVocab(new File(fFolder, formatFilename + speakerVocabExt));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
@@ -304,19 +312,19 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
         BufferedReader reader = IOUtils.getBufferedReader(filepath);
         String line;
         String[] sline;
-        docIdList = new ArrayList<String>();
+        ArrayList<String> dIdList = new ArrayList<String>();
         ArrayList<Integer> aList = new ArrayList<Integer>();
         ArrayList<Double> rList = new ArrayList<Double>();
 
         while ((line = reader.readLine()) != null) {
             sline = line.split("\t");
-            docIdList.add(sline[0]);
+            dIdList.add(sline[0]);
             aList.add(Integer.parseInt(sline[1]));
             rList.add(Double.parseDouble(sline[2]));
         }
         reader.close();
 
-        this.docIds = docIdList.toArray(new String[docIdList.size()]);
+        this.docIds = dIdList.toArray(new String[dIdList.size()]);
         this.authors = new int[aList.size()];
         for (int i = 0; i < this.authors.length; i++) {
             this.authors[i] = aList.get(i);
@@ -327,12 +335,11 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
         }
     }
 
-    public void loadAuthorVocab(File authorVocFile) throws Exception {
+    protected void inputAuthorVocab(File authorVocFile) throws Exception {
         if (verbose) {
             logln("Loading authors from vocab file " + authorVocFile);
         }
 
-        this.authorTable = new HashMap<String, Author>();
         this.authorProperties = new ArrayList<String>();
         BufferedReader reader = IOUtils.getBufferedReader(authorVocFile);
         String line = reader.readLine();
@@ -340,6 +347,9 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
         for (int ii = 1; ii < sline.length; ii++) {
             this.authorProperties.add(sline[ii]);
         }
+
+        this.authorVocab = new ArrayList<String>();
+        this.authorTable = new HashMap<String, Author>();
         while ((line = reader.readLine()) != null) {
             sline = line.split("\t");
             String id = sline[0];
@@ -347,19 +357,10 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
             for (int ii = 1; ii < sline.length; ii++) {
                 author.addProperty(authorProperties.get(ii - 1), sline[ii]);
             }
+            this.authorVocab.add(id);
             this.authorTable.put(id, author);
         }
         reader.close();
-
-        // create author vocab
-        this.authorVocab = new ArrayList<String>();
-        for (String author : authorTable.keySet()) {
-            this.authorVocab.add(author);
-        }
-
-        if (verbose) {
-            logln("--- Loaded. " + this.authorTable.size());
-        }
     }
 
     class Author extends AbstractObject {

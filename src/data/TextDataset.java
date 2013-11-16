@@ -35,6 +35,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected String[][] sentRawWords;
     protected MimnoTopicCoherence topicCoherence;
     protected double[] tfidfs;
+    protected double[] idfs;
 
     public TextDataset(String name) {
         super(name);
@@ -82,15 +83,21 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
 
         this.tfidfs = new double[V];
+        this.idfs = new double[V];
         for (int v = 0; v < V; v++) {
             double tf = Math.log(tfs.getCount(v));
             double idf = Math.log(D) - Math.log(dfs.getCount(v));
             this.tfidfs[v] = tf * idf;
+            this.idfs[v] = idf;
         }
     }
 
     public double[] getTFIDFs() {
         return this.tfidfs;
+    }
+
+    public double[] getIDFs() {
+        return this.idfs;
     }
 
     public String[][] getRawSentences() {
