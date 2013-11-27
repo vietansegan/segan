@@ -202,6 +202,9 @@ public class AuthorResponseTextDataset extends ResponseTextDataset {
         authorResponses = new double[authorVocab.size()];
         for (int a = 0; a < authorResponses.length; a++) {
             Author author = authorTable.get(authorVocab.get(a));
+            if(author.getProperty(prop) == null ||
+                    author.getProperty(prop).isEmpty()) 
+                throw new RuntimeException("Empty response: " + author.getId());
             authorResponses[a] = Double.parseDouble(author.getProperty(prop));
         }
     }

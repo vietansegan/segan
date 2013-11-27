@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package util;
 
 import java.io.*;
@@ -12,11 +8,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-//import sampling.likelihood.DirichletMultinomialModel;
 
 /**
  *
- * @author Segan Kings
+ * @author vietan
  */
 public class IOUtils {
 

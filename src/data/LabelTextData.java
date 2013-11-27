@@ -130,18 +130,6 @@ public class LabelTextData extends TextDataset {
         this.labelVocab = filterLabelVocab;
     }
 
-//    public void filterDocumentWithoutLabels() {
-//        logln("Filtering out documents without labels");
-//        int count = 0;
-//        for (int d = 0; d < labels.length; d++) {
-//            if (labels[d].length == 0) {
-//                // TODO
-//                count++;
-//            }
-//        }
-//        logln("--- # documents without labels: " + count);
-//    }
-
     public void loadLabels(File labelFile) throws Exception {
         loadLabels(labelFile.getAbsolutePath());
     }

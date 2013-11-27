@@ -13,10 +13,9 @@ import java.util.Collections;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
+import regression.Regressor;
 import regression.RegressorUtils;
 import sampler.LDA;
-import regression.Regressor;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import util.CLIUtils;
@@ -51,7 +50,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     protected DirMult[] docTopics;
     protected DirMult[] topicWords;
     protected double[] regParams;
-    private OLSMultipleLinearRegression regressor;
     private GaussianIndLinearRegObjective optimizable;
     private Optimizer optimizer;
     // internal
@@ -59,7 +57,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     private int convergeCount = 0;
     private int numTokensChanged = 0;
     private int numTokens = 0;
-    
     private ArrayList<double[]> regressionParameters;
 
     public void configure(
@@ -95,9 +92,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.MAX_ITER = maxiter;
         this.LAG = samplelag;
         this.REP_INTERVAL = repInt;
-
-        this.regressor = new OLSMultipleLinearRegression();
-        this.regressor.setNoIntercept(true);
 
         this.initState = initState;
         this.paramOptimized = paramOpt;
@@ -151,13 +145,11 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 .append("_K-").append(K)
                 .append("_a-").append(formatter.format(hyperparams.get(ALPHA)))
                 .append("_b-").append(formatter.format(hyperparams.get(BETA)))
-                .append("_m-").append(formatter.format(hyperparams.get(MU)))
-                .append("_s-").append(formatter.format(hyperparams.get(SIGMA)))
                 .append("_r-").append(formatter.format(hyperparams.get(RHO)));
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
     }
-    
+
     public void train(int[][] ws, double[] rs) {
         this.words = ws;
         this.responses = rs;
@@ -177,7 +169,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     public void test(int[][] ws) {
         testSampler(ws);
     }
-    
+
     @Override
     public void test(ResponseTextDataset testData) {
         testSampler(testData.getWords());
@@ -209,7 +201,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     private void initializeModelStructure() {
         topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
-            topicWords[k] = new DirMult(V, hyperparams.get(BETA), 1.0 / V);
+            topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
 
         regParams = new double[K];
@@ -226,7 +218,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         docTopics = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            docTopics[d] = new DirMult(K, hyperparams.get(ALPHA), 1.0 / K);
+            docTopics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
         }
     }
 
@@ -556,13 +548,13 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             docTopics[d].increment(z[d][n]);
         }
     }
-    
+
     private void updateRegressionParametersNew() {
         double[][] designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
         }
-        
+
         double lambda = 1.0 / hyperparams.get(SIGMA);
         GurobiMLRL2Norm mlr =
                 new GurobiMLRL2Norm(designMatrix, responses, lambda);
@@ -659,19 +651,19 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     public double getLogLikelihood(ArrayList<Double> newParams) {
         double wordLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            wordLlh += topicWords[k].getLogLikelihood(newParams.get(BETA), 1.0 / V);
+            wordLlh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
         }
 
         double topicLlh = 0.0;
         for (int d = 0; d < D; d++) {
-            topicLlh += docTopics[d].getLogLikelihood(newParams.get(ALPHA), 1.0 / K);
+            topicLlh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
         }
 
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
             double mean = StatisticsUtils.dotProduct(regParams, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(responses[d], mean, 
+            responseLlh += StatisticsUtils.logNormalProbability(responses[d], mean,
                     Math.sqrt(newParams.get(RHO)));
         }
 
@@ -691,10 +683,10 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     @Override
     public void updateHyperparameters(ArrayList<Double> newParams) {
         for (int k = 0; k < K; k++) {
-            topicWords[k].setConcentration(newParams.get(BETA));
+            topicWords[k].setConcentration(newParams.get(BETA) * V);
         }
         for (int d = 0; d < D; d++) {
-            docTopics[d].setCenterElement(newParams.get(ALPHA));
+            docTopics[d].setCenterElement(newParams.get(ALPHA) * K);
         }
 
         this.hyperparams = new ArrayList<Double>();
@@ -1162,7 +1154,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             logln("--- Outputing result to " + outputResultFile);
         }
         RegressorUtils.outputSingleModelPredictions(
-                new File(outputResultFile), 
+                new File(outputResultFile),
                 predResponsesList);
     }
     // End prediction ----------------------------------------------------------
@@ -1367,7 +1359,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             if (cmd.hasOption("z")) {
                 ResponseTextDataset.zNormalize(trainData, devData, testData);
             }
-            
+
             if (verbose) {
                 System.out.println("Fold " + fold.getFoldName());
                 System.out.println("--- training: " + trainData.toString());
@@ -1430,7 +1422,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             }
         }
     }
-    
+
     /**
      * Run a model on a dataset. This is mainly used for exploratory analysis.
      */

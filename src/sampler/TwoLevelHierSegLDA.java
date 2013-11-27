@@ -37,13 +37,21 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
     protected DirMult[][] second_topic_words;
     private int numTokens;
     private int numTokensChanged;
-    
+
     public DirMult[] getFirstLevelTopics() {
         return this.first_topic_words;
     }
-    
+
     public DirMult[][] getSecondLevelTopics() {
         return this.second_topic_words;
+    }
+
+    public int[][] getFirstLevelAssignments() {
+        return this.z;
+    }
+
+    public int[][] getSecondLevelAssignments() {
+        return this.y;
     }
 
     public void configure(String folder, int[][] words,
@@ -137,6 +145,36 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
         }
     }
 
+    public void initialize(double[][] topics) {
+        if (verbose) {
+            logln("Initializing with priors ...");
+        }
+
+        initializeModelStructure(topics);
+
+        initializeDataStructure();
+
+        if (debug) {
+            validate("Initialized");
+        }
+    }
+
+    protected void initializeModelStructure(double[][] topics) {
+        if (verbose) {
+            logln("--- Initializing model structure with prior ...");
+        }
+        first_topic_words = new DirMult[K];
+        for (int k = 0; k < K; k++) {
+            first_topic_words[k] = new DirMult(V, hyperparams.get(BETA_1) * V, topics[k]);
+        }
+        second_topic_words = new DirMult[K][L];
+        for (int k = 0; k < K; k++) {
+            for (int l = 0; l < L; l++) {
+                second_topic_words[k][l] = new DirMult(V, hyperparams.get(BETA_2) * V, 1.0 / V);
+            }
+        }
+    }
+
     protected void initializeModelStructure() {
         if (verbose) {
             logln("--- Initializing model structure ...");
@@ -190,7 +228,12 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
                 initState,
                 paramOptimized,
                 BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
-        lda.initialize();
+        double[][] priorTopics = new double[K][];
+        for (int k = 0; k < K; k++) {
+            priorTopics[k] = first_topic_words[k].getCenterVector();
+        }
+
+        lda.initialize(null, priorTopics);
         lda.iterate();
 
         z = lda.getZ();
@@ -400,6 +443,11 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
                     assignStr.append(z[d][n]).append("\t");
                 }
                 assignStr.append("\n");
+
+                for (int n = 0; n < words[d].length; n++) {
+                    assignStr.append(y[d][n]).append("\t");
+                }
+                assignStr.append("\n");
             }
 
             // output to a compressed file
@@ -491,6 +539,11 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
                 String[] sline = reader.readLine().split("\t");
                 for (int n = 0; n < words[d].length; n++) {
                     z[d][n] = Integer.parseInt(sline[n]);
+                }
+
+                sline = reader.readLine().split("\t");
+                for (int n = 0; n < words[d].length; n++) {
+                    y[d][n] = Integer.parseInt(sline[n]);
                 }
             }
             reader.close();

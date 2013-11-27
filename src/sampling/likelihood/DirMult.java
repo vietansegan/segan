@@ -108,10 +108,16 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel {
     }
 
     @Override
-    public DirMult clone() throws CloneNotSupportedException {
-        DirMult newMult = (DirMult) super.clone();
-        if (!isShortRepresented()) {
-            newMult.center = (double[]) this.center.clone();
+    public DirMult clone() {
+        DirMult newMult = null;
+        try {
+            newMult = (DirMult) super.clone();
+            if (!isShortRepresented()) {
+                newMult.center = (double[]) this.center.clone();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while cloning.");
         }
         return newMult;
     }

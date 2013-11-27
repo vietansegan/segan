@@ -713,7 +713,7 @@ public class TextDataset extends AbstractTokenizeDataset {
             verbose = cmd.hasOption("v");
             debug = cmd.hasOption("d");
 
-            String runMode = cmd.getOptionValue("run-mode");
+            String runMode = CLIUtils.getStringArgument(cmd, "run-mode", "process");
             if (runMode.equals("process")) {
                 process(args);
             } else if (runMode.equals("load")) {
@@ -791,10 +791,10 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     public static void process(String[] args) throws Exception {
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
-        String textInputData = cmd.getOptionValue("text-data");
-        String formatFolder = cmd.getOptionValue("format-folder");
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
+        String textInputData = CLIUtils.getStringArgument(cmd, "text-data", "demo/amazon-data/raw/text.txt");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
         int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);

@@ -33,7 +33,7 @@ public class RegressorUtils {
             predResponses = new double[numInst];
             for (int i = 0; i < numInst; i++) {
                 String[] sline = reader.readLine().split("\t");
-                predResponses[i] = Double.parseDouble(sline[3]);
+                predResponses[i] = Double.parseDouble(sline[2]);
             }
             reader.close();
         } catch (Exception e) {

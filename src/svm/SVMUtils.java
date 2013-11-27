@@ -12,7 +12,8 @@ public class SVMUtils {
 
     public static void outputSVMLightFormat(
             File outputFile,
-            double[][] features, double[] target) {
+            double[][] features, 
+            double[] target) {
         if (features.length != target.length) {
             throw new RuntimeException("Number of instances mismatch. "
                     + features.length + " vs. " + target.length);

@@ -20,6 +20,10 @@ public class GurobiMLRL2Norm {
     private double[] responseVector;
     private double lambda;
     private double[] lambdas;
+    
+    public GurobiMLRL2Norm(double lambda) {
+        this.lambda = lambda;
+    }
 
     public GurobiMLRL2Norm(double[][] X, double[] y, double lambda) {
         this.designMatrix = X;
@@ -31,6 +35,14 @@ public class GurobiMLRL2Norm {
         this.designMatrix = X;
         this.responseVector = y;
         this.lambdas = lambdas;
+    }
+    
+    public void setDesignMatrix(double[][] d) {
+        this.designMatrix = d;
+    }
+    
+    public void setResponseVector(double[] r) {
+        this.responseVector = r;
     }
 
     public int getNumObservations() {
@@ -81,11 +93,15 @@ public class GurobiMLRL2Norm {
             // constraints
             for (int d = 0; d < getNumObservations(); d++) {
                 GRBLinExpr expr = new GRBLinExpr();
-                expr.addTerm(-1.0, docAuxParams[d]);
+                expr.addTerm(1.0, docAuxParams[d]);
                 for (int v = 0; v < getNumVariables(); v++) {
                     expr.addTerm(designMatrix[d][v], regParams[v]);
                 }
                 model.addConstr(expr, GRB.EQUAL, responseVector[d], "c-" + d);
+                
+                GRBQuadExpr exp = new GRBQuadExpr();
+                exp.addTerm(1.0, docAuxParams[d], docAuxParams[d]);
+                
             }
 
             // optimize
@@ -137,7 +153,7 @@ public class GurobiMLRL2Norm {
             }
         }
 
-        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responseVector, 10);
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responseVector, 1);
         double[] solution = mlr.solve();
         System.out.println("solution: " + MiscUtils.arrayToString(solution));
     }

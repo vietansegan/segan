@@ -35,7 +35,10 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
 
     @Override
     public String getName() {
-        return "MLR-" + regularizer + "-" + param;
+        if (name == null) {
+            return "MLR-" + regularizer + "-" + param;
+        }
+        return name;
     }
 
     public void train(int[][] trWords, double[] trResponses, int V) {
@@ -75,7 +78,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
 
     public double[] test(int[][] teWords, double[] teResponses, int V) {
         input(new File(getRegressorFolder(), MODEL_FILE));
-        
+
         int D = teWords.length;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
@@ -108,11 +111,11 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         int[][] teWords = testData.getWords();
         double[] teResponses = testData.getResponses();
         int V = testData.getWordVocab().size();
-        
+
         double[] predictions = test(teWords, teResponses, V);
         File predFile = new File(getRegressorFolder(), PREDICTION_FILE + Fold.TestExt);
         outputPredictions(predFile, teDocIds, teResponses, predictions);
-        
+
         File regFile = new File(getRegressorFolder(), RESULT_FILE + Fold.TestExt);
         outputRegressionResults(regFile, teResponses, predictions);
     }

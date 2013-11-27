@@ -1561,9 +1561,6 @@ public class L2H extends AbstractSampler {
             }
             return heightLlh;
         }
-//        public double getWidthLogLikelihood(double alpha) {
-//            
-//        }
     }
 
     class TreeInitializer {

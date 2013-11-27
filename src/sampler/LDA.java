@@ -6,10 +6,6 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.likelihood.DirMult;
@@ -35,14 +31,14 @@ public class LDA extends AbstractSampler {
     protected int[][] z;
     protected DirMult[] doc_topics;
     protected DirMult[] topic_words;
-    private int numTokens;
-    private int numTokensChanged;
+    protected int numTokens;
+    protected int numTokensChanged;
 
     public void configure(String folder, int[][] words,
             int V, int K,
             double alpha,
             double beta,
-            AbstractSampler.InitialState initState,
+            InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
         if (verbose) {
@@ -67,6 +63,7 @@ public class LDA extends AbstractSampler {
         this.LAG = samplelag;
         this.REP_INTERVAL = repInt;
 
+        this.initState = initState;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.setName();
@@ -76,7 +73,7 @@ public class LDA extends AbstractSampler {
             this.numTokens += words[d].length;
         }
 
-        if (verbose) {
+        if (verbose && folder != null) {
             logln("--- folder\t" + folder);
             logln("--- # documents:\t" + D);
             logln("--- # topics:\t" + K);
@@ -104,17 +101,22 @@ public class LDA extends AbstractSampler {
                 + "_opt-" + this.paramOptimized;
     }
 
-    public void configureNewDocuments(int[][] ws) {
+    public int[][] getZ() {
+        return this.z;
+    }
+
+    /**
+     * Configure for new documents.
+     *
+     * @param ws New document words
+     */
+    public void configure(int[][] ws) {
         this.words = ws;
         this.D = this.words.length;
 
-        doc_topics = new DirMult[D];
-        for (int d = 0; d < D; d++) {
-            doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
-        }
+        this.initializeDataStructure(null);
 
-        // initialize
-        z = new int[D][];
+        // initialize assignments for new documents
         for (int d = 0; d < D; d++) {
             z[d] = new int[words[d].length];
             for (int n = 0; n < words[d].length; n++) {
@@ -124,12 +126,17 @@ public class LDA extends AbstractSampler {
         }
     }
 
-    public void sampleNewDocuments(int[][] ws) {
+    /**
+     * Sample assignments for new documents given a learned model.
+     *
+     * @param ws New document words
+     */
+    public void sample(int[][] ws) {
         if (verbose) {
             logln("Sampling for new documents ...");
         }
 
-        configureNewDocuments(ws);
+        configure(ws);
 
         // sample
         logLikelihoods = new ArrayList<Double>();
@@ -165,7 +172,9 @@ public class LDA extends AbstractSampler {
             logln("Initializing ...");
         }
 
-        initializeHierarchies();
+        initializeModelStructure(null);
+
+        initializeDataStructure(null);
 
         initializeAssignments();
 
@@ -174,19 +183,49 @@ public class LDA extends AbstractSampler {
         }
     }
 
-    protected void initializeHierarchies() {
+    public void initialize(double[][] docTopicPrior, double[][] topicWordPrior) {
         if (verbose) {
-            logln("--- Initializing topic hierarchy ...");
+            logln("Initializing with pre-defined topics ...");
         }
 
-        doc_topics = new DirMult[D];
-        for (int d = 0; d < D; d++) {
-            doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
+        initializeModelStructure(topicWordPrior);
+
+        initializeDataStructure(docTopicPrior);
+
+        initializeAssignments();
+
+        if (debug) {
+            validate("Initialized");
+        }
+    }
+
+    protected void initializeModelStructure(double[][] topics) {
+        if (verbose) {
+            logln("--- Initializing model structure ...");
         }
 
         topic_words = new DirMult[K];
         for (int k = 0; k < K; k++) {
-            topic_words[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            if (topics != null) {
+                topic_words[k] = new DirMult(V, hyperparams.get(BETA) * V, topics[k]);
+            } else {
+                topic_words[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            }
+        }
+    }
+
+    protected void initializeDataStructure(double[][] docTopicPrior) {
+        if (verbose) {
+            logln("--- Initializing model structure ...");
+        }
+
+        doc_topics = new DirMult[D];
+        for (int d = 0; d < D; d++) {
+            if (docTopicPrior != null) {
+                doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, docTopicPrior[d]);
+            } else {
+                doc_topics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
+            }
         }
 
         z = new int[D][];
@@ -256,7 +295,7 @@ public class LDA extends AbstractSampler {
      * assigned topic
      * @param add Whether this token should be added to the sampled topic
      */
-    private void sampleZ(int d, int n, boolean remove, boolean add) {
+    protected void sampleZ(int d, int n, boolean remove, boolean add) {
         doc_topics[d].decrement(z[d][n]);
         if (remove) {
             topic_words[z[d][n]].decrement(words[d][n]);
@@ -280,14 +319,9 @@ public class LDA extends AbstractSampler {
         }
     }
 
-    public int[][] getZ() {
-        return this.z;
-    }
-
     @Override
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
-
         return str.toString();
     }
 
@@ -339,11 +373,17 @@ public class LDA extends AbstractSampler {
             System.out.println("Outputing topics to file " + file);
         }
 
-        double[][] distrs = new double[K][];
+        BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < K; k++) {
-            distrs[k] = topic_words[k].getDistribution();
+            String[] topWords = getTopWords(topic_words[k].getDistribution(), numTopWords);
+            // output top words
+            writer.write("[Topic " + k + ": " + topic_words[k].getCountSum() + "]");
+            for (String tw : topWords) {
+                writer.write(" " + tw);
+            }
+            writer.write("\n\n");
         }
-        IOUtils.outputTopWords(distrs, wordVocab, numTopWords, file);
+        writer.close();
     }
 
     public void outputTopicTopWordsCummProbs(String filepath, int numTopWords) throws Exception {
@@ -384,6 +424,12 @@ public class LDA extends AbstractSampler {
 
     @Override
     public void validate(String msg) {
+        for (int d = 0; d < D; d++) {
+            doc_topics[d].validate(msg);
+        }
+        for (int k = 0; k < K; k++) {
+            topic_words[k].validate(msg);
+        }
     }
 
     @Override
@@ -395,22 +441,13 @@ public class LDA extends AbstractSampler {
             StringBuilder modelStr = new StringBuilder();
             for (int k = 0; k < K; k++) {
                 modelStr.append(k).append("\n");
-                modelStr.append(topic_words[k].getConcentration()).append("\n");
-                for (int v = 0; v < V; v++) {
-                    modelStr.append(topic_words[k].getCenterElement(v)).append("\t");
-                }
-                modelStr.append("\n");
+                modelStr.append(DirMult.output(topic_words[k])).append("\n");
             }
 
             StringBuilder assignStr = new StringBuilder();
             for (int d = 0; d < D; d++) {
                 assignStr.append(d).append("\n");
-                assignStr.append(doc_topics[d].getConcentration()).append("\n");
-                for (int k = 0; k < K; k++) {
-                    assignStr.append(doc_topics[d].getCenterElement(k)).append("\t");
-                }
-                assignStr.append("\n");
-
+                assignStr.append(DirMult.output(doc_topics[d])).append("\n");
                 for (int n = 0; n < words[d].length; n++) {
                     assignStr.append(z[d][n]).append("\t");
                 }
@@ -427,75 +464,76 @@ public class LDA extends AbstractSampler {
 
     @Override
     public void inputState(String filepath) {
-        this.initializeHierarchies();
-
         if (verbose) {
             logln("--- Reading state from " + filepath);
         }
 
         try {
-            ZipFile zipFile = new ZipFile(filepath);
-            Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            String line;
-            String[] sline;
+            inputModel(filepath);
 
-            // read in model
-            ZipEntry modelEntry = entries.nextElement();
-            BufferedReader reader = IOUtils.getBufferedReader(zipFile, modelEntry);
+            inputAssignments(filepath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        validate("Done reading state from " + filepath);
+    }
+
+    private void inputModel(String zipFilepath) {
+        if (verbose) {
+            logln("--- --- Loading model from " + zipFilepath);
+        }
+
+        try {
+            // initialize
+            this.initializeModelStructure(null);
+
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
             for (int k = 0; k < K; k++) {
-                reader.readLine();
-                double concentration = Double.parseDouble(reader.readLine());
-                sline = reader.readLine().split("\t");
-                double[] mean = new double[V];
-                if (sline.length != V) {
-                    throw new RuntimeException("Dimensions mismatch");
+                int topicIdx = Integer.parseInt(reader.readLine());
+                if (topicIdx != k) {
+                    throw new RuntimeException("Indices mismatch when loading model");
                 }
-                for (int v = 0; v < V; v++) {
-                    mean[v] = Double.parseDouble(sline[v]);
-                }
-                this.topic_words[k] = new DirMult(V, concentration, mean);
+                topic_words[k] = DirMult.input(reader.readLine());
             }
             reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing model from "
+                    + zipFilepath);
+        }
+    }
 
-            // read in assignment
-            ZipEntry assignEntry = entries.nextElement();
-            reader = IOUtils.getBufferedReader(zipFile, assignEntry);
+    private void inputAssignments(String zipFilepath) throws Exception {
+        if (verbose) {
+            logln("--- --- Loading assignments from " + zipFilepath);
+        }
+
+        try {
+            // initialize
+            this.initializeDataStructure(null);
+
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
             for (int d = 0; d < D; d++) {
-                reader.readLine();
-                double concentration = Double.parseDouble(reader.readLine());
+                int docIdx = Integer.parseInt(reader.readLine());
+                if (docIdx != d) {
+                    throw new RuntimeException("Indices mismatch when loading assignments");
+                }
+                doc_topics[d] = DirMult.input(reader.readLine());
 
-                line = reader.readLine();
-                sline = line.split("\t");
-                double[] mean = new double[K];
-                if (sline.length != K) {
-                    throw new RuntimeException("Dimensions mismatch. d = " + d
-                            + ". " + sline.length
-                            + " vs. " + K
-                            + ". " + line);
-                }
-                for (int k = 0; k < K; k++) {
-                    mean[k] = Double.parseDouble(sline[k]);
-                }
-                this.doc_topics[d] = new DirMult(K, concentration, mean);
-
-                line = reader.readLine();
-                sline = line.split("\t");
-                if (sline.length != words[d].length) {
-                    throw new RuntimeException("Dimensions mismatch. d = " + d
-                            + ". " + sline.length
-                            + " vs. " + words[d].length
-                            + ". " + line);
-                }
+                String[] sline = reader.readLine().split("\t");
                 for (int n = 0; n < words[d].length; n++) {
                     z[d][n] = Integer.parseInt(sline[n]);
-                    doc_topics[d].increment(z[d][n]);
-                    topic_words[z[d][n]].increment(words[d][n]);
                 }
             }
             reader.close();
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while inputing assignments from "
+                    + zipFilepath);
         }
     }
 
@@ -530,6 +568,10 @@ public class LDA extends AbstractSampler {
             writer.write("\n");
         }
         writer.close();
+    }
+
+    public DirMult[] getTopics() {
+        return this.topic_words;
     }
 
     public double[][] getDocumentEmpiricalDistributions() {
@@ -626,22 +668,23 @@ public class LDA extends AbstractSampler {
 
         cmd = parser.parse(options, args);
         if (cmd.hasOption("help")) {
-            CLIUtils.printHelp("java -cp dist/segan.jar main.RunLDA -help", options);
+            CLIUtils.printHelp(getHelpString(), options);
             return;
         }
 
         // data 
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
-        String outputFolder = cmd.getOptionValue("output");
-        String formatFolder = cmd.getOptionValue("format-folder");
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
+        String outputFolder = CLIUtils.getStringArgument(cmd, "output", "demo/"
+                + datasetName + "/" + formatFolder + "-model");
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
 
         // sampler
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 25);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 50);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
         int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
         int K = CLIUtils.getIntegerArgument(cmd, "K", 25);
         double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
@@ -649,6 +692,8 @@ public class LDA extends AbstractSampler {
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
+        verbose = true;
+        debug = true;
 
         if (verbose) {
             System.out.println("Loading data ...");
@@ -668,6 +713,7 @@ public class LDA extends AbstractSampler {
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setWordVocab(dataset.getWordVocab());
+        sampler.setPrefix("prior_");
 
         sampler.configure(outputFolder, dataset.getWords(),
                 V, K, alpha, beta, initState, paramOpt,
@@ -675,7 +721,19 @@ public class LDA extends AbstractSampler {
 
         File ldaFolder = new File(outputFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(ldaFolder);
-        sampler.sample();
+
+        double ratio = 100;
+        double prob = 1.0 / (K - 1 + ratio);
+        double[][] docTopicPrior = new double[dataset.getWords().length][K];
+        for (int d = 0; d < dataset.getWords().length; d++) {
+            docTopicPrior[d][0] = ratio * prob;
+            for (int k = 1; k < K; k++) {
+                docTopicPrior[d][k] = prob;
+            }
+        }
+
+        sampler.initialize(docTopicPrior, null);
+        sampler.iterate();
         sampler.outputTopicTopWords(new File(ldaFolder, TopWordFile), numTopWords);
         sampler.outputTopicCoherence(new File(ldaFolder, TopicCoherenceFile), dataset.getTopicCoherence());
         sampler.outputDocTopicDistributions(new File(ldaFolder, "doc-topic.txt"));

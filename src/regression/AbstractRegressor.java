@@ -25,12 +25,17 @@ public abstract class AbstractRegressor extends AbstractRunner {
     public static final String RESULT_FILE = "result";
 
     protected String folder;
+    protected String name;
 
     public AbstractRegressor(String folder) {
         this.folder = folder;
     }
 
     public abstract String getName();
+    
+    public void setName(String name) {
+        this.name = name;
+    }
 
     public String getFolder() {
         return this.folder;

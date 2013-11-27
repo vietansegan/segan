@@ -3,6 +3,7 @@ package regression;
 import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
 import java.io.File;
+import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import svm.SVMLight;
@@ -24,7 +25,10 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
 
     @Override
     public String getName() {
-        return "SVR";
+        if (name == null) {
+            return "SVR";
+        }
+        return name;
     }
 
     public SVMLight getSVM() {
@@ -39,19 +43,54 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
     public void output(File outputFile) {
     }
 
-    public void train(int[][] trWords, double[] trResponses, int V,
-            File trainFile, File modelFile) {
+    public void train(
+            int[][] trWords,
+            double[] trResponses,
+            int V,
+            File trainFile,
+            File modelFile) {
         int D = trWords.length;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < trWords[d].length; n++) {
                 designMatrix[d][trWords[d][n]]++;
             }
-//            for (int v = 0; v < V; v++) {
-//                designMatrix[d][v] /= trWords[d].length;
-//            }
+        }
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
+                designMatrix[d][v] /= trWords[d].length;
+            }
         }
         SVMUtils.outputSVMLightFormat(trainFile, designMatrix, trResponses);
+
+        String[] opts = {"-z r"};
+        try {
+            svm.learn(opts, trainFile, modelFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while training");
+        }
+    }
+
+    public void train(int[][] trWords,
+            double[] trResponses,
+            int V,
+            ArrayList<Double>[] addFeatures,
+            File trainFile,
+            File modelFile) {
+        int D = trWords.length;
+        int F = addFeatures[0].size();
+
+        double[][] allFeatures = new double[D][V + F];
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < trWords[d].length; n++) {
+                allFeatures[d][trWords[d][n]]++;
+            }
+            for (int f = 0; f < F; f++) {
+                allFeatures[d][V + f] = addFeatures[d].get(f);
+            }
+        }
+        SVMUtils.outputSVMLightFormat(trainFile, allFeatures, trResponses);
 
         String[] opts = {"-z r"};
         try {
@@ -93,11 +132,33 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
             for (int n = 0; n < teWords[d].length; n++) {
                 designMatrix[d][teWords[d][n]]++;
             }
-//            for (int v = 0; v < V; v++) {
-//                designMatrix[d][v] /= teWords[d].length;
-//            }
+        }
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
+                designMatrix[d][v] /= teWords[d].length;
+            }
         }
         SVMUtils.outputSVMLightFormat(testFile, designMatrix, teResponses);
+
+        test(testFile, modelFile, resultFile);
+    }
+
+    public void test(int[][] teWords, double[] teResponses, int V,
+            ArrayList<Double>[] addFeatures,
+            File testFile, File modelFile, File resultFile) {
+        int D = teWords.length;
+        int F = addFeatures[0].size();
+
+        double[][] allFeatures = new double[D][V + F];
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < teWords[d].length; n++) {
+                allFeatures[d][teWords[d][n]]++;
+            }
+            for (int f = 0; f < F; f++) {
+                allFeatures[d][V + f] = addFeatures[d].get(f);
+            }
+        }
+        SVMUtils.outputSVMLightFormat(testFile, allFeatures, teResponses);
 
         test(testFile, modelFile, resultFile);
     }
