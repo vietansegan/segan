@@ -1,8 +1,7 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.author;
 
 import core.AbstractSampler;
 import data.AuthorResponseTextDataset;
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
@@ -11,12 +10,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
-import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
+import regression.MLR;
+import regression.MLR.Regularizer;
 import regression.Regressor;
 import sampler.RLDA;
 import sampler.RecursiveLDA;
 import sampler.TwoLevelHierSegLDA;
+import sampler.supervised.regression.SHLDA;
 import sampling.likelihood.DirMult;
 import sampling.util.FullTable;
 import sampling.util.Restaurant;
@@ -56,18 +57,18 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     protected double[] mus;    // regression parameter means
     protected double[] sigmas; // regression parameter variances
     // input data
+    protected String[][] rawSentences;
     protected int[][][] words;  // [D] x [S_d] x [N_ds]: words
+    protected int[][] docWords;
     protected int[] authors; // [D]: author of each document
     protected double[] responses; // [A]: response variables of each author
     protected int[][] authorDocIndices; // [A] x [D_a]
-//    protected double[][] authorDocWeights; // [A] x [D_a]
     protected double[] docWeights;
     protected int L; // level of hierarchies
     protected int V; // vocabulary size
     protected int D; // number of documents
     protected int A; // number of authors
     protected int C; // number of lexical regression parameters
-    protected double T; // regularizer's parameter
     // input statistics
     protected int sentCount;
     protected int tokenCount;
@@ -92,9 +93,6 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     protected double[] docLexicalWeights;
     protected double[] docTopicWeights;
     protected double[][] docLexicalDesignMatrix;
-//    protected double[] authorLexicalWeights;
-//    protected double[] authorTopicWeights;
-//    protected double[][] authorLexicalDesignMatrix;
     // over time
     protected ArrayList<double[]> lexicalWeightsOverTime;
     // auxiliary
@@ -104,6 +102,17 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     protected int numTableAsgnsChange;
     protected DirMult emptySwitch;
     protected ArrayList<String> authorVocab;
+    protected MLR.Regularizer regularizer = MLR.Regularizer.L1;
+    protected double regularizerParam = 2000;
+
+    public void setRawSentences(String[][] rawSents) {
+        this.rawSentences = rawSents;
+    }
+
+    public void setRegularizer(MLR.Regularizer reg, double regParam) {
+        this.regularizer = reg;
+        this.regularizerParam = regParam;
+    }
 
     public void setAuthorVocab(ArrayList<String> authorVoc) {
         this.authorVocab = authorVoc;
@@ -115,7 +124,6 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
     public void configure(String folder,
             int V, int L,
-            double T,
             double alpha,
             double rho,
             double gem_mean,
@@ -128,6 +136,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             double[] sigmas,
             InitialState initState,
             PathAssumption pathAssumption,
+            Regularizer regularizer,
+            double regParam,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
         if (verbose) {
@@ -137,12 +147,14 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
         this.V = V;
         this.L = L;
-        this.T = T;
 
         this.betas = betas;
         this.gammas = gammas;
         this.mus = mus;
         this.sigmas = sigmas;
+
+        this.regularizer = regularizer;
+        this.regularizerParam = regParam;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
@@ -210,7 +222,6 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
         if (verbose) {
             logln("--- V = " + V);
-            logln("--- T = " + T);
             logln("--- A = " + A);
             logln("--- L = " + L);
             logln("--- # documents = " + D); // number of groups
@@ -230,6 +241,9 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             logln("--- gammas:\t" + MiscUtils.arrayToString(gammas));
             logln("--- reg mus:\t" + MiscUtils.arrayToString(mus));
             logln("--- reg sigmas:\t" + MiscUtils.arrayToString(sigmas));
+
+            logln("--- regularizer:\t" + regularizer);
+            logln("--- regularizer parameter:\t" + MiscUtils.formatDouble(regParam));
 
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
@@ -260,33 +274,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             logGammas[i] = Math.log(gammas[i]);
         }
     }
-
-//    private void updateAuthorTopicWeights() {
-//        this.authorTopicWeights = new double[A];
-//        for (int a = 0; a < A; a++) {
-//            for (int d : authorDocIndices[a]) {
-//                for (int s = 0; s < words[d].length; s++) {
-//                    this.authorTopicWeights[a] += docWeights[d] *computeTopicWeight(d, s);
-//                }
-//            }
-//        }
-//    }
-//    private void updateAuthorLexicalWeights() {
-//        this.authorLexicalWeights = new double[A];
-//        for (int a = 0; a < A; a++) {
-//            for (int d : authorDocIndices[a]) {
-//                for (int s = 0; s < words[d].length; s++) {
-//                    for (int n = 0; n < words[d][s].length; n++) {
-//                        Double w = this.lexicalWeights.get(words[d][s][n]);
-//                        if (w != null) {
-//                            this.authorLexicalWeights[d] += w;
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-    private void updateDocumentTopicWeights() {
+    
+    private void updateTopicWeights() {
         this.docTopicWeights = new double[D];
         for (int d = 0; d < D; d++) {
             for (int s = 0; s < words[d].length; s++) {
@@ -295,7 +284,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         }
     }
 
-    private void updateDocumentLexicalWeights() {
+    private void updateLexicalWeights() {
         this.docLexicalWeights = new double[D];
         for (int d = 0; d < D; d++) {
             for (int s = 0; s < words[d].length; s++) {
@@ -321,7 +310,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
-                .append("_T-").append(T)
+                .append("_reg-").append(regularizer).append("-").append(MiscUtils.formatDouble(regularizerParam))
                 .append("_a-").append(formatter.format(hyperparams.get(ALPHA)))
                 .append("_r-").append(formatter.format(hyperparams.get(RHO)))
                 .append("_gm-").append(formatter.format(hyperparams.get(GEM_MEAN)))
@@ -337,36 +326,9 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         for (int i = 0; i < gammas.length; i++) {
             str.append("-").append(formatter.format(hyperparams.get(count++)));
         }
-        str.append("_m");
-        for (int i = 0; i < mus.length; i++) {
-            str.append("-").append(formatter.format(mus[i]));
-        }
-        str.append("_s");
-        for (int i = 0; i < sigmas.length; i++) {
-            str.append("-").append(formatter.format(sigmas[i]));
-        }
         str.append("_opt-").append(this.paramOptimized);
         str.append("_").append(this.paramOptimized);
         this.name = str.toString();
-    }
-
-    private void computeDataStatistics() {
-        sentCount = 0;
-        tokenCount = 0;
-        docTokenCounts = new int[D];
-
-//        authorDocCounts = new int[A];
-//        authorTokenCounts = new int[A];
-        for (int d = 0; d < D; d++) {
-            int a = authors[d];
-//            authorDocCounts[a]++;
-            sentCount += words[d].length;
-            for (int s = 0; s < words[d].length; s++) {
-                tokenCount += words[d][s].length;
-                docTokenCounts[d] += words[d][s].length;
-//                authorTokenCounts[a] += words[d][s].length;
-            }
-        }
     }
 
     public void train(int[][][] ws, int[] as, double[] rs) {
@@ -376,6 +338,20 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         this.A = this.responses.length;
         this.D = this.words.length;
 
+        // statistics
+        sentCount = 0;
+        tokenCount = 0;
+        docTokenCounts = new int[D];
+
+        for (int d = 0; d < D; d++) {
+            sentCount += words[d].length;
+            for (int s = 0; s < words[d].length; s++) {
+                tokenCount += words[d][s].length;
+                docTokenCounts[d] += words[d][s].length;
+            }
+        }
+
+        // author document list
         ArrayList<Integer>[] authorDocList = new ArrayList[A];
         for (int a = 0; a < A; a++) {
             authorDocList[a] = new ArrayList<Integer>();
@@ -391,7 +367,17 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             }
         }
 
-        this.computeDataStatistics();
+        // document words
+        docWords = new int[D][];
+        for (int d = 0; d < D; d++) {
+            docWords[d] = new int[docTokenCounts[d]];
+            int count = 0;
+            for (int s = 0; s < words[d].length; s++) {
+                for (int n = 0; n < words[d][s].length; n++) {
+                    docWords[d][count++] = words[d][s][n];
+                }
+            }
+        }
     }
 
     @Override
@@ -416,11 +402,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         initializeDataStructure();
         initializeAssignments();
 
-        updateDocumentTopicWeights();
-        updateDocumentLexicalWeights();
-
-//        updateAuthorTopicWeights();
-//        updateAuthorLexicalWeights();
+        updateTopicWeights();
+        updateLexicalWeights();
 
         if (verbose) {
             logln("--- --- Done initializing.\n" + getCurrentState());
@@ -435,73 +418,48 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     }
 
     /**
-     * Initialize lexical weights using LASSO
+     * Initialize lexical weights
      */
     private void initializeLexicalWeights() {
         if (verbose) {
             logln("Initializing lexical weights ...");
         }
 
-        this.docWeights = new double[D];
-        for(int a=0; a<A; a++) {
-            int numAuthorDocs = authorDocIndices[a].length;
-            double weight = 1.0 / numAuthorDocs;
-            for(int d : authorDocIndices[a]){
-                docWeights[d] = weight;
-            }
-        }
-        
-        this.lexicalWeights = new SparseVector();
-        this.lexicalList = new ArrayList<Integer>();
-        if (T > 0) {
-            GurobiMLRL1Norm lasso = new GurobiMLRL1Norm(T);
-            double[] ws = null;
+        if (regularizer != null) {
+            AuthorMLR.AggregateType aggType = AuthorMLR.AggregateType.WEIGHTED_MICRO_AVG;
+            AuthorMLR mlr = new AuthorMLR(folder, regularizer, regularizerParam, aggType);
+
             try {
-                File regFile = new File(this.folder, "author-init-weights-" + T + ".txt");
-                if (regFile.exists()) {
-                    ws = inputWeights(regFile);
+                File mlrFile = new File(mlr.getRegressorFolder(), MLR.MODEL_FILE);
+                if (mlrFile.exists()) {
+                    if (verbose) {
+                        logln("--- Initial weights found. " + mlrFile);
+                    }
+                    mlr.input(mlrFile);
                 } else {
                     if (verbose) {
-                        logln("--- Initial weights not found. " + regFile);
+                        logln("--- Initial weights not found. " + mlrFile);
                         logln("--- Optimizing ...");
                     }
-                    double[][] designMatrix = new double[A][V];
-                    for (int a = 0; a < A; a++) {
-
-                        for (int d : authorDocIndices[a]) {
-                            double[] docWordCounts = new double[V];
-
-                            for (int s = 0; s < words[d].length; s++) {
-                                for (int n = 0; n < words[d][s].length; n++) {
-                                    docWordCounts[words[d][s][n]]++;
-                                }
-                            }
-
-                            for (int v = 0; v < V; v++) {
-                                designMatrix[a][v] += docWeights[d] * docWordCounts[v] / docTokenCounts[d];
-                            }
-                        }
-
-                    }
-                    lasso.setDesignMatrix(designMatrix);
-                    lasso.setResponseVector(responses);
-                    ws = lasso.solve();
-                    outputWeights(regFile, ws);
+                    mlr.train(docWords, authors, responses, V); // train & output
                 }
+
             } catch (Exception e) {
                 e.printStackTrace();
-                throw new RuntimeException("Exception while initializing lexical weights");
+                throw new RuntimeException("Exception while initializing lexical weights.");
             }
 
-            int count = 0;
+            // filter out lexical weights with small magnitudes
+            this.lexicalWeights = new SparseVector();
+            this.lexicalList = new ArrayList<Integer>();
+            double[] ws = mlr.getWeights();
             for (int v = 0; v < V; v++) {
                 if (Math.abs(ws[v]) >= WEIGHT_THRESHOLD) {
                     this.lexicalWeights.set(v, ws[v]);
                     this.lexicalList.add(v);
-                    count++;
                 }
             }
-            this.C = count;
+            this.C = lexicalList.size();
             if (verbose) {
                 logln("--- # non-zero lexical weights: " + this.C);
             }
@@ -509,43 +467,21 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             // document design matrix for lexical items
             this.docLexicalDesignMatrix = new double[D][C];
             for (int d = 0; d < D; d++) {
+                int docValidTokenCount = 0;
                 for (int s = 0; s < words[d].length; s++) {
                     for (int n = 0; n < words[d][s].length; n++) {
                         int w = words[d][s][n];
                         if (this.lexicalWeights.containsIndex(w)) {
                             docLexicalDesignMatrix[d][lexicalList.indexOf(w)]++;
+                            docValidTokenCount++;
                         }
                     }
                 }
-                for (int ii = 0; ii < count; ii++) {
-                    docLexicalDesignMatrix[d][ii] /= docTokenCounts[d];
+                for (int cc = 0; cc < C; cc++) {
+                    docLexicalDesignMatrix[d][cc] /= docValidTokenCount;
                 }
             }
         }
-    }
-
-    protected void outputWeights(File outputFile, double[] ws) throws Exception {
-        if (verbose) {
-            logln("--- Writing weights to file " + outputFile);
-        }
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int ii = 0; ii < ws.length; ii++) {
-            writer.write(wordVocab.get(ii) + "\t" + ws[ii] + "\n");
-        }
-        writer.close();
-    }
-
-    protected double[] inputWeights(File inputFile) throws Exception {
-        if (verbose) {
-            logln("--- Reading weights from file " + inputFile);
-        }
-        double[] ws = new double[V];
-        BufferedReader reader = IOUtils.getBufferedReader(inputFile);
-        for (int v = 0; v < V; v++) {
-            ws[v] = Double.parseDouble(reader.readLine().split("\t")[1]);
-        }
-        reader.close();
-        return ws;
     }
 
     /**
@@ -556,7 +492,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         double pass = (1 - hyperparams.get(GEM_MEAN)) * hyperparams.get(GEM_SCALE);
         double[] switchPrior = new double[]{stay, pass};
         emptySwitch = new DirMult(switchPrior);
-        
+
         DirMult dmModel = new DirMult(V, betas[0] * V, uniform);
         double regParam = 0.0;
         this.globalTreeRoot = new SNode(iter, 0, 0, dmModel, regParam, null);
@@ -599,155 +535,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                 throw new RuntimeException("Initialization not supported");
         }
     }
-    
+
+    /**
+     * Initialize the tree structure and assignments by applying LDA recursively
+     * on the input documents.
+     */
     protected void initializeRecursiveLDAAssignments() {
-        if (verbose) {
-            logln("--- Initializing assignments using hierarchical segmented LDA ...");
-        }
-        double[] empBackgroundTopic = new double[V];
-        int[][] docWords = new int[D][];
-        for (int d = 0; d < D; d++) {
-            docWords[d] = new int[docTokenCounts[d]];
-            int count = 0;
-            for (int s = 0; s < words[d].length; s++) {
-                for (int n = 0; n < words[d][s].length; n++) {
-                    docWords[d][count++] = words[d][s][n];
-                    empBackgroundTopic[words[d][s][n]]++;
-                }
-            }
-        }
-
-        for (int v = 0; v < V; v++) {
-            empBackgroundTopic[v] /= tokenCount;
-        }
-
-        int init_burnin = 10;
-        int init_maxiter = 20;
-        int init_samplelag = 5;
-
-        double alpha_1 = 0.1;
-        double alpha_2 = 0.01;
-        double beta_1 = 0.1;
-        double beta_2 = 0.01;
-        int numFirstTopics = 20;
-        int numSecondTopics = 4;
-
-        TwoLevelHierSegLDA sampler = new TwoLevelHierSegLDA();
-        sampler.setVerbose(verbose);
-        sampler.setDebug(debug);
-        sampler.setLog(false);
-        sampler.setReport(false);
-
-        sampler.configure(
-                null,
-                docWords, V, numFirstTopics, numSecondTopics,
-                alpha_1, alpha_2,
-                beta_1, beta_2,
-                initState,
-                paramOptimized, init_burnin, init_maxiter, init_samplelag, 1);
-
-        try {
-            File initFile = new File(this.folder, "hslda-init-"
-                    + numFirstTopics + "-"
-                    + numSecondTopics + ".zip");
-            if (initFile.exists()) {
-                sampler.inputState(initFile);
-            } else {
-                sampler.initialize();
-                sampler.iterate();
-                sampler.outputState(initFile);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
-        setLog(true);
-
-        // initialize structure
-        int topicLevel = 1;
-        int frameLevel = 2;
-        ArrayList<SNode> frameNodes = new ArrayList<SNode>();
-        this.globalTreeRoot.setTopic(empBackgroundTopic);
-        for (int k = 0; k < numFirstTopics; k++) {
-            SNode topicNode = new SNode(iter, k, 1,
-                    new DirMult(V, betas[topicLevel] * V, 1.0 / V),
-                    SamplerUtils.getGaussian(mus[topicLevel], sigmas[topicLevel]),
-                    globalTreeRoot);
-            topicNode.setTopic(sampler.getFirstLevelTopics()[k].getDistribution());
-            globalTreeRoot.addChild(k, topicNode);
-
-            for (int f = 0; f < numSecondTopics; f++) {
-                SNode frameNode = new SNode(iter, f, frameLevel,
-                        new DirMult(V, betas[frameLevel] * V, 1.0 / V),
-                        SamplerUtils.getGaussian(mus[topicLevel], sigmas[topicLevel]), topicNode);
-                frameNode.setTopic(sampler.getSecondLevelTopics()[k][f].getDistribution());
-                topicNode.addChild(f, frameNode);
-                frameNodes.add(frameNode);
-            }
-        }
-
-        logln(printGlobalTree());
-
-        // assign
-        for (int d = 0; d < D; d++) {
-            for (int s = 0; s < words[d].length; s++) {
-//                // create a new table for each sentence
-//                TruncatedStickBreaking stick = new TruncatedStickBreaking(L,
-//                        hyperparams.get(GEM_MEAN), hyperparams.get(GEM_SCALE));
-                STable table = new STable(iter, s, null, d);
-                localRestaurants[d].addTable(table);
-                localRestaurants[d].addCustomerToTable(s, table.getIndex());
-                c[d][s] = table;
-
-                // assume all tokens are at the leave node, choose a path
-                SparseCount sentObs = new SparseCount();
-                for (int n = 0; n < words[d][s].length; n++) {
-                    sentObs.increment(words[d][s][n]);
-                }
-                ArrayList<Double> logprobs = new ArrayList<Double>();
-                for (int ii = 0; ii < frameNodes.size(); ii++) {
-                    double lp = frameNodes.get(ii).getLogProbability(sentObs);
-                    logprobs.add(lp);
-                }
-                int idx = SamplerUtils.logMaxRescaleSample(logprobs);
-                SNode frameNode = frameNodes.get(idx);
-                table.setContent(frameNode);
-                addTableToPath(frameNode);
-
-                // sample level for token
-                for (int n = 0; n < words[d][s].length; n++) {
-                    SNode[] path = getPathFromNode(frameNode);
-                    logprobs = new ArrayList<Double>();
-                    for (int l = 0; l < L; l++) {
-                        double lp = path[l].getLogProbability(words[d][s][n]);
-                        logprobs.add(lp);
-                    }
-                    idx = SamplerUtils.logMaxRescaleSample(logprobs);
-
-                    z[d][s][n] = idx;
-                    sentLevelCounts[d][s][z[d][s][n]]++;
-                    addObservationToNode(path[z[d][s][n]], d, words[d][s][n]);
-                }
-            }
-        }
-
-        if (debug) {
-            validate("After initial assignments");
-        }
-
-        this.sampleTopics();
-
-        if (verbose) {
-            logln("--- --- Start sampling paths for tables\n" + getCurrentState());
-        }
-        for (int d = 0; d < D; d++) {
-            for (STable table : localRestaurants[d].getTables()) {
-                samplePathForTable(d, table, REMOVE, ADD, !OBSERVED, EXTEND);
-            }
-        }
-    }
-
-    protected void initializeRecursiveLDAAssignmentsOld() {
         // wait for background lda or background recursive lda
         if (verbose) {
             logln("--- Initializing assignments using recursive LDA ...");
@@ -759,13 +552,9 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         rLDA.setReport(false);
 
         double[] empBackgroundTopic = new double[V];
-        int[][] docWords = new int[D][];
         for (int d = 0; d < D; d++) {
-            docWords[d] = new int[docTokenCounts[d]];
-            int count = 0;
             for (int s = 0; s < words[d].length; s++) {
                 for (int n = 0; n < words[d][s].length; n++) {
-                    docWords[d][count++] = words[d][s][n];
                     empBackgroundTopic[words[d][s][n]]++;
                 }
             }
@@ -775,11 +564,11 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             empBackgroundTopic[v] /= tokenCount;
         }
 
-        int init_burnin = 250;
-        int init_maxiter = 500;
-        int init_samplelag = 25;
+        int init_burnin = 5;
+        int init_maxiter = 10;
+        int init_samplelag = 1;
 
-        int[] Ks = {16, 3};
+        int[] Ks = {16, 4};
         double[] init_alphas = {0.1, 0.1};
         double[] init_betas = {0.1, 0.1};
         double ratio = 1000;
@@ -787,6 +576,14 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         rLDA.configure(folder, docWords,
                 V, Ks, ratio, init_alphas, init_betas, initState,
                 paramOptimized, init_burnin, init_maxiter, init_samplelag, 1);
+        
+        // debug
+        int dd=123;
+        System.out.println("# sents: " + words[dd].length);
+        for(int s=0; s<words[dd].length; s++){
+            System.out.println(s +"\t" + words[dd][s].length+ "\t" + rawSentences[dd][s]);
+        }
+        System.out.println("--- " + docWords[dd].length);
 
         try {
             File lldaZFile = new File(rLDA.getSamplerFolderPath(), "model.zip");
@@ -807,10 +604,10 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         setLog(true);
         this.globalTreeRoot.setTopic(empBackgroundTopic);
 
+        // Construct initial tree using the structure provided by RecursiveLDA
         HashMap<RLDA, SNode> nodeMap = new HashMap<RLDA, SNode>();
         nodeMap.put(rLDA.getRoot(), globalTreeRoot);
         ArrayList<SNode> leafNodes = new ArrayList<SNode>();
-
         Queue<RLDA> queue = new LinkedList<RLDA>();
         queue.add(rLDA.getRoot());
         while (!queue.isEmpty()) {
@@ -854,59 +651,143 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             }
         }
 
-        if (verbose) {
-            logln(printGlobalTree());
-            outputTopicTopWords(new File(getSamplerFolderPath(), "init-" + TopWordFile), 15);
-        }
-
-        // sample initial assignments
+        // Initialize sentence assignments to path based on the majority of the
+        // sentences' tokens. If all tokens of a sentence are assigned to the 
+        // background topic in RecursiveLDA, store the sentence in a separate 
+        // set called backgroundSents
+        int[][][] initZs = rLDA.getAssingments();
         for (int d = 0; d < D; d++) {
+            HashMap<SNode, ArrayList<Integer>> pathSentList = new HashMap<SNode, ArrayList<Integer>>();
+            ArrayList<Integer> backgroundSents = new ArrayList<Integer>();
+            int count = 0;
             for (int s = 0; s < words[d].length; s++) {
-                // create a new table for each sentence
-                STable table = new STable(iter, s, null, d);
+                HashMap<SNode, Integer> pathTokenCount = new HashMap<SNode, Integer>();
+                for (int n = 0; n < words[d][s].length; n++) {
+                    int leafTopic = initZs[rLDA.getNumLevels() - 1][d][count];
+                    RLDA assignNode = rLDA.getAssignedLeaf(d, count);
+                    SNode pNode = nodeMap.get(assignNode);
+
+                    if (pNode != null) {
+                        SNode sNode = pNode.getChild(leafTopic);
+                        Integer cc = pathTokenCount.get(sNode);
+                        if (cc == null) {
+                            pathTokenCount.put(sNode, 1);
+                        } else {
+                            pathTokenCount.put(sNode, cc + 1);
+                        }
+                    }
+                    count++;
+                }
+
+                int maxCount = 0;
+                SNode asgnNode = null;
+                for (SNode node : pathTokenCount.keySet()) {
+                    if (maxCount < pathTokenCount.get(node)) {
+                        maxCount = pathTokenCount.get(node);
+                        asgnNode = node;
+                    }
+                }
+
+                // all tokens of this sentence are assigned to the background topic
+                if (asgnNode == null) {
+                    backgroundSents.add(s);
+                    continue;
+                }
+
+                ArrayList<Integer> sentList = pathSentList.get(asgnNode);
+                if (sentList == null) {
+                    sentList = new ArrayList<Integer>();
+                }
+                sentList.add(s);
+                if (asgnNode == null) {
+                    throw new RuntimeException("Null key");
+                }
+                pathSentList.put(asgnNode, sentList);
+            }
+
+            // For each of the path that a sentence of this document is assigned
+            // to, create a table and put all sentences assigned to the
+            // corresponding path on this table
+            int tableCount = 0;
+            for (SNode node : pathSentList.keySet()) {
+                ArrayList<Integer> sents = pathSentList.get(node);
+                STable table = new STable(iter, tableCount, node, d);
                 localRestaurants[d].addTable(table);
-                localRestaurants[d].addCustomerToTable(s, table.getIndex());
-                c[d][s] = table;
+                for (int s : sents) {
+                    c[d][s] = table;
+                    localRestaurants[d].addCustomerToTable(s, table.getIndex());
 
-                // assume all tokens are at the leave node, choose a path
-                SparseCount sentObs = new SparseCount();
-                for (int n = 0; n < words[d][s].length; n++) {
-                    sentObs.increment(words[d][s][n]);
+                    // sample level for each token in the sentence
+                    for (int n = 0; n < words[d][s].length; n++) {
+                        SNode[] path = getPathFromNode(node);
+                        ArrayList<Double> logprobs = new ArrayList<Double>();
+                        for (int l = 0; l < L; l++) {
+                            double lp = path[l].getLogProbability(words[d][s][n]);
+                            logprobs.add(lp);
+                        }
+                        int idx = SamplerUtils.logMaxRescaleSample(logprobs);
+
+                        z[d][s][n] = idx;
+                        sentLevelCounts[d][s][z[d][s][n]]++;
+                        addObservationToNode(path[z[d][s][n]], d, words[d][s][n]);
+                    }
                 }
+                tableCount++;
+            }
 
-                ArrayList<Double> logprobs = new ArrayList<Double>();
-                for (int ii = 0; ii < leafNodes.size(); ii++) {
-                    double lp = leafNodes.get(ii).getLogProbability(sentObs);
-                    logprobs.add(lp);
-                }
-                int idx = SamplerUtils.logMaxRescaleSample(logprobs);
-                SNode frameNode = leafNodes.get(idx);
-                table.setContent(frameNode);
-                addTableToPath(frameNode);
+            // For sentences which have all tokens assigned to the background
+            // topic, randomly assign each of them to a path
+            if (!backgroundSents.isEmpty()) {
+                for (int s : backgroundSents) {
+                    // debug
+                    System.out.println(d + ":" + s + ". " + words[d][s].length
+                            + "\t" + this.rawSentences[d][s]);
 
-                // sample level for token
-                for (int n = 0; n < words[d][s].length; n++) {
-                    SNode[] path = getPathFromNode(frameNode);
-                    logprobs = new ArrayList<Double>();
-                    for (int l = 0; l < L; l++) {
-                        double lp = path[l].getLogProbability(words[d][s][n]);
+
+                    // create a new table for each sentence
+                    int tabIdx = localRestaurants[d].getNextTableIndex();
+                    STable table = new STable(iter, tabIdx, null, d);
+                    localRestaurants[d].addTable(table);
+                    localRestaurants[d].addCustomerToTable(s, table.getIndex());
+                    c[d][s] = table;
+
+                    // assume all tokens are at the leave node, choose a path
+                    SparseCount sentObs = new SparseCount();
+                    for (int n = 0; n < words[d][s].length; n++) {
+                        sentObs.increment(words[d][s][n]);
+                    }
+
+                    ArrayList<Double> logprobs = new ArrayList<Double>();
+                    for (int ii = 0; ii < leafNodes.size(); ii++) {
+                        double lp = leafNodes.get(ii).getLogProbability(sentObs);
                         logprobs.add(lp);
                     }
-                    idx = SamplerUtils.logMaxRescaleSample(logprobs);
+                    int idx = SamplerUtils.logMaxRescaleSample(logprobs);
+                    SNode frameNode = leafNodes.get(idx);
+                    table.setContent(frameNode);
+                    addTableToPath(frameNode);
 
-                    z[d][s][n] = idx;
-                    sentLevelCounts[d][s][z[d][s][n]]++;
-                    addObservationToNode(path[z[d][s][n]], d, words[d][s][n]);
+                    // sample level for token
+                    for (int n = 0; n < words[d][s].length; n++) {
+                        SNode[] path = getPathFromNode(frameNode);
+                        logprobs = new ArrayList<Double>();
+                        for (int l = 0; l < L; l++) {
+                            double lp = path[l].getLogProbability(words[d][s][n]);
+                            logprobs.add(lp);
+                        }
+                        idx = SamplerUtils.logMaxRescaleSample(logprobs);
+
+                        z[d][s][n] = idx;
+                        sentLevelCounts[d][s][z[d][s][n]]++;
+                        addObservationToNode(path[z[d][s][n]], d, words[d][s][n]);
+                    }
                 }
-
             }
         }
 
         if (debug) {
             validate("After initial assignments");
         }
-
-        this.sampleTopics();
 
         if (verbose) {
             logln("--- --- Start sampling paths for tables\n" + getCurrentState());
@@ -915,6 +796,13 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             for (STable table : localRestaurants[d].getTables()) {
                 samplePathForTable(d, table, REMOVE, ADD, !OBSERVED, EXTEND);
             }
+        }
+
+        this.sampleTopics();
+
+        if (verbose) {
+            logln("--- --- Finish initializing assignments\n" + getCurrentState());
+            outputTopicTopWords(new File(getSamplerFolderPath(), "init-" + TopWordFile), 15);
         }
     }
 
@@ -991,7 +879,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
             optimizeTopicRegressionParameters();
 
-            if (this.T > 0) {
+            if (this.regularizer != null) {
                 optimizeLexicalRegressionParameters();
             }
 
@@ -1029,7 +917,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             if (debug) {
                 this.validate("Iteration " + iter);
             }
-            
+
 
             float elapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
             logln("Elapsed time iterating: " + elapsedSeconds + " seconds");
@@ -1161,12 +1049,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             node.getContent().changeCount(obs, count);
         }
         int numObs = observations.getCountSum();
-//        node.changeCount(d, STAY, numObs);
-        node.changeCount(STAY, numObs);
+        node.changeCount(d, STAY, numObs);
+//        node.changeCount(STAY, numObs);
         SNode temp = node.getParent();
         while (temp != null) {
-//            temp.changeCount(d, PASS, numObs);
-            temp.changeCount(PASS, numObs);
+            temp.changeCount(d, PASS, numObs);
+//            temp.changeCount(PASS, numObs);
             temp = temp.getParent();
         }
     }
@@ -1199,12 +1087,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             node.getContent().changeCount(obs, -count);
         }
         int numObs = observations.getCountSum();
-//        node.changeCount(d, STAY, -numObs);
-        node.changeCount(STAY, -numObs);
+        node.changeCount(d, STAY, -numObs);
+//        node.changeCount(STAY, -numObs);
         SNode temp = node.getParent();
         while (temp != null) {
-//            temp.changeCount(d, PASS, -numObs);
-            temp.changeCount(PASS, -numObs);
+            temp.changeCount(d, PASS, -numObs);
+//            temp.changeCount(PASS, -numObs);
             temp = temp.getParent();
         }
 
@@ -1221,12 +1109,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
      */
     void removeObseravtionFromNode(SNode node, int d, int obs) {
         node.getContent().decrement(obs);
-//        node.decrementCount(d, STAY);
-        node.decrementCount(STAY);
+        node.decrementCount(d, STAY);
+//        node.decrementCount(STAY);
         SNode temp = node.getParent();
         while (temp != null) {
-//            temp.decrementCount(d, PASS);
-            temp.decrementCount(PASS);
+            temp.decrementCount(d, PASS);
+//            temp.decrementCount(PASS);
             temp = temp.getParent();
         }
     }
@@ -1242,12 +1130,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
      */
     void addObservationToNode(SNode node, int d, int obs) {
         node.getContent().increment(obs);
-//        node.incrementCount(d, STAY);
-        node.incrementCount(STAY);
+        node.incrementCount(d, STAY);
+//        node.incrementCount(STAY);
         SNode temp = node.getParent();
         while (temp != null) {
-//            temp.incrementCount(d, PASS);
-            temp.incrementCount(PASS);
+            temp.incrementCount(d, PASS);
+//            temp.incrementCount(PASS);
             temp = temp.getParent();
         }
     }
@@ -1365,7 +1253,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                 double authorMean = mean;
                 for (int dd : authorDocIndices[authors[d]]) {
                     if (dd != d) {
-                        authorMean += docWeights[dd] * (docTopicWeights[dd] + docLexicalWeights[dd]) / docTokenCounts[dd];
+                        authorMean += docWeights[dd] * (docTopicWeights[dd]
+                                + docLexicalWeights[dd]) / docTokenCounts[dd];
                     }
                 }
 
@@ -1415,12 +1304,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
         double passLogProb = 0.0;
         for (int l = 0; l < L; l++) {
-//            double stayLogProb = path[l].getSwitchLogProbability(d, STAY);
-            double stayLogProb = path[l].getSwitchLogProbability(STAY);
+            double stayLogProb = path[l].getSwitchLogProbability(d, STAY);
+//            double stayLogProb = path[l].getSwitchLogProbability(STAY);
             logprobs[l] = passLogProb + stayLogProb;
 
-//            passLogProb = path[l].getSwitchLogProbability(d, PASS);
-            passLogProb = path[l].getSwitchLogProbability(PASS);
+            passLogProb = path[l].getSwitchLogProbability(d, PASS);
+//            passLogProb = path[l].getSwitchLogProbability(PASS);
         }
 
         return logprobs;
@@ -1443,8 +1332,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                 lvlSwitchCounts.put(PASS, stayAndPassCounts[l] - lvlCounts[l]);
             }
 
-//            val += path[l].getSwitchLogProbability(d, lvlSwitchCounts);
-            val += path[l].getSwitchLogProbability(lvlSwitchCounts);
+            val += path[l].getSwitchLogProbability(d, lvlSwitchCounts);
+//            val += path[l].getSwitchLogProbability(lvlSwitchCounts);
         }
         return val;
     }
@@ -1520,7 +1409,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                     addTopicWeight += path[l].getRegressionParameter() * sentLevelCounts[d][s][l];
                 }
 
-                double mean = docWeights[d] * (docTopicWeights[d] + docLexicalWeights[d] + addTopicWeight) / docTokenCounts[d];
+                double mean = docWeights[d] * (docTopicWeights[d]
+                        + docLexicalWeights[d] + addTopicWeight) / docTokenCounts[d];
 
                 double authorMean = mean;
                 for (int dd : authorDocIndices[authors[d]]) {
@@ -1731,7 +1621,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     }
 
     /**
-     * Sample topics of each tree node
+     * Sample topics of each tree node.
      */
     protected void sampleTopics() {
         // get all leaves of the tree
@@ -1804,8 +1694,8 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         double[][] authorLexDesignMatrix = new double[A][C];
         for (int a = 0; a < A; a++) {
             for (int d : authorDocIndices[a]) {
-                for (int ii = 0; ii < C; ii++) {
-                    authorLexDesignMatrix[a][ii] += docWeights[d] * docLexicalDesignMatrix[d][ii];
+                for (int cc = 0; cc < C; cc++) {
+                    authorLexDesignMatrix[a][cc] += docWeights[d] * docLexicalDesignMatrix[d][cc];
                 }
             }
         }
@@ -1818,7 +1708,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             int v = this.lexicalList.get(ii);
             this.lexicalWeights.set(v, weights[ii]);
         }
-        this.updateDocumentLexicalWeights();
+        this.updateLexicalWeights();
     }
 
     /**
@@ -1871,7 +1761,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         for (int i = 0; i < numNodes; i++) {
             flattenTree.get(i).setRegressionParameter(weights[i]);
         }
-        this.updateDocumentTopicWeights();
+        this.updateTopicWeights();
     }
 
     ArrayList<SNode> flattenTreeWithoutRoot() {
@@ -2216,6 +2106,111 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
     @Override
     public void validate(String msg) {
         logln("Validating ... " + msg);
+
+        validateModel(msg);
+
+        validateAssignments(msg);
+    }
+
+    protected void validateModel(String msg) {
+        Stack<SNode> stack = new Stack<SNode>();
+        stack.add(globalTreeRoot);
+        while (!stack.isEmpty()) {
+            SNode node = stack.pop();
+
+            if (!isLeafNode(node)) {
+                int childNumCusts = 0;
+
+                for (SNode child : node.getChildren()) {
+                    childNumCusts += child.getNumCustomers();
+                    stack.add(child);
+                }
+
+                if (childNumCusts != node.getNumCustomers()) {
+                    throw new RuntimeException(msg + ". Numbers of customers mismatch. "
+                            + node.toString());
+                }
+            }
+
+            if (this.isLeafNode(node) && node.isEmpty()) {
+                throw new RuntimeException(msg + ". Leaf node " + node.toString()
+                        + " is empty");
+            }
+        }
+    }
+
+    protected void validateAssignments(String msg) {
+        // validate the stochastic switching variables at each node
+        Stack<SNode> stack = new Stack<SNode>();
+        stack.add(globalTreeRoot);
+        while (!stack.isEmpty()) {
+            SNode node = stack.pop();
+            for (SNode child : node.getChildren()) {
+                stack.add(child);
+            }
+            for (DirMult swch : node.getSwitches().values()) {
+                swch.validate(msg);
+            }
+        }
+
+        for (int d = 0; d < D; d++) {
+            int totalCusts = 0;
+            for (STable table : localRestaurants[d].getTables()) {
+                totalCusts += table.getNumCustomers();
+            }
+            if (totalCusts != words[d].length) {
+                for (STable table : localRestaurants[d].getTables()) {
+                    System.out.println(table.toString() + ". customers: " + table.getCustomers().toString());
+                }
+                throw new RuntimeException(msg + ". Numbers of customers in restaurant " + d
+                        + " mismatch. " + totalCusts + " vs. " + words[d].length);
+            }
+
+            HashMap<STable, Integer> tableCustCounts = new HashMap<STable, Integer>();
+            for (int s = 0; s < words[d].length; s++) {
+                Integer count = tableCustCounts.get(c[d][s]);
+
+                if (count == null) {
+                    tableCustCounts.put(c[d][s], 1);
+                } else {
+                    tableCustCounts.put(c[d][s], count + 1);
+                }
+            }
+
+            if (tableCustCounts.size() != localRestaurants[d].getNumTables()) {
+                throw new RuntimeException(msg + ". Numbers of tables mismatch in"
+                        + " restaurant " + d);
+            }
+
+            for (STable table : localRestaurants[d].getTables()) {
+                if (table.getNumCustomers() != tableCustCounts.get(table)) {
+                    System.out.println("Table: " + table.toString());
+
+                    for (int s : table.getCustomers()) {
+                        System.out.println("--- s = " + s + ". " + c[d][s].toString());
+                    }
+                    System.out.println(tableCustCounts.get(table));
+
+
+                    throw new RuntimeException(msg + ". Number of customers "
+                            + "mismatch. Table " + table.toString()
+                            + ". " + table.getNumCustomers() + " vs. " + tableCustCounts.get(table));
+                }
+            }
+        }
+
+        if (docTopicWeights != null) {
+            for (int d = 0; d < D; d++) {
+                double topicWeight = 0.0;
+                for (int s = 0; s < words[d].length; s++) {
+                    topicWeight += computeTopicWeight(d, s);
+                }
+                if (Math.abs(topicWeight - docTopicWeights[d]) > 0.01) {
+                    throw new RuntimeException(msg + ". Topic weights of document " + d
+                            + " mismatch. " + topicWeight + " vs. " + docTokenCounts[d]);
+                }
+            }
+        }
     }
 
     @Override
@@ -2344,18 +2339,18 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                     assignStr.append(table.getContent().getPathString()).append("\n");
                 }
             }
-            
+
             stack = new Stack<SNode>();
             stack.add(globalTreeRoot);
             while (!stack.isEmpty()) {
                 SNode node = stack.pop();
                 modelStr.append(node.getPathString()).append("\n");
-                modelStr.append(DirMult.output(node.getSwitch())).append("\n");
-//                modelStr.append(node.switches.size()).append("\n");
-//                for(int dd : node.switches.keySet()) {
-//                    modelStr.append(dd).append("\n");
-//                    modelStr.append(DirMult.output(node.switches.get(dd))).append("\n");
-//                }
+//                modelStr.append(DirMult.output(node.getSwitch())).append("\n");
+                modelStr.append(node.switches.size()).append("\n");
+                for (int dd : node.switches.keySet()) {
+                    modelStr.append(dd).append("\n");
+                    modelStr.append(DirMult.output(node.switches.get(dd))).append("\n");
+                }
 
                 for (SNode child : node.getChildren()) {
                     stack.add(child);
@@ -2396,6 +2391,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         if (verbose) {
             logln("--- Reading state from " + filepath + "\n");
         }
+        throw new RuntimeException("To be implemented");
     }
 
     void inputModel(String zipFilepath) {
@@ -2578,7 +2574,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                     + outputFile);
         }
     }
-    
+
     public void outputHTML(
             File htmlFile,
             String[] docIds,
@@ -2679,7 +2675,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
                     int s = Integer.parseInt(sent.getObject().split("-")[1]);
 
                     String debateId = docIds[d].substring(0, docIds[d].indexOf("_"));
-                    if(debateId.startsWith("112-") || debateId.startsWith("111-")) {
+                    if (debateId.startsWith("112-") || debateId.startsWith("111-")) {
                         debateId = debateId.substring(4);
                     }
                     str.append("<a href=\"")
@@ -2707,7 +2703,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         writer.write(str.toString());
         writer.close();
     }
-    
+
     private HashMap<SNode, ArrayList<RankingItem<String>>> getRankingSentences() {
         HashMap<SNode, ArrayList<RankingItem<String>>> pathRankSentMap =
                 new HashMap<SNode, ArrayList<RankingItem<String>>>();
@@ -2739,184 +2735,12 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
         return pathRankSentMap;
     }
 
-//    private void testSampler(int[][][] newWords, int[] newAuthors) {
-//        if (verbose) {
-//            logln("Test sampling ...");
-//        }
-//        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-//        if (!reportFolder.exists()) {
-//            throw new RuntimeException("Report folder does not exist");
-//        }
-//        String[] filenames = reportFolder.list();
-//
-//        File iterPredFolder = new File(getSamplerFolderPath(), IterPredictionFolder);
-//        IOUtils.createFolder(iterPredFolder);
-//
-//        try {
-//            for (int i = 0; i < filenames.length; i++) {
-//                String filename = filenames[i];
-//                if (!filename.contains("zip")) {
-//                    continue;
-//                }
-//
-//                File partialResultFile = new File(iterPredFolder, IOUtils.removeExtension(filename) + ".txt");
-//                sampleNewDocuments(
-//                        new File(reportFolder, filename),
-//                        newWords, newAuthors,
-//                        partialResultFile.getAbsolutePath());
-//            }
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            throw new RuntimeException("Exception while sampling during test time.");
-//        }
-//    }
-//
-//    private void sampleNewDocuments(
-//            File stateFile,
-//            int[][][] newWords,
-//            int[] newAuthors,
-//            String outputResultFile) throws Exception {
-//        if (verbose) {
-//            logln("\nPerform regression using model from " + stateFile);
-//        }
-//
-//        try {
-//            inputModel(stateFile.getAbsolutePath());
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            System.exit(1);
-//        }
-//
-//
-//        words = newWords;
-//        responses = null; // for evaluation
-//        D = words.length;
-//
-//        sentCount = 0;
-//        tokenCount = 0;
-//        docTokenCounts = new int[D];
-//        for (int d = 0; d < D; d++) {
-//            sentCount += words[d].length;
-//            for (int s = 0; s < words[d].length; s++) {
-//                tokenCount += words[d][s].length;
-//                docTokenCounts[d] += words[d][s].length;
-//            }
-//        }
-//
-//        logln("--- V = " + V);
-//        logln("--- # documents = " + D); // number of groups
-//        logln("--- # sentences = " + sentCount);
-//        logln("--- # tokens = " + tokenCount);
-//
-//        // initialize structure for test data
-//        initializeDataStructure();
-//
-//        if (verbose) {
-//            logln("Initialized data structure");
-//            logln(printGlobalTreeSummary());
-//            logln(printLocalRestaurantSummary());
-//        }
-//
-//        // initialize random assignments
-//        initializeRandomAssignmentsNewDocuments();
-//
-//        updateDocumentTopicWeights();
-//        updateDocumentLexicalWeights();
-//
-//        if (verbose) {
-//            logln("Initialized random assignments");
-//            logln(printGlobalTreeSummary());
-//            logln(printLocalRestaurantSummary());
-//        }
-//
-//        if (debug) {
-//            validateAssignments("Initialized");
-//        }
-//
-//        // iterate
-//        ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
-//        for (iter = 0; iter < MAX_ITER; iter++) {
-//            for (int d = 0; d < D; d++) {
-//                for (int s = 0; s < words[d].length; s++) {
-//                    if (words[d].length > 1) // if this document has only 1 sentence, no sampling is needed
-//                    {
-//                        sampleTableForSentence(d, s, REMOVE, ADD, !OBSERVED, !EXTEND);
-//                    }
-//
-//                    for (int n = 0; n < words[d][s].length; n++) {
-//                        sampleLevelForToken(d, s, n, REMOVE, ADD, !OBSERVED);
-//                    }
-//                }
-//
-//                for (STable table : localRestaurants[d].getTables()) {
-//                    samplePathForTable(d, table, REMOVE, ADD, !OBSERVED, !EXTEND);
-//                }
-//            }
-//
-//            if (verbose && iter % LAG == 0) {
-//                logln("--- iter = " + iter + " / " + MAX_ITER);
-//            }
-//
-//            if (iter >= BURN_IN && iter % LAG == 0) {
-//                this.updateDocumentLexicalWeights();
-//                this.updateDocumentTopicWeights();
-//
-//                double[] predResponses = getRegressionValues();
-//                predResponsesList.add(predResponses);
-//            }
-//        }
-//
-//        // output result during test time 
-//        BufferedWriter writer = IOUtils.getBufferedWriter(outputResultFile);
-//        for (int d = 0; d < D; d++) {
-//            writer.write(Integer.toString(d));
-//
-//            for (int ii = 0; ii < predResponsesList.size(); ii++) {
-//                writer.write("\t" + predResponsesList.get(ii)[d]);
-//            }
-//            writer.write("\n");
-//        }
-//        writer.close();
-//    }
-//
-//    private void initializeRandomAssignmentsNewDocuments() {
-//        if (verbose) {
-//            logln("--- Initializing random assignments ...");
-//        }
-//
-//        for (int d = 0; d < D; d++) {
-//            for (int s = 0; s < words[d].length; s++) {
-//                // create a new table for each sentence
-//                STable table = new STable(iter, s, null, d,
-//                        new TruncatedStickBreaking(L, hyperparams.get(GEM_MEAN),
-//                        hyperparams.get(GEM_SCALE)));
-//                localRestaurants[d].addTable(table);
-//                localRestaurants[d].addCustomerToTable(s, table.getIndex());
-//                c[d][s] = table;
-//
-//                // initialize all tokens at the leaf node first
-//                for (int n = 0; n < words[d][s].length; n++) {
-//                    z[d][s][n] = L - 1;
-//                    table.incrementLevelCount(z[d][s][n]);
-//                    sentLevelCounts[d][s][z[d][s][n]]++;
-//                }
-//            }
-//        }
-//
-//        for (int d = 0; d < D; d++) {
-//            for (STable table : localRestaurants[d].getTables()) {
-//                samplePathForTable(d, table, !REMOVE, ADD, !OBSERVED, !EXTEND);
-//            }
-//        }
-//    }
-
     class SNode extends TopicTreeNode<SNode, DirMult> {
 
         private final int born;
         private int numCustomers;
         private double regression;
-//        private HashMap<Integer, DirMult> switches;
-        private DirMult gate;
+        private HashMap<Integer, DirMult> switches;
 
         SNode(int iter, int index, int level,
                 DirMult content,
@@ -2926,8 +2750,7 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
             this.born = iter;
             this.numCustomers = 0;
             this.regression = regParam;
-//            this.switches = new HashMap<Integer, DirMult>();
-            this.gate = emptySwitch.clone();
+            this.switches = new HashMap<Integer, DirMult>();
         }
 
         public int getIterationCreated() {
@@ -2936,66 +2759,70 @@ public class AuthorSHLDA extends AbstractSampler implements Regressor<AuthorResp
 
         public double getSwitchLogLikelihood() {
             double llh = 0.0;
-//            for (int d : this.switches.keySet()) {
-//                llh += this.switches.get(d).getLogLikelihood();
-//            }
-            llh = this.gate.getLogLikelihood();
+            for (int d : this.switches.keySet()) {
+                llh += this.switches.get(d).getLogLikelihood();
+            }
             return llh;
         }
 
-        public double getSwitchLogProbability(int type) {
-//            DirMult swch = this.switches.get(d);
-//            if (gate != null) {
-                return gate.getLogLikelihood(type);
-//            } else {
-//                return emptySwitch.getLogLikelihood(type);
-//            }
+        public double getSwitchLogProbability(int d, int type) {
+            DirMult swch = this.switches.get(d);
+            if (swch != null) {
+                return swch.getLogLikelihood(type);
+            } else {
+                return emptySwitch.getLogLikelihood(type);
+            }
         }
 
-        public double getSwitchLogProbability(HashMap<Integer, Integer> typeCounts) {
-//            if (gate != null) {
-                return gate.getLogLikelihood(typeCounts);
-//            } else {
-//                return emptySwitch.getLogLikelihood(typeCounts);
-//            }
+        public double getSwitchLogProbability(int d, HashMap<Integer, Integer> typeCounts) {
+            DirMult swch = this.switches.get(d);
+            if (swch != null) {
+                return swch.getLogLikelihood(typeCounts);
+            } else {
+                return emptySwitch.getLogLikelihood(typeCounts);
+            }
         }
 
-        public DirMult getSwitch() {
-            return this.gate;
+        public HashMap<Integer, DirMult> getSwitches() {
+            return this.switches;
         }
 
-//        public void setSwitch(int d, DirMult s) {
-//            this.switches.put(d, s);
-//        }
-
-        public int getCount(int type) {
-            return this.gate.getCount(type);
+        public DirMult getSwitch(int d) {
+            return this.switches.get(d);
         }
 
-        public void decrementCount(int type) {
-            this.changeCount(type, -1);
+        public void setSwitch(int d, DirMult s) {
+            this.switches.put(d, s);
         }
 
-        public void incrementCount(int type) {
-            this.changeCount(type, 1);
+        public int getCount(int d, int type) {
+            return this.switches.get(d).getCount(type);
         }
 
-        public void changeCount(int type, int delta) {
-//            DirMult swch = this.switches.get(d);
-//            if (swch == null) {
-//                swch = emptySwitch.clone();
-//            }
-            gate.changeCount(type, delta);
+        public void decrementCount(int d, int type) {
+            this.changeCount(d, type, -1);
+        }
 
-            if (gate.getCount(type) < 0) {
-                throw new RuntimeException("Negative count " + gate.getCount(type));
+        public void incrementCount(int d, int type) {
+            this.changeCount(d, type, 1);
+        }
+
+        public void changeCount(int d, int type, int delta) {
+            DirMult swch = this.switches.get(d);
+            if (swch == null) {
+                swch = emptySwitch.clone();
+            }
+            swch.changeCount(type, delta);
+
+            if (swch.getCount(type) < 0) {
+                throw new RuntimeException("Negative count " + swch.getCount(type));
             }
 
-//            if (swch.isEmpty()) {
-//                this.switches.remove(d);
-//            } else {
-//                this.switches.put(d, swch);
-//            }
+            if (swch.isEmpty()) {
+                this.switches.remove(d);
+            } else {
+                this.switches.put(d, swch);
+            }
         }
 
         /**

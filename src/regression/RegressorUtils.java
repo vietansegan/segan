@@ -60,7 +60,10 @@ public class RegressorUtils {
             double[] predValues) {
         if (instanceIds.length != trueValues.length
                 || instanceIds.length != predValues.length) {
-            throw new RuntimeException("Lengths mismatched");
+            throw new RuntimeException("Lengths mismatched. "
+                    + "\t" + instanceIds.length
+                    + "\t" + trueValues.length
+                    + "\t" + predValues.length);
         }
 
         try {

@@ -3,6 +3,7 @@ package util;
 import java.io.BufferedReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * Class to store and perform stop word removal for English.
@@ -11,48 +12,61 @@ import java.util.Arrays;
  */
 public class StopwordRemoval {
 
-    private String[] stopwords;
+    private ArrayList<String> stopwords;
 
     public StopwordRemoval() {
-        this.stopwords = sws;
+        this.stopwords = new ArrayList<String>(Arrays.asList(sws));
+        Collections.sort(stopwords);
     }
 
     public StopwordRemoval(Stemmer stemmer) {
-        this.stopwords = new String[sws.length];
-        for (int ii = 0; ii < this.stopwords.length; ii++) {
-            this.stopwords[ii] = stemmer.stem(sws[ii]);
+        this.stopwords = new ArrayList<String>();
+        for(int ii=0; ii<sws.length; ii++) {
+            this.stopwords.add(stemmer.stem(sws[ii]));
         }
+        Collections.sort(stopwords);
     }
 
     public StopwordRemoval(String stopwordFile) {
         try {
-            ArrayList<String> stopwordList = new ArrayList<String>();
+            stopwords = new ArrayList<String>();
             BufferedReader reader = IOUtils.getBufferedReader(stopwordFile);
             String line;
             while ((line = reader.readLine()) != null) {
-                stopwordList.add(line);
+                stopwords.add(line);
             }
             reader.close();
-            this.stopwords = (String[]) stopwordList.toArray(new String[0]);
+            Collections.sort(stopwords);
         } catch (Exception e) {
             e.printStackTrace();
             System.err.println("Throwing exception while loading stop words"
                     + " from file " + stopwordFile);
             System.err.println("Using the default list of stop words instead.");
-            this.stopwords = sws;
+            this.stopwords = new ArrayList<String>(Arrays.asList(sws));
+        Collections.sort(stopwords);
         }
     }
 
-    public void setStopwords(String[] sws) {
+    public void setStopwords(ArrayList<String> sws) {
         this.stopwords = sws;
     }
 
-    public String[] getStopwords() {
+    public ArrayList<String> getStopwords() {
         return this.stopwords;
     }
 
     public boolean isStopword(String word) {
-        return Arrays.binarySearch(this.stopwords, word) < 0 ? false : true;
+        return Collections.binarySearch(this.stopwords, word) > 0 ? true : false;
+    }
+
+    public static void main(String[] args) {
+        String token = "they";
+        Stemmer stemmer = new Stemmer();
+        String stem = stemmer.stem(token);
+        System.out.println("token = " + token + "\t stem = " + stem);
+
+        StopwordRemoval sr = new StopwordRemoval(stemmer);
+        System.out.println(sr.isStopword(stem));
     }
     private static String[] sws = {
         "a",

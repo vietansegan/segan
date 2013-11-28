@@ -23,12 +23,13 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
         super(index, level, content, parent);
         this.pseudoCounts = new SparseCount();
     }
-    
+
     public void setTopic(double[] topic) {
         this.content.setSamplingDistribution(topic);
         this.logTopics = new double[topic.length];
-        for(int v=0; v<topic.length; v++)
+        for (int v = 0; v < topic.length; v++) {
             this.logTopics[v] = Math.log(topic[v]);
+        }
     }
 
     /**

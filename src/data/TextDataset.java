@@ -85,8 +85,8 @@ public class TextDataset extends AbstractTokenizeDataset {
         this.tfidfs = new double[V];
         this.idfs = new double[V];
         for (int v = 0; v < V; v++) {
-            double tf = Math.log(tfs.getCount(v));
-            double idf = Math.log(D) - Math.log(dfs.getCount(v));
+            double tf = Math.log(tfs.getCount(v) + 1);
+            double idf = Math.log(D) - Math.log(dfs.getCount(v) + 1);
             this.tfidfs[v] = tf * idf;
             this.idfs[v] = idf;
         }
@@ -571,6 +571,43 @@ public class TextDataset extends AbstractTokenizeDataset {
                         + rawSentFile);
             } finally {
                 return;
+            }
+        }
+    }
+
+    /**
+     * Filter out sentences that are too short
+     *
+     * @param minSentTokenCount Number of tokens that a sentence must have
+     */
+    public void filterShortSentences(int minSentTokenCount) {
+        if (words == null) {
+            throw new RuntimeException("Empty documents");
+        }
+        for (int d = 0; d < words.length; d++) {
+            ArrayList<Integer> filteredDocWords = new ArrayList<Integer>();
+            for (int s = 0; s < sentWords[d].length; s++) {
+                if (sentWords[d][s].length < minSentTokenCount) {
+                    sentWords[d][s] = new int[0];
+                } else {
+                    for (int n = 0; n < sentWords[d][s].length; n++) {
+                        filteredDocWords.add(sentWords[d][s][n]);
+                    }
+                }
+            }
+
+            if (filteredDocWords.isEmpty()) {
+                System.out.println();
+                logln("[WARNING] Empty document. d = " + d
+                        + ". original count = " + words[d].length);
+                for (int s = 0; s < sentRawWords[d].length; s++) {
+                    logln(s + "\t" + sentRawWords[d][s]);
+                }
+            }
+
+            words[d] = new int[filteredDocWords.size()];
+            for (int n = 0; n < words[d].length; n++) {
+                words[d][n] = filteredDocWords.get(n);
             }
         }
     }

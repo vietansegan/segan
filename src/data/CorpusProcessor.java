@@ -122,7 +122,7 @@ public class CorpusProcessor {
 
         try {
             this.stemmer = new Stemmer();
-            if (lemmatization) {
+            if (this.lemmatization) {
                 this.stopwordRemoval = new StopwordRemoval(stemmer);
             } else {
                 this.stopwordRemoval = new StopwordRemoval();
@@ -330,8 +330,7 @@ public class CorpusProcessor {
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
                     int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
-                    if (numericTerm < 0) // this term is out-of-vocab
-                    {
+                    if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
                     numericDoc.add(numericTerm);
@@ -683,7 +682,7 @@ public class CorpusProcessor {
 
     /**
      * Normalize a token. This includes - turn the token into lowercase - remove
-     * punctuation - discard the reduced token if is stopword
+     * punctuation - discard the reduced token if is stop-word
      */
     public String normalize(String token) {
         StringBuilder normToken = new StringBuilder();

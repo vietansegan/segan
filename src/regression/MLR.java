@@ -1,6 +1,5 @@
 package regression;
 
-import regression.AbstractRegressor;
 import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
@@ -23,9 +22,9 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
 
         L1, L2
     }
-    private Regularizer regularizer;
-    private double[] weights;
-    private double param;
+    protected Regularizer regularizer;
+    protected double[] weights;
+    protected double param;
 
     public MLR(String folder, Regularizer reg, double t) {
         super(folder);
@@ -66,7 +65,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
     }
 
     @Override
-    public void train(ResponseTextDataset trainData) {
+    public void train(D trainData) {
         if (verbose) {
             System.out.println("Training ...");
         }
@@ -103,7 +102,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
     }
 
     @Override
-    public void test(ResponseTextDataset testData) {
+    public void test(D testData) {
         if (verbose) {
             System.out.println("Testing ...");
         }

@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.author;
 
 import core.AbstractSampler;
 import data.AuthorResponseTextDataset;
@@ -458,11 +458,11 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             logprobs[k] =
                     docTopics[d].getLogLikelihood(k)
                     + topicWords[k].getLogLikelihood(words[d][n]);
-            if (observe) {
-                double mean = authorPredValues[authors[d]] + regParams[k] / words[d].length;
-                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
-                        mean, Math.sqrt(hyperparams.get(RHO)));
-            }
+//            if (observe) {
+//                double mean = authorPredValues[authors[d]] + regParams[k] / words[d].length;
+//                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
+//                        mean, Math.sqrt(hyperparams.get(RHO)));
+//            }
         }
         int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
 
