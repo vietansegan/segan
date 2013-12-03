@@ -258,6 +258,7 @@ public class ResponseTextDataset extends TextDataset {
             addOption("min-df", "Document frequency minimum cutoff");
             addOption("max-df", "Document frequency maximum cutoff");
             addOption("min-doc-length", "Document minimum length");
+            addOption("min-word-length", "Word minimum length");
 
             // cross validation
             addOption("num-folds", "Number of folds. Default 5.");
@@ -316,6 +317,7 @@ public class ResponseTextDataset extends TextDataset {
         int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 0);
         int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
         int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 1);
+        int minWordLength = CLIUtils.getIntegerArgument(cmd, "min-word-length", 1);
 
         boolean stopwordFilter = cmd.hasOption("s");
         boolean lemmatization = cmd.hasOption("l");
@@ -336,6 +338,7 @@ public class ResponseTextDataset extends TextDataset {
                 vocDocFreqMinCutoff,
                 vocDocFreqMaxCutoff,
                 docTypeCountCutoff,
+                minWordLength,
                 stopwordFilter,
                 lemmatization);
 

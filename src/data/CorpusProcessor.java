@@ -47,8 +47,10 @@ public class CorpusProcessor {
     protected int vocabDocFreqMinCutoff; // minimum document frequency (for all items in the vocab, including unigrams and bigrams)
     protected int vocabDocFreqMaxCutoff; // maximum document frequency 
     protected int docTypeCountCutoff;  // minumum number of types in a document
+    protected int minWordLength = 3; // minimum length of a word type 
     protected boolean filterStopwords = true; // whether stopwords are filtered
     protected boolean lemmatization = false; // whether lemmatization should be performed
+    
     // tools
     protected Tokenizer tokenizer;
     protected SentenceDetector sentenceDetector;
@@ -80,7 +82,7 @@ public class CorpusProcessor {
                 corp.filterStopwords,
                 corp.lemmatization);
     }
-
+    
     public CorpusProcessor(
             int unigramCountCutoff,
             int bigramCountCutoff,
@@ -91,6 +93,33 @@ public class CorpusProcessor {
             int vocDocFreqMinCutoff,
             int vocDocFreqMaxCutoff,
             int docTypeCountCutoff,
+            boolean filterStopwords,
+            boolean lemmatization) {
+        this(unigramCountCutoff,
+                bigramCountCutoff,
+                bigramScoreCutoff,
+                maxVocabSize,
+                vocTermFreqMinCutoff,
+                vocTermFreqMaxCutoff,
+                vocDocFreqMinCutoff,
+                vocDocFreqMaxCutoff,
+                docTypeCountCutoff,
+                3,
+                filterStopwords,
+                lemmatization);
+    }
+    
+    public CorpusProcessor(
+            int unigramCountCutoff,
+            int bigramCountCutoff,
+            double bigramScoreCutoff,
+            int maxVocabSize,
+            int vocTermFreqMinCutoff,
+            int vocTermFreqMaxCutoff,
+            int vocDocFreqMinCutoff,
+            int vocDocFreqMaxCutoff,
+            int docTypeCountCutoff,
+            int minWordLength,
             boolean filterStopwords,
             boolean lemmatization) {
         this.chiSquareTest = new ChiSquareTest();
@@ -109,6 +138,8 @@ public class CorpusProcessor {
         this.vocabDocFreqMaxCutoff = vocDocFreqMaxCutoff;
 
         this.docTypeCountCutoff = docTypeCountCutoff;
+        this.minWordLength = minWordLength;
+        
         this.filterStopwords = filterStopwords;
         this.lemmatization = lemmatization;
 
@@ -698,7 +729,7 @@ public class CorpusProcessor {
             reduced = this.stemmer.stem(reduced);
         }
 
-        if (reduced.length() < 3
+        if (reduced.length() < minWordLength
                 || token.matches("[^A-Za-z]+")
                 || Character.isDigit(token.charAt(0))) {
             return "";

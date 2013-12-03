@@ -194,7 +194,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (verbose) {
             logln("Initializing ...");
         }
-        
+
         // compute the design matrix for lexical regression
         if (lexReg) {
             this.docLexDesignMatrix = new double[D][V];
@@ -538,7 +538,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             docRegressMeans[d] += topicParams[z[d][n]] / words[d].length;
         }
     }
-    
+
     private void updateTopicRegressionParameters() {
         double[][] designMatrix;
     }
