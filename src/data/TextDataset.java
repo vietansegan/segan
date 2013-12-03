@@ -601,7 +601,7 @@ public class TextDataset extends AbstractTokenizeDataset {
                 logln("[WARNING] Empty document. d = " + d
                         + ". original count = " + words[d].length);
                 for (int s = 0; s < sentRawWords[d].length; s++) {
-                    logln(s + "\t" + sentRawWords[d][s]);
+                    logln(">>> " + s + "\t" + sentRawWords[d][s]);
                 }
             }
 

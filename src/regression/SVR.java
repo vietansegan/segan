@@ -16,7 +16,7 @@ import util.CLIUtils;
  */
 public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
 
-    private SVMLight svm;
+    protected SVMLight svm;
 
     public SVR(String folder) {
         super(folder);

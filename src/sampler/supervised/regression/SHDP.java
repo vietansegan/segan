@@ -1,15 +1,9 @@
 package sampler.supervised.regression;
 
-import regression.RegressorUtils;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
 import core.AbstractSampler.InitialState;
-import core.crossvalidation.CrossValidation;
-import core.crossvalidation.Fold;
-import core.crossvalidation.Instance;
-import core.crossvalidation.RegressionDocumentInstance;
-import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -17,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import regression.RegressorUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
@@ -30,7 +25,6 @@ import util.StatisticsUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
-import util.normalizer.ZNormalizer;
 
 /**
  *

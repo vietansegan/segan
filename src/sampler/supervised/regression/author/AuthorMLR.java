@@ -151,7 +151,8 @@ public class AuthorMLR extends MLR<AuthorResponseTextDataset> {
             GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, trAuthorResponses, param);
             this.weights = mlr.solve();
         } else if (regularizer == Regularizer.L2) {
-            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trAuthorResponses, param);
+            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trAuthorResponses);
+            mlr.setSigma(param);
             this.weights = mlr.solve();
         } else {
             throw new RuntimeException(regularizer + " regularization is not supported");

@@ -12,10 +12,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
-import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import regression.MLR;
 import regression.MLR.Regularizer;
 import regression.Regressor;
 import regression.RegressorUtils;
@@ -49,7 +49,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     public static final int PSEUDO_TABLE_INDEX = -1;
     public static final int PSEUDO_NODE_INDEX = -1;
     // hyperparameter indices
-    public static final int ALPHA = 0;
+    public static final int ALPHA = 0; // DP parameter for document's CRP
     public static final int RHO = 1;
     public static final int GEM_MEAN = 2;
     public static final int GEM_SCALE = 3;
@@ -57,7 +57,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     public static final int TAU_SCALE = 5;
     // hyperparameters
     protected double[] betas;  // topics concentration parameter
-    protected double[] gammas; // DP
+    protected double[] gammas; // DP param for nCRP
     protected double[] mus;    // regression parameter means
     protected double[] sigmas; // regression parameter variances
     // input data
@@ -319,6 +319,10 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         for (int i = 0; i < gammas.length; i++) {
             str.append("-").append(formatter.format(hyperparams.get(count++)));
         }
+        count += mus.length;
+        str.append("_s");
+        for(int i=0; i<sigmas.length; i++)
+            str.append("-").append(formatter.format(hyperparams.get(count++)));
         str.append("_opt-").append(this.paramOptimized);
         str.append("_").append(this.paramOptimized);
         this.name = str.toString();
@@ -377,11 +381,25 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         updateDocumentTopicWeights();
         updateDocumentLexicalWeights();
 
+        optimizeTopicRegressionParameters();
+
         if (verbose) {
             logln("--- --- Done initializing.\n" + getCurrentState());
             logln(printGlobalTree());
             logln(printGlobalTreeSummary());
             logln(printLocalRestaurantSummary());
+            getLogLikelihood();
+            double[] trPredResponses = getRegressionValues();
+            RegressionEvaluation eval = new RegressionEvaluation(
+                    (responses),
+                    (trPredResponses));
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeRSquared();
+            ArrayList<Measurement> measurements = eval.getMeasurements();
+            for (Measurement measurement : measurements) {
+                logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+            }
         }
 
         if (debug) {
@@ -399,56 +417,40 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         this.lexicalWeights = new SparseVector();
         this.lexicalList = new ArrayList<Integer>();
+
         if (regularizer != null) {
-            GurobiMLRL1Norm lasso = null;
-            GurobiMLRL2Norm ridge = null;
+            MLR mlr = new MLR(folder, regularizer, regularizerParam);
 
-            if (regularizer == Regularizer.L1) {
-                lasso = new GurobiMLRL1Norm(regularizerParam);
-            } else if (regularizer == Regularizer.L2) {
-                ridge = new GurobiMLRL2Norm(regularizerParam);
-            } else {
-                throw new RuntimeException("Regularizer " + regularizer + " is not supported");
-            }
-
-            double[] ws = null;
             try {
-                File regFile = new File(this.folder, "init-weights-"
-                        + regularizer + "-" + regularizerParam + ".txt");
-                if (regFile.exists()) {
-                    ws = inputWeights(regFile);
+                File mlrFile = new File(mlr.getRegressorFolder(), MLR.MODEL_FILE);
+                if (mlrFile.exists()) {
+                    if (verbose) {
+                        logln("--- Initial weights found. " + mlrFile);
+                    }
+                    mlr.input(mlrFile);
                 } else {
                     if (verbose) {
-                        logln("--- Initial weights not found. " + regFile);
+                        logln("--- Initial weights not found. " + mlrFile);
                         logln("--- Optimizing ...");
                     }
-                    double[][] designMatrix = new double[D][V];
+                    int[][] docWords = new int[D][];
                     for (int d = 0; d < D; d++) {
+                        docWords[d] = new int[docTokenCounts[d]];
+                        int count = 0;
                         for (int s = 0; s < words[d].length; s++) {
                             for (int n = 0; n < words[d][s].length; n++) {
-                                designMatrix[d][words[d][s][n]]++;
+                                docWords[d][count++] = words[d][s][n];
                             }
                         }
-                        for (int v = 0; v < V; v++) {
-                            designMatrix[d][v] /= docTokenCounts[d];
-                        }
                     }
-                    if (regularizer == Regularizer.L1) {
-                        lasso.setDesignMatrix(designMatrix);
-                        lasso.setResponseVector(responses);
-                        ws = lasso.solve();
-                    } else {
-                        ridge.setDesignMatrix(designMatrix);
-                        ridge.setResponseVector(responses);
-                        ws = ridge.solve();
-                    }
-                    outputWeights(regFile, ws);
+                    mlr.train(docWords, responses, V);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-                throw new RuntimeException("Exception while initializing lexical weights");
+                throw new RuntimeException("Exception while initializing lexical weights.");
             }
 
+            double[] ws = mlr.getWeights();
             int count = 0;
             for (int v = 0; v < V; v++) {
                 if (Math.abs(ws[v]) >= WEIGHT_THRESHOLD) {
@@ -464,16 +466,20 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             // document design matrix for lexical items
             this.docLexicalDesignMatrix = new double[D][count];
             for (int d = 0; d < D; d++) {
+                int validTokenCount = 0;
                 for (int s = 0; s < words[d].length; s++) {
                     for (int n = 0; n < words[d][s].length; n++) {
                         int w = words[d][s][n];
                         if (this.lexicalWeights.containsIndex(w)) {
                             docLexicalDesignMatrix[d][lexicalList.indexOf(w)]++;
+                            validTokenCount++;
                         }
                     }
                 }
-                for (int ii = 0; ii < count; ii++) {
-                    docLexicalDesignMatrix[d][ii] /= docTokenCounts[d];
+                if (validTokenCount > 0) {
+                    for (int ii = 0; ii < count; ii++) {
+                        docLexicalDesignMatrix[d][ii] /= validTokenCount;
+                    }
                 }
             }
         }
@@ -686,7 +692,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                     sentLevelCounts[d][s][z[d][s][n]]++;
                     path[z[d][s][n]].getContent().increment(words[d][s][n]);
                 }
-
             }
         }
 
@@ -973,9 +978,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             optimizeTopicRegressionParameters();
 
-            if (this.regularizer != null) {
+//            if (this.regularizer != null) {
                 optimizeLexicalRegressionParameters();
-            }
+//            }
 
             sampleTopics();
 
@@ -1641,14 +1646,21 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * Optimize lexical regression parameters.
      */
     protected void optimizeLexicalRegressionParameters() {
+        if (verbose) {
+            logln("--- Optimizing lexical regression parameters ...");
+        }
+        
         // adjusted response vector
         double[] responseVector = new double[D];
         for (int d = 0; d < D; d++) {
             responseVector[d] = responses[d] - docTopicWeights[d] / docTokenCounts[d];
         }
 
-        GurobiMLRL2Norm mlr =
-                new GurobiMLRL2Norm(this.docLexicalDesignMatrix, responseVector, 1.0);
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(this.docLexicalDesignMatrix, responseVector);
+        mlr.setRho(hyperparams.get(RHO));
+        mlr.setSigma(hyperparams.get(TAU_SCALE));
+        mlr.setMean(hyperparams.get(TAU_MEAN));
+
         double[] weights = mlr.solve();
         for (int ii = 0; ii < weights.length; ii++) {
             int v = this.lexicalList.get(ii);
@@ -1661,15 +1673,21 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * Optimize topic regression parameters.
      */
     protected void optimizeTopicRegressionParameters() {
+        if (verbose) {
+            logln("--- Optimizing topic regression parameters ...");
+        }
+
         ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
         int numNodes = flattenTree.size();
 
-        double[] lambdas = new double[numNodes];
+        double[] nodeSigmas = new double[numNodes];
+        double[] nodeMeans = new double[numNodes];
         HashMap<SNode, Integer> nodeIndices = new HashMap<SNode, Integer>();
         for (int i = 0; i < flattenTree.size(); i++) {
             SNode node = flattenTree.get(i);
             nodeIndices.put(node, i);
-            lambdas[i] = 1.0 / sigmas[node.getLevel()];
+            nodeSigmas[i] = sigmas[node.getLevel()];
+            nodeMeans[i] = mus[node.getLevel()];
         }
 
         // design matrix
@@ -1695,8 +1713,10 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             responseVector[d] = responses[d] - docLexicalWeights[d] / docTokenCounts[d];
         }
 
-        GurobiMLRL2Norm mlr =
-                new GurobiMLRL2Norm(designMatrix, responseVector, lambdas);
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responseVector);
+        mlr.setSigmas(nodeSigmas);
+        mlr.setMeans(nodeMeans);
+        mlr.setRho(hyperparams.get(RHO));
         double[] weights = mlr.solve();
 
         // update
@@ -3440,7 +3460,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         Regularizer reg = Regularizer.L1;
         double regPr = 2500;
         sampler.configure(resultFolder,
-                V, L, 
+                V, L,
                 alpha,
                 rho,
                 gem_mean, gem_scale,
@@ -3564,7 +3584,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
             double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
             double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-            
+
             Regularizer reg = Regularizer.L1;
             double regPr = 2500;
 
@@ -3577,7 +3597,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             sampler.setNumInitTopics(numTopics);
             sampler.setNumInitFrames(numFrames);
-            
+
             // train
             sampler.train(trainData);
             sampler.configure(foldFolder.getAbsolutePath(),

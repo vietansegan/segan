@@ -56,11 +56,13 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, trResponses, param);
             this.weights = mlr.solve();
         } else if (regularizer == Regularizer.L2) {
-            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trResponses, param);
+            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trResponses);
+            mlr.setSigma(param);
             this.weights = mlr.solve();
         } else {
             throw new RuntimeException(regularizer + " regularization is not supported");
         }
+        IOUtils.createFolder(getRegressorFolder());
         output(new File(getRegressorFolder(), MODEL_FILE));
     }
 

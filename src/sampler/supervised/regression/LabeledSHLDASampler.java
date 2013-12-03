@@ -35,7 +35,6 @@ import util.evaluation.RegressionEvaluation;
  */
 public class LabeledSHLDASampler extends AbstractSampler {
 
-    public static final String IterPredictionFolder = "iter-predictions/";
     public static final int PSEUDO_TABLE_INDEX = -1;
     public static final int PSEUDO_NODE_INDEX = -1;
     public static final int ALPHA = 0;
@@ -1411,12 +1410,14 @@ public class LabeledSHLDASampler extends AbstractSampler {
         ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
         int numNodes = flattenTree.size();
 
-        double[] lambdas = new double[numNodes];
+        double[] nodeMeans = new double[numNodes];
+        double[] nodeSigmas = new double[numNodes];
         HashMap<SNode, Integer> nodeIndices = new HashMap<SNode, Integer>();
         for (int i = 0; i < flattenTree.size(); i++) {
             SNode node = flattenTree.get(i);
             nodeIndices.put(node, i);
-            lambdas[i] = 1.0 / sigmas[node.getLevel()];
+            nodeSigmas[i] = sigmas[node.getLevel()];
+            nodeMeans[i] = mus[node.getLevel()];
         }
 
         // design matrix
@@ -1443,7 +1444,10 @@ public class LabeledSHLDASampler extends AbstractSampler {
         }
 
         GurobiMLRL2Norm mlr =
-                new GurobiMLRL2Norm(designMatrix, responseVector, lambdas);
+                new GurobiMLRL2Norm(designMatrix, responseVector);
+        mlr.setSigmas(nodeSigmas);
+        mlr.setMeans(nodeMeans);
+        mlr.setRho(hyperparams.get(RHO));
         double[] weights = mlr.solve();
 
         // update

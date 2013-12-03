@@ -89,11 +89,11 @@ public class StatisticsUtils {
     }
 
     public static double logNormalProbability(double observation,
-            double mean, double sigma) {
+            double mean, double stdv ){
         double llh = 0;
         llh -= 0.5 * Math.log(2 * Math.PI);
-        llh -= Math.log(sigma);
-        llh += -(observation - mean) * (observation - mean) / (2 * sigma * sigma);
+        llh -= Math.log(stdv);
+        llh += -(observation - mean) * (observation - mean) / (2 * stdv * stdv);
         return llh;
     }
 
