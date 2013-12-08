@@ -4,13 +4,16 @@ import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
 import data.AuthorResponseTextDataset;
+import gurobi.GRB;
+import gurobi.GRBEnv;
+import gurobi.GRBLinExpr;
+import gurobi.GRBModel;
+import gurobi.GRBVar;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import optimization.GurobiMLRL2Norm;
 import regression.Regressor;
 import regression.RegressorUtils;
 import sampler.LDA;
@@ -221,8 +224,15 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             validate("Initialized");
         }
 
-        updateRegressionParameters();
+        if (verbose) {
+            logln("--- Done initializing. \t" + getCurrentState());
+            getLogLikelihood();
+            evaluateRegressPrediction(responses, authorPredValues);
+        }
+    }
 
+    private void updateAuthorPredictedValues() {
+        authorPredValues = new double[A];
         for (int a = 0; a < A; a++) {
             for (int d : authorDocIndices[a]) {
                 double[] docEmpDist = docTopics[d].getEmpiricalDistribution();
@@ -231,19 +241,16 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
                 }
             }
         }
+    }
 
-        if (verbose) {
-            logln("--- Done initializing. \t" + getCurrentState());
-            getLogLikelihood();
-            double[] trPredResponses = authorPredValues;
-            RegressionEvaluation eval = new RegressionEvaluation(responses, trPredResponses);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
-            }
+    private void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeRSquared();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
 
@@ -271,12 +278,18 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
         }
 
         this.docWeights = new double[D];
-        for (int d = 0; d < D; d++) {
-            int author = authors[d];
-            this.docWeights[d] = 1.0 / authorDocIndices[author].length;
+        for(int a=0; a<A; a++) {
+            int totalLength = 0;
+            for(int d : authorDocIndices[a]){
+                totalLength += words[d].length;
+            }
+            
+            for(int d : authorDocIndices[a]) {
+                docWeights[d] = (double)words[d].length / totalLength;
+            }
         }
 
-        authorPredValues = new double[A];
+        this.authorPredValues = new double[A];
     }
 
     protected void initializeAssignments() {
@@ -309,7 +322,7 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
                 paramOptimized, lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
 
         try {
-            File ldaFile = new File(lda.getSamplerFolderPath(), "model.zip");
+            File ldaFile = new File(lda.getSamplerFolderPath(), "author-model.zip");
             if (ldaFile.exists()) {
                 lda.inputState(ldaFile);
             } else {
@@ -335,10 +348,11 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             }
         }
 
-        // optimize
+        // initialize regression parameters
         for (int k = 0; k < K; k++) {
             regParams[k] = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
         }
+        updateRegressionParameters();
     }
 
     @Override
@@ -419,17 +433,7 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             }
 
             if (verbose && iter % REP_INTERVAL == 0) {
-                double[] trPredResponses = authorPredValues;
-                eval = new RegressionEvaluation(responses, trPredResponses);
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-
-                logln("--- --- After updating regression parameters Zs:\t" + getCurrentState());
-                for (Measurement measurement : measurements) {
-                    logln("--- --- --- " + measurement.getName() + ":\t" + measurement.getValue());
-                }
+                evaluateRegressPrediction(responses, authorPredValues);
 
                 logln("--- --- # tokens: " + tokenCount
                         + ". # token changed: " + numTokensChanged
@@ -537,36 +541,96 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             }
         }
 
-        GurobiMLRL2Norm mlr =
-                new GurobiMLRL2Norm(designMatrix, responses);
-        mlr.setMean(hyperparams.get(MU));
-        mlr.setRho(hyperparams.get(RHO));
-        mlr.setSigma(hyperparams.get(SIGMA));
-        regParams = mlr.solve();
+//        GurobiMLRL2Norm mlr =
+//                new GurobiMLRL2Norm(designMatrix, responses);
+//        mlr.setMean(hyperparams.get(MU));
+//        mlr.setRho(hyperparams.get(RHO));
+//        mlr.setSigma(hyperparams.get(SIGMA));
+//        regParams = mlr.solve();
 
-//        this.optimizable = new GaussianIndLinearRegObjective(
-//                regParams, designMatrix, responses,
-//                hyperparams.get(RHO),
-//                hyperparams.get(MU),
-//                hyperparams.get(SIGMA));
-//
-//        this.optimizer = new LimitedMemoryBFGS(optimizable);
-//        boolean converged = false;
-//        try {
-//            converged = optimizer.optimize();
-//        } catch (Exception ex) {
-//            ex.printStackTrace();
-//        }
-//
-//        // if the number of observations is less than or equal to the number of parameters
-//        if (verbose && converged) {
-//            logln("--- converged? " + converged);
-//        }
-//
-//        // update regression parameters
-//        for (int i = 0; i < regParams.length; i++) {
-//            regParams[i] = optimizable.getParameter(i);
-//        }
+        this.optimizable = new GaussianIndLinearRegObjective(
+                regParams, designMatrix, responses,
+                hyperparams.get(RHO),
+                hyperparams.get(MU),
+                hyperparams.get(SIGMA));
+
+        this.optimizer = new LimitedMemoryBFGS(optimizable);
+        boolean converged = false;
+        try {
+            converged = optimizer.optimize();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        // if the number of observations is less than or equal to the number of parameters
+        if (verbose && converged) {
+            logln("--- converged? " + converged);
+        }
+
+        // update regression parameters
+        for (int i = 0; i < regParams.length; i++) {
+            regParams[i] = optimizable.getParameter(i);
+        }
+
+        updateAuthorPredictedValues();
+    }
+
+    private void updateDocumentWeights() {
+        try {
+            for (int a = 0; a < A; a++) {
+                updateAuthorDocumentWeights(a);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while updating document weights");
+        }
+    }
+
+    private void updateAuthorDocumentWeights(int a) throws Exception {
+        GRBEnv env = new GRBEnv();
+        GRBModel model = new GRBModel(env);
+
+        // add variables
+        GRBVar[] weightVar = new GRBVar[V];
+        for (int d = 0; d < authorDocIndices[a].length; d++) {
+            weightVar[d] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 0.0, GRB.CONTINUOUS, "var-" + d);
+        }
+
+        // objective function
+        GRBLinExpr obj = new GRBLinExpr();
+        obj.addConstant(-responses[a]);
+        for (int d = 0; d < authorDocIndices[a].length; d++) {
+            int docIdx = authorDocIndices[a][d];
+            double[] empDist = docTopics[docIdx].getEmpiricalDistribution();
+            double dotprod = StatisticsUtils.dotProduct(empDist, regParams);
+
+            obj.addTerm(dotprod, weightVar[d]);
+        }
+        model.setObjective(obj, GRB.MINIMIZE);
+
+        // constraints
+        GRBLinExpr sumExpr = new GRBLinExpr();
+        for (int d = 0; d < authorDocIndices[a].length; d++) {
+            GRBLinExpr expr = new GRBLinExpr();
+            expr.addTerm(1.0, weightVar[d]);
+            model.addConstr(expr, GRB.GREATER_EQUAL, 0.0, "pc" + d);
+
+            sumExpr.addTerm(1.0, weightVar[d]);
+        }
+        model.addConstr(sumExpr, GRB.EQUAL, 1.0, "sum");
+
+        // optimize
+        model.optimize();
+
+        // get solution
+        for (int d = 0; d < authorDocIndices[a].length; d++) {
+            int docIdx = authorDocIndices[a][d];
+            docWeights[docIdx] = weightVar[d].get(GRB.DoubleAttr.X);
+        }
+
+        // dispose of model and environment
+        model.dispose();
+        env.dispose();
     }
 
     @Override
@@ -853,6 +917,33 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
         D = words.length;
         A = numAuthors;
 
+        // statistics
+        tokenCount = 0;
+        docTokenCounts = new int[D];
+
+        for (int d = 0; d < D; d++) {
+            tokenCount += words[d].length;
+            docTokenCounts[d] += words[d].length;
+        }
+
+        // author document list
+        ArrayList<Integer>[] authorDocList = new ArrayList[A];
+        for (int a = 0; a < A; a++) {
+            authorDocList[a] = new ArrayList<Integer>();
+        }
+        for (int d = 0; d < D; d++) {
+            if (docTokenCounts[d] > 0) { // skip if this document is empty
+                authorDocList[authors[d]].add(d);
+            }
+        }
+        this.authorDocIndices = new int[A][];
+        for (int a = 0; a < A; a++) {
+            this.authorDocIndices[a] = new int[authorDocList[a].size()];
+            for (int dd = 0; dd < this.authorDocIndices[a].length; dd++) {
+                this.authorDocIndices[a][dd] = authorDocList[a].get(dd);
+            }
+        }
+
         // initialize structure
         initializeDataStructure();
 
@@ -882,6 +973,8 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
             }
         }
 
+        updateAuthorPredictedValues();
+
         if (verbose) {
             logln("After initialization");
             int docTopicCount = 0;
@@ -907,14 +1000,14 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
                 }
             }
 
+            updateAuthorPredictedValues();
+
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 if (verbose) {
                     logln("--- iter = " + iter + " / " + this.testMaxIter);
                 }
                 double[] predResponses = new double[A];
-                for (int a = 0; a < A; a++) {
-                    predResponses[a] = authorPredValues[a];
-                }
+                System.arraycopy(authorPredValues, 0, predResponses, 0, A);
                 predResponsesList.add(predResponses);
             }
         }

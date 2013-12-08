@@ -233,7 +233,7 @@ public class DoubleSLDA extends AbstractSampler {
             logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
-
+    
     private void evaluateRegressPrediction() {
         RegressionEvaluation eval = new RegressionEvaluation(responses, docResponseDotProds);
         eval.computeCorrelationCoefficient();

@@ -50,7 +50,6 @@ public class CorpusProcessor {
     protected int minWordLength = 3; // minimum length of a word type 
     protected boolean filterStopwords = true; // whether stopwords are filtered
     protected boolean lemmatization = false; // whether lemmatization should be performed
-    
     // tools
     protected Tokenizer tokenizer;
     protected SentenceDetector sentenceDetector;
@@ -82,7 +81,7 @@ public class CorpusProcessor {
                 corp.filterStopwords,
                 corp.lemmatization);
     }
-    
+
     public CorpusProcessor(
             int unigramCountCutoff,
             int bigramCountCutoff,
@@ -108,7 +107,7 @@ public class CorpusProcessor {
                 filterStopwords,
                 lemmatization);
     }
-    
+
     public CorpusProcessor(
             int unigramCountCutoff,
             int bigramCountCutoff,
@@ -139,7 +138,7 @@ public class CorpusProcessor {
 
         this.docTypeCountCutoff = docTypeCountCutoff;
         this.minWordLength = minWordLength;
-        
+
         this.filterStopwords = filterStopwords;
         this.lemmatization = lemmatization;
 
@@ -712,8 +711,11 @@ public class CorpusProcessor {
     }
 
     /**
-     * Normalize a token. This includes - turn the token into lowercase - remove
-     * punctuation - discard the reduced token if is stop-word
+     * Normalize a token. This includes: (1) turn the token into lowercase, (2)
+     * remove punctuation, (3) discard the reduced token if is stop-word.
+     *
+     * @param token The raw token
+     * @return The normalize token
      */
     public String normalize(String token) {
         StringBuilder normToken = new StringBuilder();

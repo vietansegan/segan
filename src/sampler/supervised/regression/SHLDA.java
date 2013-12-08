@@ -1,5 +1,6 @@
 package sampler.supervised.regression;
 
+import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
 import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
@@ -22,6 +23,7 @@ import regression.RegressorUtils;
 import sampler.RLDA;
 import sampler.RecursiveLDA;
 import sampler.TwoLevelHierSegLDA;
+import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;
@@ -298,7 +300,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_SHLDA")
+                .append("_SHLDA-lex")
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
@@ -321,8 +323,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
         count += mus.length;
         str.append("_s");
-        for(int i=0; i<sigmas.length; i++)
+        for (int i = 0; i < sigmas.length; i++) {
             str.append("-").append(formatter.format(hyperparams.get(count++)));
+        }
         str.append("_opt-").append(this.paramOptimized);
         str.append("_").append(this.paramOptimized);
         this.name = str.toString();
@@ -389,17 +392,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             logln(printGlobalTreeSummary());
             logln(printLocalRestaurantSummary());
             getLogLikelihood();
-            double[] trPredResponses = getRegressionValues();
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    (responses),
-                    (trPredResponses));
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-            for (Measurement measurement : measurements) {
-                logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
-            }
+            evaluateRegressPrediction(responses, getRegressionValues());
         }
 
         if (debug) {
@@ -979,23 +972,13 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             optimizeTopicRegressionParameters();
 
 //            if (this.regularizer != null) {
-                optimizeLexicalRegressionParameters();
+            optimizeLexicalRegressionParameters();
 //            }
 
             sampleTopics();
 
             if (verbose) {
-                double[] trPredResponses = getRegressionValues();
-                RegressionEvaluation eval = new RegressionEvaluation(
-                        (responses),
-                        (trPredResponses));
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-                for (Measurement measurement : measurements) {
-                    logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
-                }
+                this.evaluateRegressPrediction(responses, getRegressionValues());
             }
 
             if (iter >= BURN_IN && iter % LAG == 0) {
@@ -1060,6 +1043,17 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
+        }
+    }
+
+    private void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeRSquared();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
 
@@ -1668,17 +1662,29 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
         this.updateDocumentLexicalWeights();
     }
-
+    
     /**
      * Optimize topic regression parameters.
      */
-    protected void optimizeTopicRegressionParameters() {
+    private void optimizeTopicRegressionParameters() {
+//        optimizeTopicRegressionParametersGurobi();
+        optimizeTopicRegressionParametersLBFGS();
+    }
+
+    /**
+     * Optimize the topic regression parameters using gurobi.
+     */
+    private void optimizeTopicRegressionParametersGurobi() {
         if (verbose) {
             logln("--- Optimizing topic regression parameters ...");
         }
 
         ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
         int numNodes = flattenTree.size();
+        double[] curParams = new double[numNodes];
+        for (int ii = 0; ii < curParams.length; ii++) {
+            curParams[ii] = flattenTree.get(ii).getRegressionParameter();
+        }
 
         double[] nodeSigmas = new double[numNodes];
         double[] nodeMeans = new double[numNodes];
@@ -1719,9 +1725,89 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         mlr.setRho(hyperparams.get(RHO));
         double[] weights = mlr.solve();
 
-        // update
+        // update regression parameters
         for (int i = 0; i < numNodes; i++) {
             flattenTree.get(i).setRegressionParameter(weights[i]);
+        }
+        this.updateDocumentTopicWeights();
+    }
+
+    /**
+     * Optimize topic regression parameters using L-BFGS.
+     */
+    private void optimizeTopicRegressionParametersLBFGS() {
+        if (verbose) {
+            logln("--- Optimizing topic regression parameters ...");
+        }
+
+        ArrayList<SNode> flattenTree = flattenTreeWithoutRoot();
+        int numNodes = flattenTree.size();
+        double[] curParams = new double[numNodes];
+        for (int ii = 0; ii < curParams.length; ii++) {
+            curParams[ii] = flattenTree.get(ii).getRegressionParameter();
+        }
+
+        double[] nodeSigmas = new double[numNodes];
+        double[] nodeMeans = new double[numNodes];
+        HashMap<SNode, Integer> nodeIndices = new HashMap<SNode, Integer>();
+        for (int i = 0; i < flattenTree.size(); i++) {
+            SNode node = flattenTree.get(i);
+            nodeIndices.put(node, i);
+            nodeSigmas[i] = sigmas[node.getLevel()];
+            nodeMeans[i] = mus[node.getLevel()];
+        }
+
+        // design matrix
+        double[][] designMatrix = new double[D][numNodes];
+        for (int d = 0; d < D; d++) {
+            for (int s = 0; s < words[d].length; s++) {
+                SNode[] path = getPathFromNode(c[d][s].getContent());
+                for (int l = 1; l < L; l++) {
+                    int nodeIdx = nodeIndices.get(path[l]);
+                    int count = sentLevelCounts[d][s][l];
+                    designMatrix[d][nodeIdx] += count;
+                }
+            }
+
+            for (int i = 0; i < numNodes; i++) {
+                designMatrix[d][i] /= docTokenCounts[d];
+            }
+        }
+
+        // adjusted response vector
+        double[] responseVector = new double[D];
+        for (int d = 0; d < D; d++) {
+            responseVector[d] = responses[d] - docLexicalWeights[d] / docTokenCounts[d];
+        }
+
+        // optimize using L-BFGS
+        GaussianIndLinearRegObjective optimizable = new GaussianIndLinearRegObjective(
+                curParams, designMatrix, responseVector,
+                hyperparams.get(RHO),
+                nodeMeans,
+                nodeSigmas);
+
+        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+        boolean converged = false;
+        try {
+            converged = optimizer.optimize();
+        } catch (Exception ex) {
+            // This exception may be thrown if L-BFGS
+            //  cannot step in the current direction.
+            // This condition does not necessarily mean that
+            //  the optimizer has failed, but it doesn't want
+            //  to claim to have succeeded... 
+            // do nothing
+            ex.printStackTrace();
+        }
+
+        if (verbose) {
+            logln("--- converged? " + converged);
+        }
+
+        // update regression parameters
+        for (int i = 0; i < numNodes; i++) {
+            flattenTree.get(i).setRegressionParameter(optimizable.getParameter(i));
         }
         this.updateDocumentTopicWeights();
     }
@@ -2786,8 +2872,10 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         // header containing styles and javascript functions
         str.append("<head>\n");
-        str.append("<link type=\"text/css\" rel=\"stylesheet\" href=\"http://argviz.umiacs.umd.edu/teaparty/framing.css\">\n"); // style
-        str.append("<script type=\"text/javascript\" src=\"http://argviz.umiacs.umd.edu/teaparty/framing.js\"></script>\n"); // script
+        str.append("<link type=\"text/css\" rel=\"stylesheet\" "
+                + "href=\"http://argviz.umiacs.umd.edu/teaparty/framing.css\">\n"); // style
+        str.append("<script type=\"text/javascript\" "
+                + "src=\"http://argviz.umiacs.umd.edu/teaparty/framing.js\"></script>\n"); // script
         str.append("</head>\n"); // end head
 
         // start body
@@ -2932,6 +3020,25 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
     }
 
+//    private void predicNewDocuments(int[][][] newWords, String outputResultFile) {
+//        words = newWords;
+//        responses = null; // for evaluation
+//        D = words.length;
+//        
+//        updateDocumentLexicalWeights();
+//        
+//        // output result during test time 
+//        BufferedWriter writer = IOUtils.getBufferedWriter(outputResultFile);
+//        for (int d = 0; d < D; d++) {
+//            writer.write(Integer.toString(d));
+//
+//            for (int ii = 0; ii < predResponsesList.size(); ii++) {
+//                writer.write("\t" + predResponsesList.get(ii)[d]);
+//            }
+//            writer.write("\n");
+//        }
+//        writer.close();
+//    }
     private void sampleNewDocuments(
             File stateFile,
             int[][][] newWords,

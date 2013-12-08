@@ -1,9 +1,7 @@
 package sampler.supervised.regression;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
-import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
-import core.crossvalidation.Fold;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -11,21 +9,18 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import optimization.GurobiMLRL2Norm;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.Options;
 import regression.Regressor;
 import regression.RegressorUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
-import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
+import util.SparseVector;
 import util.StatisticsUtils;
 import util.evaluation.Measurement;
-import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
 
 /**
@@ -34,11 +29,12 @@ import util.evaluation.RegressionEvaluation;
  */
 public class SLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
+    public static final Double WEIGHT_THRESHOLD = 10e-2;
     public static final int ALPHA = 0;
     public static final int BETA = 1;
-    public static final int MU = 2;
-    public static final int SIGMA = 3;
-    public static final int RHO = 4;
+    public static final int RHO = 2;
+    public static final int MU = 3;
+    public static final int SIGMA = 4;
     protected int K;
     protected int V;
     protected int D;
@@ -50,26 +46,19 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     protected DirMult[] docTopics;
     protected DirMult[] topicWords;
     // optimization
-    private GaussianIndLinearRegObjective optimizable;
-    private Optimizer optimizer;
     private double[] docRegressMeans;
     // topical regression
     protected double[] topicParams;
-    // lexical regression
-    private boolean lexReg = false;
-    private double lexMean;
-    private double lexSigma;
-    private double[] lexicalParams;
-    private double[][] docLexDesignMatrix;
+    protected SparseVector lexicalWeights;
+    protected ArrayList<Integer> lexicalList;
     // internal
     private int numTokensChanged = 0;
     private int numTokens = 0;
     private ArrayList<double[]> regressionParameters;
+    private String optType = "lbfgs";
 
-    public void setLexicalRegression(double lexMean, double lexSigma) {
-        this.lexReg = true;
-        this.lexMean = lexMean;
-        this.lexSigma = lexSigma;
+    public void setOptimizerType(String ot) {
+        this.optType = ot;
     }
 
     public void configure(
@@ -77,9 +66,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             int V, int K,
             double alpha,
             double beta,
+            double rho, // standard deviation of Gaussian for document observations
             double mu, // mean of Gaussian for regression parameters
             double sigma, // stadard deviation of Gaussian for regression parameters
-            double rho, // standard deviation of Gaussian for document observations
             InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
@@ -94,9 +83,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
         this.hyperparams.add(beta);
+        this.hyperparams.add(rho);
         this.hyperparams.add(mu);
         this.hyperparams.add(sigma);
-        this.hyperparams.add(rho);
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
@@ -123,15 +112,14 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             logln("--- num topics:\t" + K);
             logln("--- alpha:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA)));
             logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
-            logln("--- reg mu:\t" + MiscUtils.formatDouble(hyperparams.get(MU)));
-            logln("--- reg sigma:\t" + MiscUtils.formatDouble(hyperparams.get(SIGMA)));
             logln("--- response rho:\t" + MiscUtils.formatDouble(hyperparams.get(RHO)));
+            logln("--- topic mu:\t" + MiscUtils.formatDouble(hyperparams.get(MU)));
+            logln("--- topic sigma:\t" + MiscUtils.formatDouble(hyperparams.get(SIGMA)));
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
             logln("--- sample lag:\t" + LAG);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
-            logln("--- # tokens:\t" + numTokens);
 
             logln("--- responses:");
             logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
@@ -159,12 +147,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 .append("_a-").append(formatter.format(hyperparams.get(ALPHA)))
                 .append("_b-").append(formatter.format(hyperparams.get(BETA)))
                 .append("_r-").append(formatter.format(hyperparams.get(RHO)))
-                .append("_s-").append(formatter.format(hyperparams.get(SIGMA)));
-        if (lexReg) {
-            str.append("_lex-").append(formatter.format(lexMean))
-                    .append("-").append(formatter.format(lexSigma));
-        }
+                .append("_ts-").append(formatter.format(hyperparams.get(SIGMA)));
         str.append("_opt-").append(this.paramOptimized);
+        str.append("_ot-").append(optType);
         this.name = str.toString();
     }
 
@@ -196,18 +181,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
 
         // compute the design matrix for lexical regression
-        if (lexReg) {
-            this.docLexDesignMatrix = new double[D][V];
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    this.docLexDesignMatrix[d][words[d][n]]++;
-                }
-                for (int v = 0; v < V; v++) {
-                    this.docLexDesignMatrix[d][v] /= words[d].length;
-                }
-            }
-        }
-
         initializeModelStructure();
 
         initializeDataStructure();
@@ -215,7 +188,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         initializeAssignments();
 
         // optimize regression parameters
-        updateRegressionParameters();
+        updateTopicRegressionParameters();
 
         if (debug) {
             validate("Initialized");
@@ -224,22 +197,19 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (verbose) {
             logln("--- Done initializing. " + getCurrentState());
             getLogLikelihood();
-            RegressionEvaluation eval = new RegressionEvaluation(responses, docRegressMeans);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-
-            for (Measurement measurement : measurements) {
-                logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
-            }
+            evaluateRegressPrediction(responses, docRegressMeans);
         }
     }
 
-    @Override
-    public void sample() {
-        this.initialize();
-        this.iterate();
+    private void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeRSquared();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        }
     }
 
     private void initializeModelStructure() {
@@ -251,13 +221,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         topicParams = new double[K];
         for (int k = 0; k < K; k++) {
             topicParams[k] = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
-        }
-
-        if (lexReg) {
-            lexicalParams = new double[V];
-            for (int v = 0; v < V; v++) {
-                lexicalParams[v] = SamplerUtils.getGaussian(lexMean, lexSigma);
-            }
         }
     }
 
@@ -278,9 +241,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             case RANDOM:
                 this.initializeRandomAssignments();
                 break;
-            case FORWARD:
-                initializeForwardAssignments();
-                break;
             case PRESET:
                 initializePresetAssignments();
                 break;
@@ -295,14 +255,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 z[d][n] = rand.nextInt(K);
                 docTopics[d].increment(z[d][n]);
                 topicWords[z[d][n]].increment(words[d][n]);
-            }
-        }
-    }
-
-    private void initializeForwardAssignments() {
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                sampleZ(d, n, !REMOVE, ADD, !REMOVE, ADD, OBSERVED);
             }
         }
     }
@@ -381,7 +333,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         logln(getClass().toString());
         startTime = System.currentTimeMillis();
 
-        RegressionEvaluation eval;
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
@@ -395,14 +346,12 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             this.regressionParameters.add(rp);
 
             if (verbose && iter % REP_INTERVAL == 0) {
+                String str = "Iter " + iter + "\t llh = " + loglikelihood
+                        + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
-                    logln("--- Burning in. Iter " + iter
-                            + "\t llh = " + loglikelihood
-                            + "\n" + getCurrentState());
+                    logln("--- Burning in. " + str);
                 } else {
-                    logln("--- Sampling. Iter " + iter
-                            + "\t llh = " + loglikelihood
-                            + "\n" + getCurrentState());
+                    logln("--- Sampling. " + str);
                 }
             }
 
@@ -414,7 +363,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             }
 
             // update the regression parameters
-            updateRegressionParameters();
+            updateTopicRegressionParameters();
 
             // parameter optimization
             if (iter % LAG == 0 && iter >= BURN_IN) {
@@ -435,17 +384,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             }
 
             if (verbose && iter % REP_INTERVAL == 0) {
-                eval = new RegressionEvaluation(responses, docRegressMeans);
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-
-                logln("--- --- After updating regression parameters Zs:\t" + getCurrentState());
-                for (Measurement measurement : measurements) {
-                    logln("--- --- --- " + measurement.getName() + ":\t" + measurement.getValue());
-                }
-
+                evaluateRegressPrediction(responses, docRegressMeans);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
                         + ". change ratio: " + (double) numTokensChanged / numTokens
@@ -480,7 +419,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         try {
             if (paramOptimized && log) {
                 this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        "hyperparameters.txt").getAbsolutePath());
+                        "hyperparameters.txt"));
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -513,8 +452,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         double[] logprobs = new double[K];
         for (int k = 0; k < K; k++) {
-            logprobs[k] =
-                    docTopics[d].getLogLikelihood(k)
+            logprobs[k] = docTopics[d].getLogLikelihood(k)
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
                 double mean = docRegressMeans[d] + topicParams[k] / (words[d].length);
@@ -540,89 +478,28 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     }
 
     private void updateTopicRegressionParameters() {
-        double[][] designMatrix;
-    }
-
-    private void updateRegressionParameters() {
-        double[][] designMatrix;
-        if (lexReg) {
-            designMatrix = new double[D][K + V];
-            for (int d = 0; d < D; d++) {
-                double[] docEmpDist = docTopics[d].getEmpiricalDistribution();
-                System.arraycopy(docEmpDist, 0, designMatrix[d], 0, K);
-                System.arraycopy(docLexDesignMatrix[d], 0, designMatrix[d], K, V);
-            }
+        if (optType.equals("gurobi")) {
+            optimizeTopicRegressionParametersGurobi();
+        } else if (optType.equals("lbfgs")) {
+            optimizeTopicRegressionParametersLBFGS();
         } else {
-            designMatrix = new double[D][K];
-            for (int d = 0; d < D; d++) {
-                designMatrix[d] = docTopics[d].getEmpiricalDistribution();
-            }
-        }
-
-        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responses);
-        mlr.setRho(hyperparams.get(RHO));
-
-        double[] means;
-        double[] sigmas;
-        if (lexReg) {
-            means = new double[K + V];
-            sigmas = new double[K + V];
-            for (int k = 0; k < K; k++) {
-                means[k] = hyperparams.get(MU);
-                sigmas[k] = hyperparams.get(SIGMA);
-            }
-            for (int v = 0; v < V; v++) {
-                means[v + K] = lexMean;
-                sigmas[v + K] = lexSigma;
-            }
-            mlr.setMeans(means);
-            mlr.setSigmas(sigmas);
-
-            double[] params = mlr.solve();
-            System.arraycopy(params, 0, topicParams, 0, K);
-            for (int v = 0; v < V; v++) {
-                lexicalParams[v] = params[v + K];
-            }
-        } else {
-            mlr.setMean(hyperparams.get(MU));
-            mlr.setSigma(hyperparams.get(SIGMA));
-
-            topicParams = mlr.solve();
-        }
-
-        // update current predictions
-        this.docRegressMeans = new double[D];
-        for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            for (int k = 0; k < K; k++) {
-                this.docRegressMeans[d] += topicParams[k] * empDist[k];
-            }
-
-            if (lexReg) {
-                for (int v = 0; v < V; v++) {
-                    this.docRegressMeans[d] += lexicalParams[v] * docLexDesignMatrix[d][v];
-                }
-            }
+            throw new RuntimeException("Optimization type " + optType + " is not supported");
         }
     }
 
-    /**
-     * Update the regression parameters using L-BFGS. This is to perform a full
-     * optimization procedure until convergence.
-     */
-    private void updateRegressionParametersOld() {
+    private void optimizeTopicRegressionParametersLBFGS() {
         double[][] designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
         }
 
-        this.optimizable = new GaussianIndLinearRegObjective(
+        GaussianIndLinearRegObjective optimizable = new GaussianIndLinearRegObjective(
                 topicParams, designMatrix, responses,
-                (hyperparams.get(RHO)),
+                hyperparams.get(RHO),
                 hyperparams.get(MU),
                 hyperparams.get(SIGMA));
 
-        this.optimizer = new LimitedMemoryBFGS(optimizable);
+        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
         boolean converged = false;
         try {
             converged = optimizer.optimize();
@@ -633,11 +510,46 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             //  the optimizer has failed, but it doesn't want
             //  to claim to have succeeded... 
             // do nothing
+            ex.printStackTrace();
+        }
+
+        if (verbose) {
+            logln("--- converged? " + converged);
         }
 
         // update regression parameters
-        for (int i = 0; i < topicParams.length; i++) {
-            topicParams[i] = optimizable.getParameter(i);
+        for (int kk = 0; kk < K; kk++) {
+            topicParams[kk] = optimizable.getParameter(kk);
+        }
+
+        // update current predictions
+        updatePredictionValues();
+    }
+
+    private void optimizeTopicRegressionParametersGurobi() {
+        double[][] designMatrix = new double[D][K];
+        for (int d = 0; d < D; d++) {
+            designMatrix[d] = docTopics[d].getEmpiricalDistribution();
+        }
+
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responses);
+        mlr.setRho(hyperparams.get(RHO));
+        mlr.setMean(hyperparams.get(MU));
+        mlr.setSigma(hyperparams.get(SIGMA));
+        topicParams = mlr.solve();
+
+        // update current predictions
+        updatePredictionValues();
+    }
+
+    /**
+     * Update the document predicted values given the new set of assignments.
+     */
+    private void updatePredictionValues() {
+        this.docRegressMeans = new double[D];
+        for (int d = 0; d < D; d++) {
+            double[] empDist = docTopics[d].getEmpiricalDistribution();
+            this.docRegressMeans[d] = StatisticsUtils.dotProduct(topicParams, empDist);
         }
     }
 
@@ -687,50 +599,11 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
     @Override
     public double getLogLikelihood(ArrayList<Double> newParams) {
-        double wordLlh = 0.0;
-        for (int k = 0; k < K; k++) {
-            wordLlh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
-        }
-
-        double topicLlh = 0.0;
-        for (int d = 0; d < D; d++) {
-            topicLlh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
-        }
-
-        double responseLlh = 0.0;
-        for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(topicParams, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(responses[d], mean,
-                    Math.sqrt(newParams.get(RHO)));
-        }
-
-        double regParamLlh = 0.0;
-        for (int k = 0; k < K; k++) {
-            regParamLlh += StatisticsUtils.logNormalProbability(topicParams[k],
-                    newParams.get(MU), Math.sqrt(newParams.get(SIGMA)));
-        }
-
-        double llh = wordLlh
-                + topicLlh
-                + responseLlh
-                + regParamLlh;
-        return llh;
+        return 0.0;
     }
 
     @Override
     public void updateHyperparameters(ArrayList<Double> newParams) {
-        for (int k = 0; k < K; k++) {
-            topicWords[k].setConcentration(newParams.get(BETA) * V);
-        }
-        for (int d = 0; d < D; d++) {
-            docTopics[d].setCenterElement(newParams.get(ALPHA) * K);
-        }
-
-        this.hyperparams = new ArrayList<Double>();
-        for (double param : newParams) {
-            this.hyperparams.add(param);
-        }
     }
 
     @Override
@@ -864,21 +737,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
     }
 
-    public void outputLexicalRegressionParameters(File file) throws Exception {
-        if (this.wordVocab == null) {
-            throw new RuntimeException("The word vocab has not been assigned yet");
-        }
-        if (verbose) {
-            logln("Outputing lexical regression parameters to " + file);
-        }
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        writer.write(lexicalParams.length + "\n");
-        for (int v = 0; v < lexicalParams.length; v++) {
-            writer.write(wordVocab.get(v) + "\t" + lexicalParams[v] + "\n");
-        }
-        writer.close();
-    }
-
     public void outputTopicTopWords(File file, int numTopWords) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -911,179 +769,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         writer.close();
     }
 
-    public void outputTopicCoherence(
-            File file,
-            MimnoTopicCoherence topicCoherence) throws Exception {
-        if (this.wordVocab == null) {
-            throw new RuntimeException("The word vocab has not been assigned yet");
-        }
-
-        if (verbose) {
-            logln("Outputing topic coherence to file " + file);
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            double[] distribution = this.topicWords[k].getDistribution();
-            int[] topic = SamplerUtils.getSortedTopic(distribution);
-            double score = topicCoherence.getCoherenceScore(topic);
-            writer.write(k
-                    + "\t" + topicWords[k].getCountSum()
-                    + "\t" + MiscUtils.formatDouble(score));
-            for (int i = 0; i < topicCoherence.getNumTokens(); i++) {
-                writer.write("\t" + this.wordVocab.get(topic[i]));
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void outputDocTopicDistributions(File file) throws Exception {
-        if (verbose) {
-            logln("Outputing per-document topic distribution to " + file);
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int d = 0; d < D; d++) {
-            writer.write(Integer.toString(d));
-            double[] docTopicDist = this.docTopics[d].getDistribution();
-            for (int k = 0; k < K; k++) {
-                writer.write("\t" + docTopicDist[k]);
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void outputTopicWordDistributions(File file) throws Exception {
-        if (verbose) {
-            logln("Outputing per-topic word distribution to " + file);
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            writer.write(Integer.toString(k));
-            double[] topicWordDist = this.topicWords[k].getDistribution();
-            for (int v = 0; v < V; v++) {
-                writer.write("\t" + topicWordDist[v]);
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void outputTopicRegressionParameters(File file) throws Exception {
-        if (verbose) {
-            logln("Outputing per-topic regression parameters to " + file);
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            writer.write(k + "\t" + this.topicParams[k] + "\n");
-        }
-        writer.close();
-    }
-
-    public double[] getRegressionValues() {
-        double[] predValues = new double[D];
-        for (int d = 0; d < D; d++) {
-            double[] empiricalTopicDist = docTopics[d].getEmpiricalDistribution();
-            predValues[d] = StatisticsUtils.dotProduct(empiricalTopicDist, topicParams);
-
-            if (lexReg) {
-                for (int v = 0; v < V; v++) {
-                    predValues[d] += lexicalParams[v] * docLexDesignMatrix[d][v];
-                }
-            }
-        }
-        return predValues;
-    }
-
-    public double[] outputRegressionResults(
-            double[] trueResponses,
-            String predFilepath,
-            String outputFile) throws Exception {
-        BufferedReader reader = IOUtils.getBufferedReader(predFilepath);
-        String line = reader.readLine();
-        String[] modelNames = line.split("\t");
-        int numModels = modelNames.length;
-
-        double[][] predResponses = new double[numModels][trueResponses.length];
-
-        int idx = 0;
-        while ((line = reader.readLine()) != null) {
-            String[] sline = line.split("\t");
-            for (int j = 0; j < numModels; j++) {
-                predResponses[j][idx] = Double.parseDouble(sline[j]);
-            }
-            idx++;
-        }
-        reader.close();
-
-        double[] finalPredResponses = new double[D];
-        for (int d = 0; d < trueResponses.length; d++) {
-            double sum = 0.0;
-            for (int i = 0; i < numModels; i++) {
-                sum += predResponses[i][d];
-            }
-            finalPredResponses[d] = sum / numModels;
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int i = 0; i < numModels; i++) {
-            RegressionEvaluation eval = new RegressionEvaluation(
-                    trueResponses, predResponses[i]);
-            eval.computeCorrelationCoefficient();
-            eval.computeMeanSquareError();
-            eval.computeRSquared();
-            ArrayList<Measurement> measurements = eval.getMeasurements();
-
-            if (i == 0) {
-                writer.write("Model");
-                for (Measurement measurement : measurements) {
-                    writer.write("\t" + measurement.getName());
-                }
-                writer.write("\n");
-            }
-            writer.write(modelNames[i]);
-            for (Measurement measurement : measurements) {
-                writer.write("\t" + measurement.getValue());
-            }
-            writer.write("\n");
-        }
-        writer.close();
-
-        return finalPredResponses;
-    }
-
     public File getIterationPredictionFolder() {
         return new File(getSamplerFolderPath(), IterPredictionFolder);
-    }
-
-    public void testFinal(int[][] newWords) {
-        if (verbose) {
-            logln("Test sampling ...");
-        }
-
-        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
-        String finalFile = "iter-" + iter;
-        File finalZipFile = new File(reportFolderPath, finalFile + ".zip");
-
-        this.setTestConfigurations(BURN_IN, MAX_ITER, LAG);
-
-        File iterPredFolder = getIterationPredictionFolder();
-        IOUtils.createFolder(iterPredFolder);
-        File partialResultFile = new File(iterPredFolder, finalFile + ".txt");
-
-        try {
-            sampleNewDocuments(
-                    finalZipFile.getAbsolutePath(),
-                    newWords,
-                    partialResultFile.getAbsolutePath());
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while testing using final model");
-        }
     }
 
     public void test(int[][] newWords) {
@@ -1177,25 +864,25 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
 
         // initialize
-        if (lexReg) {
-            this.docLexDesignMatrix = new double[D][V];
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    this.docLexDesignMatrix[d][words[d][n]]++;
-                }
-                for (int v = 0; v < V; v++) {
-                    this.docLexDesignMatrix[d][v] /= words[d].length;
-                }
-            }
-        }
-        this.docRegressMeans = new double[D];
-        for (int d = 0; d < D; d++) {
-            if (lexReg) {
-                for (int v = 0; v < V; v++) {
-                    this.docRegressMeans[d] += lexicalParams[v] * docLexDesignMatrix[d][v];
-                }
-            }
-        }
+//        if (lexReg) {
+//            this.docLexDesignMatrix = new double[D][V];
+//            for (int d = 0; d < D; d++) {
+//                for (int n = 0; n < words[d].length; n++) {
+//                    this.docLexDesignMatrix[d][words[d][n]]++;
+//                }
+//                for (int v = 0; v < V; v++) {
+//                    this.docLexDesignMatrix[d][v] /= words[d].length;
+//                }
+//            }
+//        }
+//        this.docRegressMeans = new double[D];
+//        for (int d = 0; d < D; d++) {
+//            if (lexReg) {
+//                for (int v = 0; v < V; v++) {
+//                    this.docRegressMeans[d] += lexicalParams[v] * docLexDesignMatrix[d][v];
+//                }
+//            }
+//        }
 
         // initialize assignments
         for (int d = 0; d < D; d++) {
@@ -1203,6 +890,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 sampleZ(d, n, !REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
             }
         }
+
+        this.updatePredictionValues();
 
         if (verbose) {
             logln("After initialization");
@@ -1229,12 +918,15 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 }
             }
 
+            this.updatePredictionValues();
+
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 if (verbose) {
                     logln("--- iter = " + iter + " / " + this.testMaxIter);
                 }
 
-                double[] predResponses = getRegressionValues();
+                double[] predResponses = new double[D];
+                System.arraycopy(docRegressMeans, 0, predResponses, 0, D);
                 predResponsesList.add(predResponses);
             }
         }
@@ -1276,323 +968,5 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             str.append("\n");
         }
         return str.toString();
-    }
-
-    public double[][] getDocumentTopicDistributions() {
-        double[][] docTopicDists = new double[this.D][];
-        for (int d = 0; d < this.D; d++) {
-            docTopicDists[d] = this.docTopics[d].getDistribution();
-        }
-        return docTopicDists;
-    }
-
-    public double[][] getTopicWordDistributions() {
-        double[][] topicWordDists = new double[this.K][];
-        for (int k = 0; k < K; k++) {
-            topicWordDists[k] = this.topicWords[k].getDistribution();
-        }
-        return topicWordDists;
-    }
-
-    public void outputTopWords(String outputFile, ArrayList<String> vocab, int numWords)
-            throws Exception {
-        System.out.println("Outputing top words to file " + outputFile);
-        double[][] topicWordDistr = new double[K][V];
-        for (int k = 0; k < K; k++) {
-            topicWordDistr[k] = topicWords[k].getDistribution();
-        }
-        IOUtils.outputTopWords(topicWordDistr, vocab, numWords, outputFile);
-    }
-
-    public void outputRegressionParameters(String outputFile) throws Exception {
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (double[] rp : this.regressionParameters) {
-            for (double r : rp) {
-                writer.write(MiscUtils.formatDouble(r) + "\t");
-            }
-            writer.write("\n");
-        }
-        writer.close();
-    }
-
-    public void outputTopicsWithRegressionParameters(String outputFile,
-            ArrayList<String> vocab,
-            int numWords) throws Exception {
-        System.out.println("Outputing topics with regression parameters to file " + outputFile);
-        double[][] topicWordDistr = new double[K][V];
-        for (int k = 0; k < K; k++) {
-            topicWordDistr[k] = topicWords[k].getDistribution();
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int t = 0; t < topicWordDistr.length; t++) {
-            // sort words
-            double[] bs = topicWordDistr[t];
-            ArrayList<RankingItem<Integer>> rankedWords = new ArrayList<RankingItem<Integer>>();
-            for (int i = 0; i < bs.length; i++) {
-                rankedWords.add(new RankingItem<Integer>(i, bs[i]));
-            }
-            Collections.sort(rankedWords);
-
-            // output top words
-            writer.write("Topic " + (t + 1));
-            writer.write(" (" + MiscUtils.formatDouble(topicParams[t])
-                    + "; " + topicWords[t].getCountSum()
-                    + ") ");
-            for (int i = 0; i < Math.min(numWords, vocab.size()); i++) {
-                writer.write("\t" + vocab.get(rankedWords.get(i).getObject()));
-            }
-            writer.write("\n\n");
-        }
-        writer.close();
-    }
-
-    public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + SLDA.class.getName() + " -help";
-    }
-
-    public static void main(String[] args) {
-        run(args);
-    }
-
-    public static void run(String[] args) {
-        try {
-            // create the command line parser
-            parser = new BasicParser();
-
-            // create the Options
-            options = new Options();
-
-            // directories
-            addOption("dataset", "Dataset");
-            addOption("data-folder", "Processed data folder");
-            addOption("format-folder", "Folder holding formatted data");
-            addOption("format-file", "Formatted file name");
-            addOption("output", "Output folder");
-
-            // sampling configurations
-            addOption("burnIn", "Burn-in");
-            addOption("maxIter", "Maximum number of iterations");
-            addOption("sampleLag", "Sample lag");
-            addOption("report", "Report interval");
-
-            // model parameters
-            addOption("K", "Number of topics");
-            addOption("numTopwords", "Number of top words per topic");
-
-            // model hyperparameters
-            addOption("alpha", "Hyperparameter of the symmetric Dirichlet prior "
-                    + "for topic distributions");
-            addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
-                    + "for word distributions");
-            addOption("mu", "Prior mean of regression parameters");
-            addOption("sigma", "Prior variance of regression parameters");
-            addOption("rho", "Variance of the response variable");
-
-            // running configurations
-            addOption("cv-folder", "Cross validation folder");
-            addOption("num-folds", "Number of folds");
-            addOption("fold", "The cross-validation fold to run");
-            addOption("run-mode", "Running mode");
-
-            options.addOption("paramOpt", false, "Whether hyperparameter "
-                    + "optimization using slice sampling is performed");
-            options.addOption("v", false, "verbose");
-            options.addOption("d", false, "debug");
-            options.addOption("z", false, "standardize (z-score normalization)");
-            options.addOption("help", false, "Help");
-
-            cmd = parser.parse(options, args);
-            if (cmd.hasOption("help")) {
-                CLIUtils.printHelp(getHelpString(), options);
-                return;
-            }
-
-            if (cmd.hasOption("cv-folder")) {
-                runCrossValidation();
-            } else {
-                runModel();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            CLIUtils.printHelp(getHelpString(), options);
-            System.exit(1);
-        }
-    }
-
-    private static void runCrossValidation() throws Exception {
-        String cvFolder = cmd.getOptionValue("cv-folder");
-        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
-        String runMode = cmd.getOptionValue("run-mode");
-        String resultFolder = cmd.getOptionValue("output");
-        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-        int foldIndex = -1;
-        if (cmd.hasOption("fold")) {
-            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-        }
-
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-        int K = CLIUtils.getIntegerArgument(cmd, "K", 25);
-
-        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-
-        boolean paramOpt = cmd.hasOption("paramOpt");
-        boolean verbose = cmd.hasOption("v");
-        boolean debug = cmd.hasOption("d");
-
-        InitialState initState = InitialState.RANDOM;
-
-        for (int ii = 0; ii < numFolds; ii++) {
-            if (foldIndex != -1 && ii != foldIndex) {
-                continue;
-            }
-            if (verbose) {
-                System.out.println("\nRunning fold " + foldIndex);
-            }
-
-            Fold fold = new Fold(ii, cvFolder);
-            File foldFolder = new File(resultFolder, fold.getFoldName());
-            ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
-            ResponseTextDataset trainData = foldData[Fold.TRAIN];
-            ResponseTextDataset devData = foldData[Fold.DEV];
-            ResponseTextDataset testData = foldData[Fold.TEST];
-
-            if (cmd.hasOption("z")) {
-                ResponseTextDataset.zNormalize(trainData, devData, testData);
-            }
-
-            if (verbose) {
-                System.out.println("Fold " + fold.getFoldName());
-                System.out.println("--- training: " + trainData.toString());
-                System.out.println("--- development: " + devData.toString());
-                System.out.println("--- test: " + testData.toString());
-                System.out.println();
-            }
-
-            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
-            double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
-            double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-            double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-            double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-
-            SLDA sampler = new SLDA();
-            sampler.setVerbose(verbose);
-            sampler.setDebug(debug);
-            sampler.setLog(true);
-            sampler.setReport(true);
-            sampler.setWordVocab(trainData.getWordVocab());
-
-            sampler.train(trainData);
-            sampler.configure(foldFolder.getAbsolutePath(),
-                    trainData.getWordVocab().size(), K,
-                    alpha, beta,
-                    mu, sigma, rho,
-                    initState, paramOpt,
-                    burnIn, maxIters, sampleLag, repInterval);
-
-            File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
-            File iterPredFolder = sampler.getIterationPredictionFolder();
-            IOUtils.createFolder(samplerFolder);
-
-            if (runMode.equals("train")) {
-                sampler.sample();
-                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
-                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
-                sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
-            } else if (runMode.equals("test")) {
-                sampler.test(testData);
-                File teResultFolder = new File(samplerFolder, "te-results");
-                IOUtils.createFolder(teResultFolder);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
-                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
-            } else if (runMode.equals("train-test")) {
-                sampler.sample();
-                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
-                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
-                sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
-
-                sampler.test(testData);
-                File teResultFolder = new File(samplerFolder, "te-results");
-                IOUtils.createFolder(teResultFolder);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
-                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
-            } else {
-                throw new RuntimeException("Run mode " + runMode + " is not supported");
-            }
-        }
-    }
-
-    /**
-     * Run a model on a dataset. This is mainly used for exploratory analysis.
-     */
-    private static void runModel() throws Exception {
-        String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
-        String outputFolder = cmd.getOptionValue("output");
-        String formatFolder = cmd.getOptionValue("format-folder");
-        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-        int K = CLIUtils.getIntegerArgument(cmd, "K", 25);
-
-        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-
-        boolean paramOpt = cmd.hasOption("paramOpt");
-        boolean verbose = cmd.hasOption("v");
-        boolean debug = cmd.hasOption("d");
-        InitialState initState = InitialState.RANDOM;
-
-        if (verbose) {
-            System.out.println("\nLoading formatted data ...");
-        }
-        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
-        data.setFormatFilename(formatFile);
-        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-        data.prepareTopicCoherence(numTopWords);
-
-        int V = data.getWordVocab().size();
-        if (cmd.hasOption("z")) {
-            data.zNormalize();
-        }
-
-        double meanResponse = StatisticsUtils.mean(data.getResponses());
-        double stddevResponse = StatisticsUtils.standardDeviation(data.getResponses());
-
-        double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-
-        if (verbose) {
-            System.out.println("Running SLDA ...");
-        }
-        SLDA sampler = new SLDA();
-        sampler.setVerbose(verbose);
-        sampler.setDebug(debug);
-        sampler.setWordVocab(data.getWordVocab());
-        sampler.train(data);
-        sampler.configure(outputFolder,
-                V, K, alpha, beta, mu, sigma, rho, initState, paramOpt,
-                burnIn, maxIters, sampleLag, repInterval);
-
-        File sldaFolder = new File(outputFolder, sampler.getSamplerFolder());
-        IOUtils.createFolder(sldaFolder);
-        sampler.sample();
-        sampler.outputTopicTopWords(new File(sldaFolder, TopWordFile), numTopWords);
-        sampler.outputTopicCoherence(new File(sldaFolder, TopicCoherenceFile), data.getTopicCoherence());
-        sampler.outputDocTopicDistributions(new File(sldaFolder, "doc-topic.txt"));
-        sampler.outputTopicWordDistributions(new File(sldaFolder, "topic-word.txt"));
-        sampler.outputTopicRegressionParameters(new File(sldaFolder, "topic-reg-params.txt"));
     }
 }
