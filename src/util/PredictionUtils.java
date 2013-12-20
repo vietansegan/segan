@@ -1,11 +1,11 @@
-package regression;
+package util;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
-import util.IOUtils;
-import util.StatisticsUtils;
+import java.util.Collections;
+import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;
 
@@ -13,8 +13,10 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class RegressorUtils {
+public class PredictionUtils {
 
+    public static final int POSITVE = 1;
+    public static final int NEGATIVE = -1;
     public static final String SINGLE_FINAL = "single-final.txt";
     public static final String SINGLE_AVG = "single-avg.txt";
     public static final String MULTIPLE_FINAL = "multiple-final.txt";
@@ -53,7 +55,7 @@ public class RegressorUtils {
      * @param predValues List of predicted values
      *
      */
-    public static void outputPredictions(
+    public static void outputRegressionPredictions(
             File outputFile,
             String[] instanceIds,
             double[] trueValues,
@@ -81,6 +83,60 @@ public class RegressorUtils {
             throw new RuntimeException("Exception while outputing predictions to "
                     + outputFile);
         }
+    }
+
+    public static void outputClassificationPredictions(
+            File outputFile,
+            String[] instanceIds,
+            int[] trueLabels,
+            double[] predValues) {
+        if (instanceIds.length != trueLabels.length
+                || instanceIds.length != predValues.length) {
+            throw new RuntimeException("Lengths mismatched. "
+                    + "\t" + instanceIds.length
+                    + "\t" + trueLabels.length
+                    + "\t" + predValues.length);
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(instanceIds.length + "\n");
+            for (int i = 0; i < instanceIds.length; i++) {
+                writer.write(instanceIds[i]
+                        + "\t" + trueLabels[i]
+                        + "\t" + predValues[i]
+                        + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing predictions to "
+                    + outputFile);
+        }
+    }
+
+    /**
+     * Output classification results.
+     *
+     * @param outputFile The output file
+     * @param labels List of true labels
+     * @param preds List of predicted labels
+     */
+    public static ArrayList<Measurement> outputBinaryClassificationResults(
+            File outputFile,
+            int[] labels,
+            int[] preds) {
+        ArrayList<Measurement> measurements = null;
+        try {
+            ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
+            eval.computePRF1();
+            measurements = eval.getMeasurements();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing results to "
+                    + outputFile);
+        }
+        return measurements;
     }
 
     /**
@@ -113,6 +169,48 @@ public class RegressorUtils {
                     + outputFile);
         }
         return measurements;
+    }
+
+    public static ArrayList<Measurement> outputBinaryClassificationResults(
+            File outputFile,
+            int[] trueLabels,
+            double[] predValues) {
+        int numPositives = 0;
+        for (int ii = 0; ii < trueLabels.length; ii++) {
+            if (trueLabels[ii] == POSITVE) {
+                numPositives++;
+            }
+        }
+
+        ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
+        for (int d = 0; d < predValues.length; d++) {
+            rankDocs.add(new RankingItem<Integer>(d, predValues[d]));
+        }
+        Collections.sort(rankDocs);
+        int[] preds = new int[predValues.length];
+        for (int ii = 0; ii < numPositives; ii++) {
+            int d = rankDocs.get(ii).getObject();
+            preds[d] = POSITVE;
+        }
+
+        return outputBinaryClassificationResults(outputFile, trueLabels, preds);
+
+//        ArrayList<Measurement> measurements = null;
+//        try {
+//            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+//            ClassificationEvaluation eval = new ClassificationEvaluation(trueLabels, preds);
+//            eval.computePRF1();
+//            measurements = eval.getMeasurements();
+//            for (Measurement m : measurements) {
+//                writer.write(m.getName() + "\t" + m.getValue() + "\n");
+//            }
+//            writer.close();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            throw new RuntimeException("Exception while outputing regression results to "
+//                    + outputFile);
+//        }
+//        return measurements;
     }
 
     /**
@@ -183,7 +281,7 @@ public class RegressorUtils {
      * @param outputFolder Output folder
      * @param trueResponses Ground truth responses
      */
-    public static double[] evaluate(
+    public static double[] evaluateRegression(
             File iterPredFolder,
             File outputFolder,
             String[] docIds,
@@ -192,6 +290,53 @@ public class RegressorUtils {
         computeSingleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
         computeMultipleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
         return computeMultipleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
+    }
+
+    public static double[] evaluateBinaryClassification(
+            File iterPredFolder,
+            File outputFolder,
+            String[] docIds,
+            int[] trueLabels) {
+        return computeBinaryClassificationMultipleAverage(iterPredFolder, outputFolder, docIds, trueLabels);
+    }
+
+    public static double[] computeBinaryClassificationMultipleAverage(
+            File iterPredFolder,
+            File outputFolder,
+            String[] docIds,
+            int[] trueLabels) {
+        double[] predResponses = null;
+        try {
+            String[] filenames = iterPredFolder.list();
+
+            predResponses = new double[trueLabels.length];
+            int numModels = filenames.length;
+
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+
+                double[][] predictions = inputSingleModelPredictions(
+                        new File(iterPredFolder, filename),
+                        trueLabels.length);
+
+                for (int d = 0; d < trueLabels.length; d++) {
+                    predResponses[d] += StatisticsUtils.mean(predictions[d]);
+                }
+            }
+
+            for (int d = 0; d < predResponses.length; d++) {
+                predResponses[d] /= numModels;
+            }
+
+            outputClassificationPredictions(new File(outputFolder, MULTIPLE_AVG + ".pred"),
+                    docIds, trueLabels, predResponses);
+            outputBinaryClassificationResults(new File(outputFolder, MULTIPLE_AVG + ".result"),
+                    trueLabels, predResponses);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while evaluating multiple-avg.");
+        }
+        return predResponses;
     }
 
     /**
@@ -213,7 +358,7 @@ public class RegressorUtils {
             String[] filenames = iterPredFolder.list();
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
-                
+
                 double[][] predictions = inputSingleModelPredictions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
@@ -224,8 +369,12 @@ public class RegressorUtils {
                     finalPred[d] = predictions[d][predictions[0].length - 1];
                 }
 
-                outputPredictions(new File(outputFolder, SINGLE_FINAL + "-" + filename + ".pred"), docIds, trueResponses, finalPred);
-                outputRegressionResults(new File(outputFolder, SINGLE_FINAL + "-" + filename + ".result"), trueResponses, finalPred);
+                outputRegressionPredictions(
+                        new File(outputFolder, SINGLE_FINAL + "-" + filename + ".pred"),
+                        docIds, trueResponses, finalPred);
+                outputRegressionResults(
+                        new File(outputFolder, SINGLE_FINAL + "-" + filename + ".result"),
+                        trueResponses, finalPred);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -263,8 +412,12 @@ public class RegressorUtils {
                     avgPred[d] = StatisticsUtils.mean(predictions[d]);
                 }
 
-                outputPredictions(new File(outputFolder, SINGLE_AVG + "-" + filename + ".pred"), docIds, trueResponses, avgPred);
-                outputRegressionResults(new File(outputFolder, SINGLE_AVG + "-" + filename + ".result"), trueResponses, avgPred);
+                outputRegressionPredictions(
+                        new File(outputFolder, SINGLE_AVG + "-" + filename + ".pred"),
+                        docIds, trueResponses, avgPred);
+                outputRegressionResults(
+                        new File(outputFolder, SINGLE_AVG + "-" + filename + ".result"),
+                        trueResponses, avgPred);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -307,8 +460,10 @@ public class RegressorUtils {
                 predResponses[d] /= numModels;
             }
 
-            outputPredictions(new File(outputFolder, MULTIPLE_FINAL + ".pred"), docIds, trueResponses, predResponses);
-            outputRegressionResults(new File(outputFolder, MULTIPLE_FINAL + ".result"), trueResponses, predResponses);
+            outputRegressionPredictions(new File(outputFolder, MULTIPLE_FINAL + ".pred"),
+                    docIds, trueResponses, predResponses);
+            outputRegressionResults(new File(outputFolder, MULTIPLE_FINAL + ".result"),
+                    trueResponses, predResponses);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-final.");
@@ -351,8 +506,10 @@ public class RegressorUtils {
                 predResponses[d] /= numModels;
             }
 
-            outputPredictions(new File(outputFolder, MULTIPLE_AVG + ".pred"), docIds, trueResponses, predResponses);
-            outputRegressionResults(new File(outputFolder, MULTIPLE_AVG + ".result"), trueResponses, predResponses);
+            outputRegressionPredictions(new File(outputFolder, MULTIPLE_AVG + ".pred"),
+                    docIds, trueResponses, predResponses);
+            outputRegressionResults(new File(outputFolder, MULTIPLE_AVG + ".result"),
+                    trueResponses, predResponses);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-avg.");

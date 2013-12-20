@@ -15,7 +15,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import regression.Regressor;
-import regression.RegressorUtils;
+import util.PredictionUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
@@ -1032,7 +1032,7 @@ public class AuthorSLDA extends AbstractSampler implements Regressor<AuthorRespo
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        RegressorUtils.outputSingleModelPredictions(
+        PredictionUtils.outputSingleModelPredictions(
                 new File(outputResultFile),
                 predResponsesList);
     }

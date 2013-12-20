@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import regression.RegressorUtils;
+import util.PredictionUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
@@ -1499,7 +1499,7 @@ public class SHDP extends AbstractSampler {
         }
 
         // output result during test time
-        RegressorUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
+        PredictionUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
         return finalPredResponses;
     }
 

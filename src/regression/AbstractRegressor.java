@@ -1,5 +1,6 @@
 package regression;
 
+import util.PredictionUtils;
 import core.AbstractRunner;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -49,7 +50,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
         if (verbose) {
             logln(">>> Input predictions to " + inputFile);
         }
-        return RegressorUtils.inputPredictions(inputFile);
+        return PredictionUtils.inputPredictions(inputFile);
     }
 
     /**
@@ -69,7 +70,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
         if (verbose) {
             logln(">>> Output predictions to " + outputFile);
         }
-        RegressorUtils.outputPredictions(outputFile, instanceIds, trueValues, predValues);
+        PredictionUtils.outputRegressionPredictions(outputFile, instanceIds, trueValues, predValues);
     }
 
     /** Output regression results.
@@ -85,7 +86,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
         if (verbose) {
             logln(">>> Output regression results to " + outputFile);
         }
-        return RegressorUtils.outputRegressionResults(outputFile, trueValues, predValues);
+        return PredictionUtils.outputRegressionResults(outputFile, trueValues, predValues);
     }
 
     public ArrayList<Measurement> outputClassificationResults(

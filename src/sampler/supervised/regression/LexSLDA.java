@@ -14,7 +14,7 @@ import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import regression.Regressor;
-import regression.RegressorUtils;
+import util.PredictionUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
@@ -1268,7 +1268,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        RegressorUtils.outputSingleModelPredictions(
+        PredictionUtils.outputSingleModelPredictions(
                 new File(outputResultFile),
                 predResponsesList);
     }
@@ -1518,7 +1518,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
                 sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("train-test")) {
                 sampler.sample();
@@ -1530,7 +1530,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
                 sampler.test(testData);
                 File teResultFolder = new File(samplerFolder, "te-results");
                 IOUtils.createFolder(teResultFolder);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
                 sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else {
                 throw new RuntimeException("Run mode " + runMode + " is not supported");

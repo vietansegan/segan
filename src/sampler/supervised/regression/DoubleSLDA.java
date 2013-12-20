@@ -53,6 +53,10 @@ public class DoubleSLDA extends AbstractSampler {
     protected double[] lambdas; // label regression parameters
     private double[] docResponseDotProds;
     private double[] docLabelDotProds;
+    // prediction
+    private int testBurnIn = BURN_IN;
+    private int testMaxIter = MAX_ITER;
+    private int testSampleLag = LAG;
     // internal
     private int numTokensChanged = 0;
     private int numTokens = 0;
@@ -233,7 +237,7 @@ public class DoubleSLDA extends AbstractSampler {
             logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
-    
+
     private void evaluateRegressPrediction() {
         RegressionEvaluation eval = new RegressionEvaluation(responses, docResponseDotProds);
         eval.computeCorrelationCoefficient();
@@ -416,6 +420,9 @@ public class DoubleSLDA extends AbstractSampler {
 
             // update the regression parameters
             updateEtas();
+
+            // update the label parameters
+            updateLambdas();
 
             // parameter optimization
             if (iter % LAG == 0 && iter >= BURN_IN) {
@@ -840,6 +847,10 @@ public class DoubleSLDA extends AbstractSampler {
             writer.write("\n\n");
         }
         writer.close();
+    }
+
+    public File getIterationPredictionFolder() {
+        return new File(getSamplerFolderPath(), IterPredictionFolder);
     }
 }
 

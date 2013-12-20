@@ -19,7 +19,7 @@ import org.apache.commons.cli.Options;
 import regression.MLR;
 import regression.MLR.Regularizer;
 import regression.Regressor;
-import regression.RegressorUtils;
+import util.PredictionUtils;
 import sampler.RLDA;
 import sampler.RecursiveLDA;
 import sampler.TwoLevelHierSegLDA;
@@ -3733,7 +3733,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             } else if (runMode.equals("test")) {
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
             } else if (runMode.equals("train-test")) {
                 // train
                 sampler.sample();
@@ -3746,7 +3746,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 // test
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                RegressorUtils.evaluate(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
 //                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("hack")) {
                 sampler.inputFinalState();
