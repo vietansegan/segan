@@ -126,11 +126,18 @@ public class PredictionUtils {
             File outputFile,
             int[] labels,
             int[] preds) {
+        System.out.println("Outputing binary classification results to " + outputFile);
         ArrayList<Measurement> measurements = null;
         try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
             eval.computePRF1();
             measurements = eval.getMeasurements();
+            for (Measurement m : measurements) {
+                writer.write(m.getName() + "\t" + m.getValue() + "\n");
+            }
+            writer.close();
+            
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing results to "
@@ -175,6 +182,7 @@ public class PredictionUtils {
             File outputFile,
             int[] trueLabels,
             double[] predValues) {
+        
         int numPositives = 0;
         for (int ii = 0; ii < trueLabels.length; ii++) {
             if (trueLabels[ii] == POSITVE) {
@@ -194,23 +202,6 @@ public class PredictionUtils {
         }
 
         return outputBinaryClassificationResults(outputFile, trueLabels, preds);
-
-//        ArrayList<Measurement> measurements = null;
-//        try {
-//            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-//            ClassificationEvaluation eval = new ClassificationEvaluation(trueLabels, preds);
-//            eval.computePRF1();
-//            measurements = eval.getMeasurements();
-//            for (Measurement m : measurements) {
-//                writer.write(m.getName() + "\t" + m.getValue() + "\n");
-//            }
-//            writer.close();
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            throw new RuntimeException("Exception while outputing regression results to "
-//                    + outputFile);
-//        }
-//        return measurements;
     }
 
     /**
