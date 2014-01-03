@@ -3492,8 +3492,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
-        verbose = true;
-        debug = true;
         InitialState initState = InitialState.PRESET;
 
         if (verbose) {
@@ -3565,7 +3563,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         sampler.train(data);
 
         Regularizer reg = Regularizer.L1;
-        double regPr = 2500;
+        double regPr = T;
         sampler.configure(resultFolder,
                 V, L,
                 alpha,
@@ -3582,8 +3580,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(samplerFolder);
-//        sampler.initialize();
-//        sampler.iterate();
+        sampler.initialize();
+        sampler.iterate();
 
         sampler.inputFinalState();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
