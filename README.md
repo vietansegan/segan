@@ -32,8 +32,10 @@ Processing text-only data from a single file, in which each line is a document w
 
 ## Process textual data with continuous response variable
 
-Processing data in which each document is associated with a single continuous value. This can be done similarly as above with an additional argument `<response-file>` which contains the value of the response variable. The `<response-file>` has the following format: `<docid>\t<response_value>\n`
+Processing data in which each document is associated with a single continuous value. This can be done similarly as above using the class `data.ResponseTextDataset` with an additional argument `<response-file>` which contains the value of the response variable. The `<response-file>` has the following format: `<docid>\t<response_value>\n`. For example:
 
+    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
+    
 ## Create cross validation data (currently only support data with continuous responses)
 
     java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset--dataset <dataset-name> --text-data <input-text-folder> --response-file <response_value> --data-folder <data-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development-ratio> --num-classes <number-of-discretized-classes> --run-mode cross-validation
