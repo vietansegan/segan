@@ -1,12 +1,14 @@
-Compile
--------
+# Compile
+
     cd <SEGAN_PATH>
     ant jar
     cp -r lib dist/
 
-Process Data
-------------
+# Process Data
+
 The main kind of data that `segan` deals with is textual data in which there is a collection of documents, each of which is associated with some additional values which can be either continuous (response variable) or discrete (label) or both. The texts can be stored in either a big file (each line is a document) or a folder (each file is a document).
+
+## Process text-only data
 
 Processing text-only data from multiple files from a folder. The filename will be the document id.
 
@@ -28,17 +30,15 @@ Processing text-only data from a single file, in which each line is a document w
    Other options:
    - `<format-file>`: By default, all processed data files will be named `<dataset-name>.<extension>`, e.g., `<dataset-name>.dat`, `<dataset-name>.wvoc` etc. If you want to rename the formatted file, use this option.
 
-3. Processing data with continuous response variable. Each document is associated with a single continuous value.
+## Process textual data with continuous response variable
 
-   As (1) and (2) but using "data.ResponseTextDataset" with an additional argument
-      --response-file <response-file>
-   where <response-file> has the following format: <docid>\t<response_value>\n
+Processing data in which each document is associated with a single continuous value. This can be done similarly as above with an additional argument `<response-file>` which contains the value of the response variable. The `<response-file>` has the following format: `<docid>\t<response_value>\n`
 
-4. Create cross validation data (currently only support data with continuous responses)
+## Create cross validation data (currently only support data with continuous responses)
 
-   java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset--dataset <dataset-name> --text-data <input-text-folder> --response-file <response_value> --data-folder <data-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development-ratio> --num-classes <number-of-discretized-classes> --run-mode cross-validation
+    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset--dataset <dataset-name> --text-data <input-text-folder> --response-file <response_value> --data-folder <data-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development-ratio> --num-classes <number-of-discretized-classes> --run-mode cross-validation
    
-   *** Note: --num-classes is the number of classes that the response variable is discretized into, which is used for stratified sampling. For example, if --num-classes = 3, the response variables are discretized into 3 classes, and CreateCrossValidationFolds will try to preserve the distributions of these 3 classes in training, development and test sets. Default, --num-classes = 1.
+   *** Note: `<num-classes>` is the number of classes that the response variable is discretized into, which is used for stratified sampling. For example, if `<num-classes> = 3`, the response variables are discretized into 3 classes, and CreateCrossValidationFolds will try to preserve the distributions of these 3 classes in training, development and test sets. Default, `<num-classes> = 1`.
 
 Run SLDA
 --------
