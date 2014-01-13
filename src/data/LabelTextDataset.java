@@ -14,7 +14,7 @@ import util.RankingItem;
  *
  * @author vietan
  */
-public class LabelTextData extends TextDataset {
+public class LabelTextDataset extends TextDataset {
 
     public static final String labelVocabExt = ".lvoc";
     protected ArrayList<String>[] labelList;
@@ -23,11 +23,11 @@ public class LabelTextData extends TextDataset {
     protected int maxLabelVocSize = Integer.MAX_VALUE;
     protected int minLabelDocFreq = 1;
 
-    public LabelTextData(String name, String folder) {
+    public LabelTextDataset(String name, String folder) {
         super(name, folder);
     }
 
-    public LabelTextData(String name, String folder,
+    public LabelTextDataset(String name, String folder,
             CorpusProcessor corpProc) {
         super(name, folder, corpProc);
     }

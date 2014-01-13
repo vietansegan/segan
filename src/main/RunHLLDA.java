@@ -4,7 +4,7 @@ import util.CLIUtils;
 import core.AbstractExperiment;
 import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
-import data.LabelTextData;
+import data.LabelTextDataset;
 import java.io.File;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.OptionBuilder;
@@ -19,7 +19,7 @@ import util.evaluation.MimnoTopicCoherence;
  */
 public class RunHLLDA extends AbstractRunner {
 
-    private static LabelTextData data;
+    private static LabelTextDataset data;
     private static MimnoTopicCoherence topicCoherence;
     private static int numTopWords;
 
@@ -151,7 +151,7 @@ public class RunHLLDA extends AbstractRunner {
         if (verbose) {
             System.out.println("--- Loading data from " + datasetFolder);
         }
-        data = new LabelTextData(datasetName, datasetFolder);
+        data = new LabelTextDataset(datasetName, datasetFolder);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
         data.filterLabelsByFrequency(minLabelFreq);
 //        data.filterDocumentWithoutLabels();
@@ -177,13 +177,13 @@ public class RunHLLDA extends AbstractRunner {
     private static void hack() {
     }
 
-    static class Experiment extends AbstractExperiment<LabelTextData> {
+    static class Experiment extends AbstractExperiment<LabelTextDataset> {
 
         protected static int reportInterval;
         protected static int numTopWords;
         protected static MimnoTopicCoherence topicCoherence;
 
-        public Experiment(LabelTextData d) {
+        public Experiment(LabelTextDataset d) {
             this.data = d;
         }
 

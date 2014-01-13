@@ -10,7 +10,7 @@ import util.IOUtils;
  *
  * @author vietan
  */
-public class LabelResponseTextDataset extends LabelTextData {
+public class LabelResponseTextDataset extends LabelTextDataset {
 
     protected double[] responses;
 

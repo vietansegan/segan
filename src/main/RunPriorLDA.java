@@ -4,7 +4,7 @@ import util.CLIUtils;
 import core.AbstractExperiment;
 import core.AbstractRunner;
 import core.AbstractSampler.InitialState;
-import data.LabelTextData;
+import data.LabelTextDataset;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,7 +23,7 @@ import util.evaluation.MimnoTopicCoherence;
  */
 public class RunPriorLDA extends AbstractRunner {
 
-    private static LabelTextData data;
+    private static LabelTextDataset data;
     private static MimnoTopicCoherence topicCoherence;
     private static int numTopWords;
 
@@ -130,7 +130,7 @@ public class RunPriorLDA extends AbstractRunner {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("folder");
         String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-        data = new LabelTextData(datasetName, datasetFolder);
+        data = new LabelTextDataset(datasetName, datasetFolder);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
         HashMap<String, Integer> labelFreqs = new HashMap<String, Integer>();
@@ -199,7 +199,7 @@ public class RunPriorLDA extends AbstractRunner {
             String datasetFolder = cmd.getOptionValue("folder");
             String outputFolder = cmd.getOptionValue("output");
             String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
-            data = new LabelTextData(datasetName, datasetFolder);
+            data = new LabelTextDataset(datasetName, datasetFolder);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
 
             numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
@@ -236,13 +236,13 @@ public class RunPriorLDA extends AbstractRunner {
         }
     }
 
-    static class Experiment extends AbstractExperiment<LabelTextData> {
+    static class Experiment extends AbstractExperiment<LabelTextDataset> {
 
         protected static int reportInterval;
         protected static int numTopWords;
         protected static MimnoTopicCoherence topicCoherence;
 
-        public Experiment(LabelTextData d) {
+        public Experiment(LabelTextDataset d) {
             this.data = d;
         }
 

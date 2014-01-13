@@ -26,7 +26,7 @@ Processing text-only data from a single file, in which each line is a document w
     java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
 
    Other options:
-   --format-file:	By default, all processed data files will be named <dataset-name>.<extension>, e.g., <dataset-name>.dat, <dataset-name>.wvoc etc. If you want to rename the formatted file, use this option.
+   - `format-file`: By default, all processed data files will be named `<dataset-name>.<extension>`, e.g., `<dataset-name>.dat`, `<dataset-name>.wvoc` etc. If you want to rename the formatted file, use this option.
 
 3. Processing data with continuous response variable. Each document is associated with a single continuous value.
 

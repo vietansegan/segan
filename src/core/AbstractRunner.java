@@ -34,4 +34,12 @@ public class AbstractRunner {
     public static void setDebug(boolean d) {
         debug = d;
     }
+    
+    public static void log(String msg) {
+        System.out.print("[LOG] " + msg);
+    }
+    
+    public void logln(String msg) {
+        System.out.println("[LOG] " + msg);
+    }
 }

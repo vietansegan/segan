@@ -7,7 +7,7 @@ package main;
 import core.AbstractRunner;
 import data.CorpusProcessor;
 import data.LabelResponseTextDataset;
-import data.LabelTextData;
+import data.LabelTextDataset;
 import data.ResponseTextDataset;
 import data.TextDataset;
 import java.io.File;
@@ -143,7 +143,7 @@ public class ProcessData extends AbstractRunner {
                 dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             } else if (cmd.hasOption("label-file")) {
                 String labelFile = cmd.getOptionValue("label-file");
-                LabelTextData dataset = new LabelTextData(datasetName, datasetFolder, corpProc);
+                LabelTextDataset dataset = new LabelTextDataset(datasetName, datasetFolder, corpProc);
                 dataset.setFormatFilename(formatFile);
                 if (cmd.hasOption("L")) {
                     dataset.setMaxLabelVocabSize(Integer.parseInt(cmd.getOptionValue("L")));

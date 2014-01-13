@@ -1,7 +1,7 @@
 package sampler.labeled;
 
 import core.AbstractSampler;
-import data.LabelTextData;
+import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -682,7 +682,7 @@ public class LabeledLDA extends AbstractSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        LabelTextData data = new LabelTextData(datasetName, datasetFolder);
+        LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
         data.filterLabelsByFrequency(minLabelFreq);

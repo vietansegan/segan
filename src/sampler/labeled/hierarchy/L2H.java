@@ -2,7 +2,7 @@ package sampler.labeled.hierarchy;
 
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;
-import data.LabelTextData;
+import data.LabelTextDataset;
 import gnu.trove.TIntDoubleHashMap;
 import gnu.trove.TIntIntHashMap;
 import graph.DirectedGraph;
@@ -1912,7 +1912,7 @@ public class L2H extends AbstractSampler {
             if (verbose) {
                 System.out.println("--- Loading data from " + datasetFolder);
             }
-            LabelTextData data = new LabelTextData(datasetName, datasetFolder);
+            LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
             data.setFormatFilename(formatFile);
             data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
             data.filterLabelsByFrequency(minLabelFreq);
