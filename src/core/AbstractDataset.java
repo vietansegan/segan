@@ -19,8 +19,4 @@ public abstract class AbstractDataset extends AbstractRunner {
     public String getFolder() {
         return this.name + "/";
     }
-
-    public void logln(String msg) {
-        System.out.println("[LOG] " + msg);
-    }
 }

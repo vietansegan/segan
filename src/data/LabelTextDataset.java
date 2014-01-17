@@ -6,9 +6,16 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
+import sampling.util.SparseCount;
+import util.CLIUtils;
 import util.DataUtils;
 import util.IOUtils;
 import util.RankingItem;
+import weka.core.Attribute;
+import weka.core.Instances;
+import weka.core.SparseInstance;
 
 /**
  *
@@ -17,7 +24,7 @@ import util.RankingItem;
 public class LabelTextDataset extends TextDataset {
 
     public static final String labelVocabExt = ".lvoc";
-    protected ArrayList<String>[] labelList;
+    protected ArrayList<ArrayList<String>> labelList;
     protected ArrayList<String> labelVocab;
     protected int[][] labels;
     protected int maxLabelVocSize = Integer.MAX_VALUE;
@@ -52,8 +59,12 @@ public class LabelTextDataset extends TextDataset {
         this.labelVocab = lVoc;
     }
 
-    public ArrayList<String>[] getLabelList() {
+    public ArrayList<ArrayList<String>> getLabelList() {
         return this.labelList;
+    }
+
+    public void setLabelList(ArrayList<ArrayList<String>> lblList) {
+        this.labelList = lblList;
     }
 
     /**
@@ -156,10 +167,10 @@ public class LabelTextDataset extends TextDataset {
         }
         reader.close();
 
-        this.labelList = new ArrayList[docIdList.size()];
+        this.labelList = new ArrayList<ArrayList<String>>();
         for (int ii = 0; ii < docIdList.size(); ii++) {
             ArrayList<String> docLabels = docLabelMap.get(docIdList.get(ii));
-            this.labelList[ii] = docLabels;
+            this.labelList.add(docLabels);
         }
     }
 
@@ -188,11 +199,11 @@ public class LabelTextDataset extends TextDataset {
         outputLabelVocab(outputFolder);
 
         // get label indices
-        this.labels = new int[this.labelList.length][];
+        this.labels = new int[this.labelList.size()][];
         for (int ii = 0; ii < labels.length; ii++) {
             ArrayList<Integer> docLabels = new ArrayList<Integer>();
-            for (int jj = 0; jj < labelList[ii].size(); jj++) {
-                int labelIndex = labelVocab.indexOf(labelList[ii].get(jj));
+            for (int jj = 0; jj < labelList.get(ii).size(); jj++) {
+                int labelIndex = labelVocab.indexOf(labelList.get(ii).get(jj));
                 if (labelIndex >= 0) { // filter out labels not in label vocab
                     docLabels.add(labelIndex);
                 }
@@ -227,8 +238,8 @@ public class LabelTextDataset extends TextDataset {
 
     protected void createLabelVocabByFrequency() throws Exception {
         HashMap<String, Integer> labelFreqs = new HashMap<String, Integer>();
-        for (int ii = 0; ii < this.labelList.length; ii++) {
-            for (String label : this.labelList[ii]) {
+        for (int ii = 0; ii < this.labelList.size(); ii++) {
+            for (String label : this.labelList.get(ii)) {
                 Integer count = labelFreqs.get(label);
                 if (count == null) {
                     labelFreqs.put(label, 1);
@@ -297,6 +308,56 @@ public class LabelTextDataset extends TextDataset {
         }
     }
 
+    public void outputArffFile(File filepath) {
+        if (verbose) {
+            logln("Outputing to " + filepath);
+        }
+
+        ArrayList<Attribute> attributes = new ArrayList<Attribute>();
+        for (int ii = 0; ii < wordVocab.size(); ii++) {
+            attributes.add(new Attribute("voc_" + wordVocab.get(ii)));
+        }
+        for (int ii = 0; ii < labelVocab.size(); ii++) {
+            ArrayList<String> attVals = new ArrayList<String>();
+            attVals.add("0");
+            attVals.add("1");
+            attributes.add(new Attribute("label_" + labelVocab.get(ii), attVals));
+        }
+
+        Instances data = new Instances(name, attributes, 0);
+        for (int dd = 0; dd < docIds.length; dd++) {
+            double[] vals = new double[wordVocab.size() + labelVocab.size()];
+
+            // words
+            SparseCount count = new SparseCount();
+            for (int w : words[dd]) {
+                count.increment(w);
+            }
+            for (int idx : count.getIndices()) {
+                vals[idx] = count.getCount(idx);
+            }
+
+            // labels
+            ArrayList<String> lbls = labelList.get(dd);
+            for (int ll = 0; ll < labelVocab.size(); ll++) {
+                if (lbls.contains(labelVocab.get(ll))) {
+                    vals[ll + wordVocab.size()] = 1;
+                }
+            }
+
+            data.add(new SparseInstance(1.0, vals));
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
+            writer.write(data.toString());
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing ARFF file");
+        }
+    }
+
     @Override
     public void loadFormattedData(String fFolder) {
         try {
@@ -316,5 +377,135 @@ public class LabelTextDataset extends TextDataset {
             labelVocab.add(line);
         }
         reader.close();
+    }
+
+    public static String getHelpString() {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + LabelTextDataset.class.getName() + " -help";
+    }
+
+    public static void main(String[] args) {
+        try {
+            parser = new BasicParser();
+
+            // create the Options
+            options = new Options();
+
+            // directories
+            addOption("dataset", "Dataset");
+            addOption("data-folder", "Folder that stores the processed data");
+            addOption("text-data", "Directory of the text data");
+            addOption("format-folder", "Folder that stores formatted data");
+            addOption("format-file", "Formatted file name");
+            addOption("label-file", "Directory of the label file");
+
+            // text processing
+            addOption("u", "The minimum count of raw unigrams");
+            addOption("b", "The minimum count of raw bigrams");
+            addOption("bs", "The minimum score of bigrams");
+            addOption("V", "Maximum vocab size");
+            addOption("min-tf", "Term frequency minimum cutoff");
+            addOption("max-tf", "Term frequency maximum cutoff");
+            addOption("min-df", "Document frequency minimum cutoff");
+            addOption("max-df", "Document frequency maximum cutoff");
+            addOption("min-doc-length", "Document minimum length");
+            addOption("min-word-length", "Word minimum length");
+
+            // cross validation
+//            addOption("num-folds", "Number of folds. Default 5.");
+//            addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
+//            addOption("cv-folder", "Folder to store cross validation folds");
+//            addOption("num-classes", "Number of classes that the response");
+
+            addOption("run-mode", "Run mode");
+
+            options.addOption("v", false, "Verbose");
+            options.addOption("d", false, "Debug");
+            options.addOption("s", false, "Whether stopwords are filtered");
+            options.addOption("l", false, "Whether lemmatization is performed");
+            options.addOption("file", false, "Whether the text input data is stored in a file or a folder");
+            options.addOption("help", false, "Help");
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp(getHelpString(), options);
+                return;
+            }
+
+            verbose = cmd.hasOption("v");
+            debug = cmd.hasOption("d");
+
+            String runMode = cmd.getOptionValue("run-mode");
+            if (runMode.equals("process")) {
+                process(args);
+            } else if (runMode.equals("load")) {
+                load(args);
+            } else {
+                throw new RuntimeException("Run mode " + runMode + " is not supported");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
+            System.exit(1);
+        }
+    }
+
+    public static void process(String[] args) throws Exception {
+        String datasetName = cmd.getOptionValue("dataset");
+        String datasetFolder = cmd.getOptionValue("data-folder");
+        String textInputData = cmd.getOptionValue("text-data");
+        String formatFolder = cmd.getOptionValue("format-folder");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        String labelFile = cmd.getOptionValue("label-file");
+
+        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 5);
+        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 10);
+        double bigramScoreCutoff = CLIUtils.getDoubleArgument(cmd, "bs", 5.0);
+        int maxVocabSize = CLIUtils.getIntegerArgument(cmd, "V", Integer.MAX_VALUE);
+        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 5);
+        int vocTermFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-tf", Integer.MAX_VALUE);
+        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 5);
+        int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
+        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 10);
+
+        boolean stopwordFilter = cmd.hasOption("s");
+        boolean lemmatization = cmd.hasOption("l");
+
+        CorpusProcessor corpProc = new CorpusProcessor(
+                unigramCountCutoff,
+                bigramCountCutoff,
+                bigramScoreCutoff,
+                maxVocabSize,
+                vocTermFreqMinCutoff,
+                vocTermFreqMaxCutoff,
+                vocDocFreqMinCutoff,
+                vocDocFreqMaxCutoff,
+                docTypeCountCutoff,
+                stopwordFilter,
+                lemmatization);
+
+        LabelTextDataset dataset = new LabelTextDataset(datasetName, datasetFolder, corpProc);
+        dataset.setFormatFilename(formatFile);
+
+        // load text data
+        if (cmd.hasOption("file")) {
+            dataset.loadTextDataFromFile(textInputData);
+        } else {
+            dataset.loadTextDataFromFolder(textInputData);
+        }
+        dataset.loadLabels(labelFile); // load response data
+        dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
+    }
+
+    public static LabelTextDataset load(String[] args) throws Exception {
+        String datasetName = cmd.getOptionValue("dataset");
+        String datasetFolder = cmd.getOptionValue("data-folder");
+        String formatFolder = cmd.getOptionValue("format-folder");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+
+        LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
+        return data;
     }
 }

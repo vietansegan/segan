@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package sampler;
 
 import core.AbstractSampler;
@@ -9,8 +5,8 @@ import java.io.BufferedWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import sampling.likelihood.DirMult;
-import sampling.util.Restaurant;
 import sampling.util.FullTable;
+import sampling.util.Restaurant;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;

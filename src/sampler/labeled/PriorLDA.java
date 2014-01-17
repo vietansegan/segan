@@ -488,31 +488,13 @@ public class PriorLDA extends AbstractSampler {
         }
         reader.close();
     }
-
-//    @Override
-//    public void inputPredictor(File predictorFile) {
-//        try {
-//            this.inputModel(predictorFile.getAbsolutePath());
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            throw new RuntimeException("Exception while loading predictor from "
-//                    + predictorFile);
-//        }
-//    }
-//    @Override
-//    public void outputPredictor(File predictorFile) {
-//        this.outputState(predictorFile.getAbsolutePath());
-//    }
-//    @Override
-//    public double[] predict(Page page) {
-//        int[] newWords = page.getWords();
-//
-////        return predictByCosineSimilarity(newWords);
-//
-//        return predictBySampling(newWords);
-//    }
+    
     public void setIdfs(double[] idfs) {
         this.idfs = idfs;
+    }
+    
+    public double[] predictNewDocument(int[] newDoc) {
+        return predictByCosineSimilarity(newDoc);
     }
 
     /**

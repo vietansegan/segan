@@ -1,5 +1,6 @@
 package sampling.util;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -9,8 +10,8 @@ import java.util.Set;
  *
  * @author vietan
  */
-public class SparseCount implements Cloneable {
-
+public class SparseCount implements Cloneable, Serializable {
+    private static final long serialVersionUID = 1123581321L;
     private HashMap<Integer, Integer> counts;
     private int countSum;
 

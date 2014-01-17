@@ -1,5 +1,6 @@
 package util;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -9,8 +10,9 @@ import java.util.Set;
  *
  * @author vietan
  */
-public class SparseVector {
-
+public class SparseVector implements Serializable {
+    private static final long serialVersionUID = 1123581321L;
+    
     private HashMap<Integer, Double> values;
 
     public SparseVector() {

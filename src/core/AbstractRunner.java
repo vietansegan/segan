@@ -11,8 +11,8 @@ import org.apache.commons.cli.Options;
  */
 public class AbstractRunner {
 
-    public static final String TopWordFile = AbstractExperiment.TopWordFile;
-    public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
+    public static final String TopWordFile = "top-words.txt";
+    public static final String TopicCoherenceFile = "topic-coherence.txt";
     protected static CommandLineParser parser;
     protected static Options options;
     protected static CommandLine cmd;
@@ -39,7 +39,7 @@ public class AbstractRunner {
         System.out.print("[LOG] " + msg);
     }
     
-    public void logln(String msg) {
+    public static void logln(String msg) {
         System.out.println("[LOG] " + msg);
     }
 }

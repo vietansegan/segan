@@ -2,6 +2,7 @@ package core;
 
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.Serializable;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -20,11 +21,13 @@ import util.RankingItem;
  *
  * @author vietan
  */
-public abstract class AbstractSampler {
+public abstract class AbstractSampler implements Serializable {
+    private static final long serialVersionUID = 1123581321L;
 
     public static final String IterPredictionFolder = "iter-predictions/";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
+    public static final String ModelFile = "model.zip";
     public static final String ReportFolder = "report/";
     public static final String AssignmentFileExt = ".assignment";
     public static final String ModelFileExt = ".model";

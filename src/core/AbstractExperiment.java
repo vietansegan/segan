@@ -4,14 +4,13 @@ package core;
  *
  * @author vietan
  */
-public abstract class AbstractExperiment<D extends AbstractDataset> {
+public abstract class AbstractExperiment<D extends AbstractDataset> extends AbstractRunner {
 
     public static final String SummaryFile = "summary.txt";
     public static final String SupervisedFolder = "supervised/";
     public static final String UnsupervisedFolder = "unsupervised/";
     public static final String SamplerFolder = "data/sampler/";
-    public static final String TopWordFile = "top-words.txt";
-    public static final String TopicCoherenceFile = "topic-coherence.txt";
+    
     public static final int UNOBSERVED = -1;
 
     public static enum RunType {
@@ -23,8 +22,6 @@ public abstract class AbstractExperiment<D extends AbstractDataset> {
     public static int sample_lag = 50;
     public static String experimentPath;
     protected D data;
-    public boolean debug;
-    public boolean verbose = true;
 
     public abstract void setup() throws Exception;
 
@@ -75,14 +72,6 @@ public abstract class AbstractExperiment<D extends AbstractDataset> {
                 sample_lag = 20;
                 break;
         }
-    }
-
-    public static void log(String msg) {
-        System.out.print("[LOG] " + msg);
-    }
-
-    public static void logln(String msg) {
-        System.out.println("[LOG] " + msg);
     }
 
     public String getDatasetFolder() {

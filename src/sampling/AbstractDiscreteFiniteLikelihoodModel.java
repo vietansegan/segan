@@ -1,5 +1,6 @@
 package sampling;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Set;
@@ -14,16 +15,16 @@ import sampling.util.SparseCount;
  * 
 * @author vietan
  */
-public abstract class AbstractDiscreteFiniteLikelihoodModel implements Cloneable {
-
+public abstract class AbstractDiscreteFiniteLikelihoodModel implements Cloneable, Serializable {
+    private static final long serialVersionUID = 1123581321L;
     public static final int RANDOM_SEED = 1123581321;
     // this is currently used for likelihood models that does not have/use
     // conjugate prior and we need to sample from the prior
     protected static Random rand = new Random(RANDOM_SEED);
     // observations
-    protected final int dimension;
+    protected int dimension;
     protected SparseCount sparseCounts;
-
+    
     public AbstractDiscreteFiniteLikelihoodModel(int dim) {
         this.dimension = dim;
         this.sparseCounts = new SparseCount();

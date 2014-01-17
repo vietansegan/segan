@@ -16,6 +16,7 @@ import sampling.util.SparseCount;
 import util.CLIUtils;
 import util.DataUtils;
 import util.IOUtils;
+import util.MiscUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -36,6 +37,11 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected MimnoTopicCoherence topicCoherence;
     protected double[] tfidfs;
     protected double[] idfs;
+
+    static {
+        verbose = true;
+        debug = true;
+    }
 
     public TextDataset(String name) {
         super(name);
@@ -218,8 +224,15 @@ public class TextDataset extends AbstractTokenizeDataset {
         BufferedReader reader;
         String line;
         StringBuilder docText;
+        int step = MiscUtils.getRoundStepSize(filenames.length, 10);
+        int count = 0;
         for (String filename : filenames) {
-            docIdList.add(IOUtils.removeExtension(filename));
+            if (count % step == 0) {
+                logln("--- --- Processing file " + count);
+            }
+            count++;
+
+            docIdList.add(filename.replaceAll(".txt", ""));
             reader = IOUtils.getBufferedReader(new File(fd, filename));
             docText = new StringBuilder();
             while ((line = reader.readLine()) != null) {

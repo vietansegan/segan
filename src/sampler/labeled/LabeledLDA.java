@@ -5,6 +5,7 @@ import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.Serializable;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
@@ -23,7 +24,8 @@ import util.evaluation.MimnoTopicCoherence;
  *
  * @author vietan
  */
-public class LabeledLDA extends AbstractSampler {
+public class LabeledLDA extends AbstractSampler implements Serializable {
+    private static final long serialVersionUID = 1123581321L;
 
     public static final int ALPHA = 0;
     public static final int BETA = 1;
@@ -355,6 +357,36 @@ public class LabeledLDA extends AbstractSampler {
         }
     }
 
+    public double[] predictNewDocument(int[] newDoc) throws Exception{
+        // initialize assignments
+        DirMult docTopic = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
+        int[] newZ = new int[newDoc.length];
+        for (int n = 0; n < newZ.length; n++) {
+            newZ[n] = rand.nextInt(L);
+            docTopic.increment(newZ[n]);
+        }
+        // sample
+        for (iter = 0; iter < MAX_ITER; iter++) {
+            for(int n=0; n<newZ.length; n++) {
+                // decrement
+                docTopic.decrement(newZ[n]);
+                
+                // sample
+                double[] logprobs = new double[L];
+                for(int l=0; l<L; l++) {
+                    logprobs[l] = docTopic.getLogLikelihood(l)
+                            + label_words[l].getLogLikelihood(newDoc[n]);
+                }
+                newZ[n] = SamplerUtils.logMaxRescaleSample(logprobs);
+                
+                // increment
+                docTopic.increment(newZ[n]);
+            }
+        }
+        
+        return docTopic.getDistribution();
+    }
+
     @Override
     public double getLogLikelihood() {
         double docTopicLlh = 0;
@@ -643,20 +675,20 @@ public class LabeledLDA extends AbstractSampler {
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
-                CLIUtils.printHelp(getHelpCmd(), options);
+                CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
 
             runModel();
         } catch (Exception e) {
             e.printStackTrace();
-            CLIUtils.printHelp(getHelpCmd(), options);
+            CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }
 
-    private static String getHelpCmd() {
-        return "java -cp dist/segan.jar sampler.labeled.LabeledLDA -help";
+    public static String getHelpString() {
+        return "java -cp dist/segan.jar " + LabeledLDA.class.getName() + " -help";
     }
 
     private static void runModel() throws Exception {

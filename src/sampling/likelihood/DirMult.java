@@ -1,9 +1,11 @@
 package sampling.likelihood;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import sampling.AbstractDiscreteFiniteLikelihoodModel;
 import util.SamplerUtils;
+import weka.core.SerializedObject;
 
 /**
  * Implementation of a multinomial likelihood model in which the multinomial
@@ -11,21 +13,22 @@ import util.SamplerUtils;
  *
  * @author vietan
  */
-public class DirMult extends AbstractDiscreteFiniteLikelihoodModel {
-
+public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Serializable {
+    private static final long serialVersionUID = 1123581321L;
+    
     private double concentration; // concentration parameter
     private double[] center; // the mean vector for asymmetric distribution
     private double centerElement; // an element in the mean vector for symmetric distribution
     private double[] distribution;
-
+    
     public DirMult(int dim, double concentration, double centerElement) {
         super(dim);
         this.centerElement = centerElement;
         this.concentration = concentration;
     }
+    
     /*TODO: dim can be inferred from the dimension of centerVector. remove the
      * argument "dim"! */
-
     public DirMult(int dim, double concentration, double[] centerVector) {
         super(dim);
         this.center = centerVector;
@@ -294,11 +297,26 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel {
 
 //            testPrior();
 
-            testLlh();
+//            testLlh();
+            
+            testSerializable();
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+    
+    private static void testSerializable() throws Exception {
+        double[] mean = {0.5, 0.5};
+        double scale = 2;
+        DirMult dmm = new DirMult(mean.length, scale, mean);
+        dmm.increment(0);
+        System.out.println(dmm);
+        System.out.println(DirMult.output(dmm));
+        
+        DirMult copy = (DirMult) new SerializedObject(dmm).getObject();
+        System.out.println(copy);
+        System.out.println(DirMult.output(copy));
     }
 
     private static void testLlh() throws Exception {
