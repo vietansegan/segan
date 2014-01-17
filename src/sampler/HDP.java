@@ -12,11 +12,12 @@ import util.MiscUtils;
 import util.SamplerUtils;
 import util.evaluation.MimnoTopicCoherence;
 
+
 /**
  *
  * @author vietan
  */
-public class HDPSampler extends AbstractSampler {
+public class HDP extends AbstractSampler {
 
     public static final int PSEUDO_INDEX = -1;
     public static final int ALPHA_GLOBAL = 0;
@@ -737,7 +738,6 @@ public class HDPSampler extends AbstractSampler {
         writer.close();
     }
 }
-
 class HDPDish extends FullTable<HDPTable, DirMult> {
 
     public HDPDish(int index, DirMult content) {
