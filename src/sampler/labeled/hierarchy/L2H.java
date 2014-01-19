@@ -1313,6 +1313,10 @@ public class L2H extends AbstractSampler {
         }
         writer.close();
     }
+    
+    public double[] predictNewDocument(int[] newDoc) {
+        return null;
+    }
 
     class Node extends TreeNode<Node, Integer> {
 

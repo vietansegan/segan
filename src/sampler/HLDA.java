@@ -21,7 +21,7 @@ import util.evaluation.MimnoTopicCoherence;
  *
  * @author vietan
  */
-public class HLDASampler extends AbstractSampler {
+public class HLDA extends AbstractSampler {
 
     public static final int MEAN = 0; // GEM mean
     public static final int SCALE = 1;  // GEM scale
