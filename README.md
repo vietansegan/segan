@@ -95,6 +95,7 @@ Run SLDA Gibbs sampler with the default setting:
  - `<output>`: Directory of the output folder
  - `<tree-height>`(optional): The height of the tree. Default: `3`. 
  - `<init-branch-factor>`(optional): An array to specify the branching factors of the initial tree. For example, use `10-5-3` to initialize a tree having 10 first-level nodes, each of which has 5 second-level children, each of which in turn has 3 third-level children. Default: `15-3`. 
+ - `<seeded-asgn-file>`(optional): File containing a pre-learned topic assignments for each tokens. This is to initialize SHLDA with good first-level topics (for example, topics learned from iteractive topic models).
  - `<T>`(optional): The parameter for L1-norm regularization on lexical regression. The smaller this number is, the fewer lexical items are used (in other words, there'll be more lexical items haiving zero weights). Default: `500`.
 
 #### Notes
