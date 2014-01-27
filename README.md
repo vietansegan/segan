@@ -92,6 +92,7 @@ Run SLDA Gibbs sampler with the default setting:
     java  -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --run-mode train 
 
  - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
+ - `<format-file>`: Name of input data files without extension.
  - `<output>`: Directory of the output folder
  - `<tree-height>`(optional): The height of the tree. Default: `3`. 
  - `<init-branch-factor>`(optional): An array to specify the branching factors of the initial tree. For example, use `10-5-3` to initialize a tree having 10 first-level nodes, each of which has 5 second-level children, each of which in turn has 3 third-level children. Default: `15-3`. 
