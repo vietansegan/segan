@@ -227,7 +227,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
-                String str = "Iter " + iter
+                String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
                         + "\t tokens changed: " + ((double) numTokensChange / numTokens)
                         + "\t" + getCurrentState();

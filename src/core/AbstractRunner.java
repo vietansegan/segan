@@ -42,4 +42,9 @@ public class AbstractRunner {
     public static void logln(String msg) {
         System.out.println("[LOG] " + msg);
     }
+    
+    public static String getHelpString(String className) {
+        return "java -cp 'dist/segan.jar:dist/lib/*' " 
+                + className + " -help";
+    }
 }

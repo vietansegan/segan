@@ -333,7 +333,7 @@ public class L2H extends AbstractSampler {
         this.sampleTopicAssignments(!REMOVE, ADD);
 
         if (verbose) {
-            logln("--- --- Assignments initialized\n" + this.printGlobalTree());
+            logln("--- --- Assignments initialized\n" + this.printGlobalTree(10));
         }
     }
 
@@ -1225,8 +1225,10 @@ public class L2H extends AbstractSampler {
 
     /**
      * Print out the global tree.
+     *
+     * @param numTopWords Number of top words shown for each topic
      */
-    public String printGlobalTree() {
+    public String printGlobalTree(int numTopWords) {
         StringBuilder str = new StringBuilder();
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
@@ -1247,7 +1249,6 @@ public class L2H extends AbstractSampler {
                 str.append("\t");
             }
 
-            int numTopWords = 10;
             String[] topWords = getTopWords(node.topic, numTopWords);
             str
                     .append(node.toString()).append(", ")
@@ -1276,12 +1277,12 @@ public class L2H extends AbstractSampler {
         return str.toString();
     }
 
-    public void outputGlobalTree(File outputFile) throws Exception {
+    public void outputGlobalTree(File outputFile, int numTopWords) throws Exception {
         if (verbose) {
             logln("Outputing global tree to " + outputFile);
         }
         BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        writer.write(this.printGlobalTree());
+        writer.write(this.printGlobalTree(numTopWords));
         writer.close();
     }
 
@@ -1313,10 +1314,29 @@ public class L2H extends AbstractSampler {
         }
         writer.close();
     }
-    
-    public double[] predictNewDocument(int[] newDoc) {
-        return null;
-    }
+
+//    public double[] predictNewDocument(int[] newDoc) {
+//        int[] newZ = new int[newDoc.length];
+//        // sample
+//        for (iter = 0; iter < MAX_ITER; iter++) {
+//            for(int n=0; n<newZ.length; n++) {
+//                // decrement
+//                docTopic.decrement(newZ[n]);
+//                
+//                // sample
+//                double[] logprobs = new double[L];
+//                for(int l=0; l<L; l++) {
+//                    logprobs[l] = docTopic.getLogLikelihood(l)
+//                            + label_words[l].getLogLikelihood(newDoc[n]);
+//                }
+//                newZ[n] = SamplerUtils.logMaxRescaleSample(logprobs);
+//                
+//                // increment
+//                docTopic.increment(newZ[n]);
+//            }
+//        }
+//        throw new RuntimeException("Not supported");
+//    }
 
     class Node extends TreeNode<Node, Integer> {
 
@@ -1502,8 +1522,7 @@ public class L2H extends AbstractSampler {
         @Override
         public String toString() {
             StringBuilder str = new StringBuilder();
-            str.append(level)
-                    .append(", ").append(index)
+            str.append(getPathString())
                     .append(", ").append(content.toString());
             return str.toString();
         }

@@ -31,6 +31,8 @@ public abstract class AbstractSampler implements Serializable {
     public static final String ReportFolder = "report/";
     public static final String AssignmentFileExt = ".assignment";
     public static final String ModelFileExt = ".model";
+    public static final String LikelihoodFile = "likelihoods.txt";
+    public static final String HyperparameterFile = "hyperparameters.txt";
     public static final int INIT = -1;
     public static final boolean REMOVE = true;
     public static final boolean ADD = true;

@@ -19,11 +19,11 @@ import util.evaluation.RankingPerformance;
  * @author vietan
  */
 public abstract class AbstractRegressor extends AbstractRunner {
+
     public static final String DATA_FILE = "data";
     public static final String MODEL_FILE = "model";
     public static final String PREDICTION_FILE = "predictions";
     public static final String RESULT_FILE = "result";
-
     protected String folder;
     protected String name;
 
@@ -32,7 +32,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
     }
 
     public abstract String getName();
-    
+
     public void setName(String name) {
         this.name = name;
     }
@@ -72,14 +72,16 @@ public abstract class AbstractRegressor extends AbstractRunner {
         PredictionUtils.outputRegressionPredictions(outputFile, instanceIds, trueValues, predValues);
     }
 
-    /** Output regression results.
+    /**
+     * Output regression results.
+     *
      * @param outputFile The output file
      * @param trueValues List of true values
      * @param predValues List of predicted values
      */
     public ArrayList<Measurement> outputRegressionResults(
             File outputFile,
-            double[] trueValues, 
+            double[] trueValues,
             double[] predValues) {
         // output different measurements
         if (verbose) {
@@ -90,7 +92,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
 
     public ArrayList<Measurement> outputClassificationResults(
             File outputFile,
-            int[] trueClasses, 
+            int[] trueClasses,
             int[] predClasses) throws Exception {
         // output different measurements
         if (verbose) {
@@ -111,29 +113,56 @@ public abstract class AbstractRegressor extends AbstractRunner {
             File rankFolder,
             String[] instanceIds,
             double[] trueValues,
+            double[] predValues) {
+        IOUtils.createFolder(rankFolder);
+
+        // predictions
+        RankingItemList<String> preds = new RankingItemList<String>();
+        for (int ii = 0; ii < instanceIds.length; ii++) {
+            preds.addRankingItem(new RankingItem<String>(instanceIds[ii], predValues[ii]));
+        }
+        preds.sortDescending();
+
+        // groundtruth
+        RankingItemList<String> truths = new RankingItemList<String>();
+        for (int ii = 0; ii < instanceIds.length; ii++) {
+            truths.addRankingItem(new RankingItem<String>(instanceIds[ii], trueValues[ii]));
+        }
+        truths.sortDescending();
+
+        RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds,
+                rankFolder.getAbsolutePath());
+        rankPerf.computeAndOutputNDCGs(truths);
+    }
+
+    public void outputRankingPerformance(
+            File rankFolder,
+            String[] instanceIds,
+            double[] trueValues,
             double[] predValues,
             double threshold) {
         IOUtils.createFolder(rankFolder);
         RankingItemList<String> preds = new RankingItemList<String>();
-        for(int ii=0; ii<instanceIds.length; ii++) {
+        for (int ii = 0; ii < instanceIds.length; ii++) {
             preds.addRankingItem(new RankingItem<String>(instanceIds[ii], predValues[ii]));
         }
         preds.sortDescending();
-        
+
         Set<String> groundtruth = new HashSet<String>();
-        for(int ii=0; ii<instanceIds.length; ii++){
-            if(trueValues[ii] >= threshold)
+        for (int ii = 0; ii < instanceIds.length; ii++) {
+            if (trueValues[ii] >= threshold) {
                 groundtruth.add(instanceIds[ii]);
+            }
         }
-        
-        RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds, 
+
+        RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds,
                 groundtruth, rankFolder.getAbsolutePath());
         rankPerf.computePrecisionsAndRecalls();
         rankPerf.outputPrecisionRecallF1();
-        
+
         rankPerf.outputAUCListFile();
         rankPerf.outputRankingResultsWithGroundtruth();
-        
+
         rankPerf.computeAUC();
         rankPerf.outputAUC();
     }

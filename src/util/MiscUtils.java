@@ -30,7 +30,7 @@ public class MiscUtils {
             map.put(key, count + 1);
         }
     }
-
+    
     public static int getRoundStepSize(int total, int numSteps) {
         int stepSize = (int) Math.pow(10, (int) Math.log10(total / numSteps));
         return stepSize;

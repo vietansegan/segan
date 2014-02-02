@@ -3920,17 +3920,22 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             if (runMode.equals("train")) {
                 sampler.sample();
-                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), 
+                        numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), 
+                        trainData.getRawSentences(), 10);
             } else if (runMode.equals("test")) {
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, 
+                        testData.getDocIds(), testData.getResponses());
             } else if (runMode.equals("train-test")) {
                 // train
                 sampler.sample();
-                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), 
+                        numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), 
+                        trainData.getRawSentences(), 10);
 //                sampler.outputDocTopicDistributions(new File(samplerFolder, "tr-doc-topic.txt"));
 //                sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
 //                sampler.outputTopicRegressionParameters(new File(samplerFolder, "topic-reg-params.txt"));
@@ -3938,12 +3943,15 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 // test
                 IOUtils.createFolder(teResultFolder);
                 sampler.test(testData);
-                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, testData.getDocIds(), testData.getResponses());
+                PredictionUtils.evaluateRegression(iterPredFolder, teResultFolder, 
+                        testData.getDocIds(), testData.getResponses());
 //                sampler.outputDocTopicDistributions(new File(samplerFolder, "te-doc-topic.txt"));
             } else if (runMode.equals("hack")) {
                 sampler.inputFinalState();
-                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), trainData.getRawSentences(), 10);
+                sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), 
+                        numTopWords);
+                sampler.outputSentences(new File(samplerFolder, "sentences.txt"), 
+                        trainData.getRawSentences(), 10);
 
                 int[][] teWords = testData.getWords();
 

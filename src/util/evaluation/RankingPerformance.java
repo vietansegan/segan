@@ -101,25 +101,32 @@ public class RankingPerformance<A> {
         return this.ndcgs;
     }
     
-    public void inputNDCGs() {
+    public static double[] inputNDCG(File ndcgFile) {
+        double[] ndcg = null;
         try {
-            BufferedReader reader = IOUtils.getBufferedReader(new File(performanceFolder, NDCGFile));
+            BufferedReader reader = IOUtils.getBufferedReader(ndcgFile);
             String line;
             String[] sline;
             ArrayList<String> ndcgList = new ArrayList<String>();
+            reader.readLine();
             while ((line = reader.readLine()) != null) {
                 sline = line.split("\t");
                 ndcgList.add(sline[sline.length - 1]);
             }
-            this.ndcgs = new double[ndcgList.size()];
-            for (int i = 0; i < this.ndcgs.length; i++) {
-                ndcgs[i] = Double.parseDouble(ndcgList.get(i));
+            ndcg = new double[ndcgList.size()];
+            for (int i = 0; i < ndcg.length; i++) {
+                ndcg[i] = Double.parseDouble(ndcgList.get(i));
             }
             reader.close();
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while inputing NDCG from " + ndcgFile);
         }
+        return ndcg;
+    }
+    
+    public void inputNDCGs() {
+        this.ndcgs = inputNDCG(new File(performanceFolder, NDCGFile));
     }
     
     public void computeAndOutputNDCGs(RankingItemList<A> groundtruthRakingItems) {
@@ -143,6 +150,8 @@ public class RankingPerformance<A> {
         
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(new File(performanceFolder, NDCGFile));
+            writer.write("order\tpredicted_value\ttrue_value\taccumulated_gain"
+                    + "\tnormalization_value\tndcg\n");
             
             double predicted_value, true_value, value;
             double accumulated_gain = 0;
