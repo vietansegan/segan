@@ -20,7 +20,7 @@ To process text-only data stored in multiple files in a folder, each file corres
  - `<input-text-folder>`:	The folder that contains input text data, in which each file is one document
  - `<data-folder>`:	The folder where the processed data will be stored
  - `<format-folder>`:	The subfolder that the processed data will be stored. More specifically, after running this, the processed data will be stored in `<output-folder>/<dataset-name>/<format-folder>`.
- - `<format-file>`(optional): By default, all processed data files will be named `<dataset-name>.<extension>`, e.g., `<dataset-name>.dat`, `<dataset-name>.wvoc` etc. If you want to rename the formatted file, use this option.
+ - `<format-file>`(optional): By default, all processed data files will be named `<dataset-name>.<extension>`, e.g., `<dataset-name>.dat`, `<dataset-name>.wvoc` etc. If you want to rename these formatted files to `<format-file>.dat`, `<format-file>.wvoc` etc, use this option.
 
 #### Notes
 
@@ -43,10 +43,6 @@ This is to process a collection of documents, each of which is associated with a
 
     java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
     
-## Text data with categorical response variable
-
-Under construction.
-    
 ## Create cross validation data
 
 Currently only support data with continuous responses
@@ -57,6 +53,21 @@ Currently only support data with continuous responses
  - `<num-folds>`: The number of folds
  - `<tr2dev-ratio>`: Training-to-development ratio: the ratio between the number of training instances to the number of development instances.
  - `<num-classes>` is the number of classes that the response variable is discretized into, which is used for stratified sampling. For example, if `<num-classes> = 3`, the response variables are discretized into 3 classes, and CreateCrossValidationFolds will try to preserve the distributions of these 3 classes in training, development and test sets. Default, `<num-classes> = 1`.
+
+## Process training/test data separately
+
+Given a training/test split, this will process the training data and use the processed word vocabulary to process the test data.
+
+To process the training data, use `--run-mode process` as above. For example,
+
+    java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --run-mode process
+
+To process the test data with the processed word vocabulary, use `--word-vocab-file` to specify the directory of the file containing word vocabulary (i.e., `<output-folder>/<dataset-name>/<format-folder>/<format-file>.wvoc`).
+
+ 
+## Text data with categorical response variable
+
+Under construction.
 
 # Run SLDA (to be revised)
 
