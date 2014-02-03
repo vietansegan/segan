@@ -1,6 +1,7 @@
 package sampler.labeled;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,9 +30,8 @@ public class TFIDF {
     protected SparseVector[] labelVectors; // L x V;
     private int minWordTypeCount = 5;
     private double[] labelL2Norms;
-    
+
     public TFIDF() {
-        
     }
 
     public TFIDF(
@@ -204,6 +204,46 @@ public class TFIDF {
             rankLabels.add(label);
         }
         return rankLabels;
+    }
+
+    public void outputPredictorTextFile(File predFile) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(predFile);
+            writer.write("num-labels\t" + L + "\n");
+            writer.write("num-dimension\t" + V + "\n");
+            for (int l = 0; l < this.labelVectors.length; l++) {
+                writer.write(labelVectors[l].toString() + "\n");
+            }
+            for (int v = 0; v < V; v++) {
+                writer.write(this.idfs[v] + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing model to "
+                    + predFile);
+        }
+    }
+
+    public void inputPredictorTextFile(File predFile) {
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(predFile);
+            L = Integer.parseInt(reader.readLine().split("\t")[1]);
+            V = Integer.parseInt(reader.readLine().split("\t")[1]);
+            this.labelVectors = new SparseVector[L];
+            for (int l = 0; l < L; l++) {
+                labelVectors[l] = SparseVector.parseString(reader.readLine());
+            }
+            this.idfs = new double[V];
+            for (int v = 0; v < V; v++) {
+                this.idfs[v] = Double.parseDouble(reader.readLine());
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing model from "
+                    + predFile);
+        }
     }
 
     public void outputPredictor(File predictorFile) {

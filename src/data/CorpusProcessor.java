@@ -1,5 +1,6 @@
 package data;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -221,6 +222,18 @@ public class CorpusProcessor {
 
     public void setVocab(ArrayList<String> voc) {
         this.vocabulary = voc;
+    }
+
+    public void loadVocab(String filepath) {
+        try {
+            this.vocabulary = new ArrayList<String>();
+            BufferedReader reader = IOUtils.getBufferedReader(filepath);
+            this.vocabulary.add(reader.readLine());
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading vocab from " + filepath);
+        }
     }
 
     public int[][] getNumerics() {

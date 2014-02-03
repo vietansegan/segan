@@ -380,7 +380,8 @@ public class LabelTextDataset extends TextDataset {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + LabelTextDataset.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar:dist/lib/*' " 
+                + LabelTextDataset.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -446,7 +447,7 @@ public class LabelTextDataset extends TextDataset {
         } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp(getHelpString(), options);
-            System.exit(1);
+            throw new RuntimeException();
         }
     }
 

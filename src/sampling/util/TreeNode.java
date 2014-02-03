@@ -1,5 +1,6 @@
 package sampling.util;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.SortedSet;
@@ -14,8 +15,10 @@ import java.util.TreeSet;
  *
  * @author vietan
  */
-public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C>> {
+public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C>>,
+        Serializable {
 
+    private static final long serialVersionUID = 1123581321L;
     public static final int ROOT_PARENT_INDEX = -1;
     protected int index;
     protected int level;

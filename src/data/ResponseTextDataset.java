@@ -163,7 +163,8 @@ public class ResponseTextDataset extends TextDataset {
             CorpusProcessor cp = new CorpusProcessor(corpProc);
 
             // training data
-            ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
             trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
             ArrayList<String> trDocIds = new ArrayList<String>();
             ArrayList<String> trDocTexts = new ArrayList<String>();
@@ -178,8 +179,9 @@ public class ResponseTextDataset extends TextDataset {
             trainData.setResponses(trResponses);
             trainData.format(fold.getFoldFolderPath());
 
-            // development data
-            ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            // development data: process using vocab from training
+            ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
             devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
             ArrayList<String> deDocIds = new ArrayList<String>();
             ArrayList<String> deDocTexts = new ArrayList<String>();
@@ -194,8 +196,9 @@ public class ResponseTextDataset extends TextDataset {
             devData.setResponses(deResponses);
             devData.format(fold.getFoldFolderPath());
 
-            // test data
-            ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(), cv.getFolderPath(), cp);
+            // test data: process using vocab from training
+            ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
             testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
             ArrayList<String> teDocIds = new ArrayList<String>();
             ArrayList<String> teDocTexts = new ArrayList<String>();
@@ -247,6 +250,7 @@ public class ResponseTextDataset extends TextDataset {
             addOption("format-folder", "Folder that stores formatted data");
             addOption("format-file", "Formatted file name");
             addOption("response-file", "Directory of the response file");
+            addOption("word-voc-file", "Directory of the word vocab file (if any)");
 
             // text processing
             addOption("u", "The minimum count of raw unigrams");
@@ -424,7 +428,16 @@ public class ResponseTextDataset extends TextDataset {
                 stopwordFilter,
                 lemmatization);
 
-        ResponseTextDataset dataset = new ResponseTextDataset(datasetName, datasetFolder, corpProc);
+        // If the word vocab file is given, use it. This is usually for the case
+        // where training data have been processed and now test data are processed
+        // using the word vocab from the training data.
+        if (cmd.hasOption("word-voc-file")) {
+            String wordVocFile = cmd.getOptionValue("word-voc-file");
+            corpProc.loadVocab(wordVocFile);
+        }
+
+        ResponseTextDataset dataset = new ResponseTextDataset(
+                datasetName, datasetFolder, corpProc);
         dataset.setFormatFilename(formatFile);
 
         // load text data
