@@ -22,6 +22,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
     public static int sample_lag = 50;
     public static String experimentPath;
     protected D data;
+    
+    public abstract void preprocess() throws Exception;
 
     public abstract void setup() throws Exception;
 

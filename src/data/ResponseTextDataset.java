@@ -140,8 +140,8 @@ public class ResponseTextDataset extends TextDataset {
      * of test data
      * @param numClasses Number of discrete classes for stratified sampling
      */
-    public void createCrossValidation(String cvFolder, int numFolds, double trToDevRatio, int numClasses)
-            throws Exception {
+    public void createCrossValidation(String cvFolder, int numFolds, 
+            double trToDevRatio, int numClasses) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = StatisticsUtils.discretize(responses, numClasses);
         for (int d = 0; d < this.docIdList.size(); d++) {
@@ -244,25 +244,11 @@ public class ResponseTextDataset extends TextDataset {
             options = new Options();
 
             // directories
-            addOption("dataset", "Dataset");
-            addOption("data-folder", "Folder that stores the processed data");
-            addOption("text-data", "Directory of the text data");
-            addOption("format-folder", "Folder that stores formatted data");
-            addOption("format-file", "Formatted file name");
+            addDataDirectoryOptions();
             addOption("response-file", "Directory of the response file");
-            addOption("word-voc-file", "Directory of the word vocab file (if any)");
 
             // text processing
-            addOption("u", "The minimum count of raw unigrams");
-            addOption("b", "The minimum count of raw bigrams");
-            addOption("bs", "The minimum score of bigrams");
-            addOption("V", "Maximum vocab size");
-            addOption("min-tf", "Term frequency minimum cutoff");
-            addOption("max-tf", "Term frequency maximum cutoff");
-            addOption("min-df", "Document frequency minimum cutoff");
-            addOption("max-df", "Document frequency maximum cutoff");
-            addOption("min-doc-length", "Document minimum length");
-            addOption("min-word-length", "Word minimum length");
+            addCorpusProcessorOptions();
 
             // cross validation
             addOption("num-folds", "Number of folds. Default 5.");
@@ -271,12 +257,8 @@ public class ResponseTextDataset extends TextDataset {
             addOption("num-classes", "Number of classes that the response");
 
             addOption("run-mode", "Run mode");
-
             options.addOption("v", false, "Verbose");
             options.addOption("d", false, "Debug");
-            options.addOption("s", false, "Whether stopwords are filtered");
-            options.addOption("l", false, "Whether lemmatization is performed");
-            options.addOption("file", false, "Whether the text input data is stored in a file or a folder");
             options.addOption("help", false, "Help");
 
             cmd = parser.parse(options, args);
@@ -290,11 +272,11 @@ public class ResponseTextDataset extends TextDataset {
 
             String runMode = cmd.getOptionValue("run-mode");
             if (runMode.equals("process")) {
-                process(args);
+                process();
             } else if (runMode.equals("load")) {
-                load(args);
+                load();
             } else if (runMode.equals("cross-validation")) {
-                crossValidate(args);
+                crossValidate();
             } else {
                 throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
@@ -302,29 +284,15 @@ public class ResponseTextDataset extends TextDataset {
         } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp(getHelpString(), options);
-            System.exit(1);
+            throw new RuntimeException();
         }
     }
 
-    public static void crossValidate(String[] args) throws Exception {
+    public static void crossValidate() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
         String responseFile = cmd.getOptionValue("response-file");
-
-        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);
-        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 0);
-        double bigramScoreCutoff = CLIUtils.getDoubleArgument(cmd, "bs", 5.0);
-        int maxVocabSize = CLIUtils.getIntegerArgument(cmd, "V", Integer.MAX_VALUE);
-        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 0);
-        int vocTermFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-tf", Integer.MAX_VALUE);
-        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 0);
-        int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
-        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 1);
-        int minWordLength = CLIUtils.getIntegerArgument(cmd, "min-word-length", 1);
-
-        boolean stopwordFilter = cmd.hasOption("s");
-        boolean lemmatization = cmd.hasOption("l");
 
         int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
         double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
@@ -332,20 +300,7 @@ public class ResponseTextDataset extends TextDataset {
         int numClasses = CLIUtils.getIntegerArgument(cmd, "num-classes", 1);
         IOUtils.createFolder(cvFolder);
 
-        CorpusProcessor corpProc = new CorpusProcessor(
-                unigramCountCutoff,
-                bigramCountCutoff,
-                bigramScoreCutoff,
-                maxVocabSize,
-                vocTermFreqMinCutoff,
-                vocTermFreqMaxCutoff,
-                vocDocFreqMinCutoff,
-                vocDocFreqMaxCutoff,
-                docTypeCountCutoff,
-                minWordLength,
-                stopwordFilter,
-                lemmatization);
-
+        CorpusProcessor corpProc = createCorpusProcessor();
         ResponseTextDataset dataset = new ResponseTextDataset(datasetName, datasetFolder, corpProc);
         // load text data
         if (cmd.hasOption("file")) {
@@ -401,41 +356,8 @@ public class ResponseTextDataset extends TextDataset {
         String formatFolder = cmd.getOptionValue("format-folder");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         String responseFile = cmd.getOptionValue("response-file");
-
-        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 0);
-        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 0);
-        double bigramScoreCutoff = CLIUtils.getDoubleArgument(cmd, "bs", 5.0);
-        int maxVocabSize = CLIUtils.getIntegerArgument(cmd, "V", Integer.MAX_VALUE);
-        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 0);
-        int vocTermFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-tf", Integer.MAX_VALUE);
-        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 0);
-        int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
-        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 1);
-
-        boolean stopwordFilter = cmd.hasOption("s");
-        boolean lemmatization = cmd.hasOption("l");
-
-        CorpusProcessor corpProc = new CorpusProcessor(
-                unigramCountCutoff,
-                bigramCountCutoff,
-                bigramScoreCutoff,
-                maxVocabSize,
-                vocTermFreqMinCutoff,
-                vocTermFreqMaxCutoff,
-                vocDocFreqMinCutoff,
-                vocDocFreqMaxCutoff,
-                docTypeCountCutoff,
-                stopwordFilter,
-                lemmatization);
-
-        // If the word vocab file is given, use it. This is usually for the case
-        // where training data have been processed and now test data are processed
-        // using the word vocab from the training data.
-        if (cmd.hasOption("word-voc-file")) {
-            String wordVocFile = cmd.getOptionValue("word-voc-file");
-            corpProc.loadVocab(wordVocFile);
-        }
-
+        
+        CorpusProcessor corpProc = createCorpusProcessor();
         ResponseTextDataset dataset = new ResponseTextDataset(
                 datasetName, datasetFolder, corpProc);
         dataset.setFormatFilename(formatFile);

@@ -134,7 +134,7 @@ public class GurobiMLRL1Norm {
     private static void test() {
         Random rand = new Random(1);
 
-        int D = 1000;
+        int D = 100;
         int V = 10;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {

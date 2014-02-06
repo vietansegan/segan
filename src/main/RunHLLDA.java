@@ -194,6 +194,11 @@ public class RunHLLDA extends AbstractRunner {
             reportInterval = repInt;
             numTopWords = nTopwords;
         }
+        
+        @Override
+        public void preprocess() {
+            
+        }
 
         @Override
         public void setup() {

@@ -81,6 +81,17 @@ public abstract class AbstractSampler implements Serializable {
                 .withArgName(optName)
                 .create());
     }
+    
+    public static void addSamplingOptions() {
+        addOption("burnIn", "Burn-in");
+        addOption("maxIter", "Maximum number of iterations");
+        addOption("sampleLag", "Sample lag");
+        addOption("report", "Report interval");
+        
+        options.addOption("v", false, "verbose");
+        options.addOption("d", false, "debug");
+        options.addOption("help", false, "Help");
+    }
 
     public void setSamplerConfiguration(int burn_in, int max_iter, int lag, int repInt) {
         BURN_IN = burn_in;

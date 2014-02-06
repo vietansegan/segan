@@ -172,8 +172,8 @@ public class PredictionUtils {
             writer.close();
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while outputing regression results to "
-                    + outputFile);
+            throw new RuntimeException("Exception while outputing regression "
+                    + "results to " + outputFile);
         }
         return measurements;
     }
@@ -347,9 +347,13 @@ public class PredictionUtils {
             double[] trueResponses) {
         try {
             String[] filenames = iterPredFolder.list();
+            
+            // debug
+//            System.out.println("iter folder: " + iterPredFolder);
+//            System.out.println("# files: " + filenames.length);
+            
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
-
                 double[][] predictions = inputSingleModelPredictions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);

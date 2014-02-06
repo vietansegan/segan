@@ -380,7 +380,7 @@ public class LabelTextDataset extends TextDataset {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " 
+        return "java -cp 'dist/segan.jar:dist/lib/*' "
                 + LabelTextDataset.class.getName() + " -help";
     }
 
@@ -392,38 +392,18 @@ public class LabelTextDataset extends TextDataset {
             options = new Options();
 
             // directories
-            addOption("dataset", "Dataset");
-            addOption("data-folder", "Folder that stores the processed data");
-            addOption("text-data", "Directory of the text data");
-            addOption("format-folder", "Folder that stores formatted data");
-            addOption("format-file", "Formatted file name");
+            addDataDirectoryOptions();
             addOption("label-file", "Directory of the label file");
 
             // text processing
-            addOption("u", "The minimum count of raw unigrams");
-            addOption("b", "The minimum count of raw bigrams");
-            addOption("bs", "The minimum score of bigrams");
-            addOption("V", "Maximum vocab size");
-            addOption("min-tf", "Term frequency minimum cutoff");
-            addOption("max-tf", "Term frequency maximum cutoff");
-            addOption("min-df", "Document frequency minimum cutoff");
-            addOption("max-df", "Document frequency maximum cutoff");
-            addOption("min-doc-length", "Document minimum length");
-            addOption("min-word-length", "Word minimum length");
+            addCorpusProcessorOptions();
 
             // cross validation
-//            addOption("num-folds", "Number of folds. Default 5.");
-//            addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
-//            addOption("cv-folder", "Folder to store cross validation folds");
-//            addOption("num-classes", "Number of classes that the response");
+            addCrossValidationOptions();
 
             addOption("run-mode", "Run mode");
-
             options.addOption("v", false, "Verbose");
             options.addOption("d", false, "Debug");
-            options.addOption("s", false, "Whether stopwords are filtered");
-            options.addOption("l", false, "Whether lemmatization is performed");
-            options.addOption("file", false, "Whether the text input data is stored in a file or a folder");
             options.addOption("help", false, "Help");
 
             cmd = parser.parse(options, args);
@@ -437,13 +417,14 @@ public class LabelTextDataset extends TextDataset {
 
             String runMode = cmd.getOptionValue("run-mode");
             if (runMode.equals("process")) {
-                process(args);
+                process();
             } else if (runMode.equals("load")) {
-                load(args);
+                load();
+            } else if (runMode.equals("cross-validate")) {
+                crossValidate();
             } else {
                 throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
-
         } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp(getHelpString(), options);
@@ -451,7 +432,34 @@ public class LabelTextDataset extends TextDataset {
         }
     }
 
-    public static void process(String[] args) throws Exception {
+    public static void crossValidate() throws Exception {
+        CorpusProcessor corpProc = createCorpusProcessor();
+        String datasetName = cmd.getOptionValue("dataset");
+        String datasetFolder = cmd.getOptionValue("data-folder");
+        String textInputData = cmd.getOptionValue("text-data");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        String labelFile = cmd.getOptionValue("label-file");
+
+        int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
+        double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
+        String cvFolder = cmd.getOptionValue("cv-folder");
+        IOUtils.createFolder(cvFolder);
+
+        LabelTextDataset dataset = new LabelTextDataset(datasetName, datasetFolder,
+                corpProc);
+        dataset.setFormatFilename(formatFile);
+
+        // load text data
+        if (cmd.hasOption("file")) {
+            dataset.loadTextDataFromFile(textInputData);
+        } else {
+            dataset.loadTextDataFromFolder(textInputData);
+        }
+        dataset.loadLabels(labelFile); // load response data
+        dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio);
+    }
+
+    public static void process() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
@@ -459,33 +467,9 @@ public class LabelTextDataset extends TextDataset {
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         String labelFile = cmd.getOptionValue("label-file");
 
-        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 5);
-        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 10);
-        double bigramScoreCutoff = CLIUtils.getDoubleArgument(cmd, "bs", 5.0);
-        int maxVocabSize = CLIUtils.getIntegerArgument(cmd, "V", Integer.MAX_VALUE);
-        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 5);
-        int vocTermFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-tf", Integer.MAX_VALUE);
-        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 5);
-        int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
-        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 10);
-
-        boolean stopwordFilter = cmd.hasOption("s");
-        boolean lemmatization = cmd.hasOption("l");
-
-        CorpusProcessor corpProc = new CorpusProcessor(
-                unigramCountCutoff,
-                bigramCountCutoff,
-                bigramScoreCutoff,
-                maxVocabSize,
-                vocTermFreqMinCutoff,
-                vocTermFreqMaxCutoff,
-                vocDocFreqMinCutoff,
-                vocDocFreqMaxCutoff,
-                docTypeCountCutoff,
-                stopwordFilter,
-                lemmatization);
-
-        LabelTextDataset dataset = new LabelTextDataset(datasetName, datasetFolder, corpProc);
+        CorpusProcessor corpProc = createCorpusProcessor();
+        LabelTextDataset dataset = new LabelTextDataset(datasetName, datasetFolder,
+                corpProc);
         dataset.setFormatFilename(formatFile);
 
         // load text data
@@ -498,7 +482,7 @@ public class LabelTextDataset extends TextDataset {
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
     }
 
-    public static LabelTextDataset load(String[] args) throws Exception {
+    public static LabelTextDataset load() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String formatFolder = cmd.getOptionValue("format-folder");
