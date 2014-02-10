@@ -27,6 +27,8 @@ import weka.core.SparseInstance;
 public class LabelTextDataset extends TextDataset {
 
     public static final String labelVocabExt = ".lvoc";
+    public static final String arffExt = ".arff";
+    public static final String xmlExt = ".xml";
     protected ArrayList<ArrayList<String>> labelList;
     protected ArrayList<String> labelVocab;
     protected int[][] labels;
@@ -389,7 +391,7 @@ public class LabelTextDataset extends TextDataset {
             this.labels[ii] = labelIndexList.get(ii);
         }
     }
-
+    
     public void outputArffFile(File filepath) {
         if (verbose) {
             logln("Outputing to " + filepath);
