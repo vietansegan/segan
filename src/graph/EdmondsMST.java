@@ -6,9 +6,13 @@ package graph;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.Set;
+import sampling.util.TreeNode;
 import util.RankingItem;
 
 /**
@@ -25,6 +29,34 @@ public class EdmondsMST<C> {
     public EdmondsMST(GraphNode<C> root, DirectedGraph<C> graph) {
         this.root = root;
         this.graph = graph;
+    }
+
+    public TreeNode<TreeNode, C> createTree(DirectedGraph<C> graphTree) {
+        HashMap<C, TreeNode<TreeNode, C>> nodeMap = new HashMap<C, TreeNode<TreeNode, C>>();
+        TreeNode<TreeNode, C> treeRoot = new TreeNode<TreeNode, C>(0, 0, root.getId(), null);
+        nodeMap.put(root.getId(), treeRoot);
+
+        Queue<GraphNode<C>> queue = new LinkedList<GraphNode<C>>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            GraphNode<C> node = queue.poll();
+            TreeNode<TreeNode, C> treeNode = nodeMap.get(node.getId());
+
+            if (!graphTree.hasOutEdges(node)) {
+                continue;
+            }
+            for (GraphEdge edge : graphTree.getOutEdges(node)) {
+                GraphNode<C> graphNode = edge.getTarget();
+                TreeNode<TreeNode, C> childNode = new TreeNode<TreeNode, C>(
+                        treeNode.getNextChildIndex(),
+                        treeNode.getLevel() + 1,
+                        graphNode.getId(), treeRoot);
+                treeNode.addChild(childNode.getIndex(), childNode);
+                queue.add(graphNode);
+                nodeMap.put(childNode.getContent(), childNode);
+            }
+        }
+        return treeRoot;
     }
 
     public DirectedGraph<C> getMinimumSpanningTree() {

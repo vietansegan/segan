@@ -30,7 +30,7 @@ public class MiscUtils {
             map.put(key, count + 1);
         }
     }
-    
+
     public static int getRoundStepSize(int total, int numSteps) {
         int stepSize = (int) Math.pow(10, (int) Math.log10(total / numSteps));
         return stepSize;
@@ -65,6 +65,9 @@ public class MiscUtils {
     }
 
     public static String arrayToString(double[] array) {
+        if (array.length == 0) {
+            return "[]";
+        }
         StringBuilder str = new StringBuilder();
         str.append("[").append(formatDouble(array[0]));
         for (int i = 1; i < array.length; i++) {
@@ -75,6 +78,9 @@ public class MiscUtils {
     }
 
     public static String arrayToString(float[] array) {
+        if (array.length == 0) {
+            return "[]";
+        }
         StringBuilder str = new StringBuilder();
         str.append("[").append(formatDouble(array[0]));
         for (int i = 1; i < array.length; i++) {
@@ -86,7 +92,7 @@ public class MiscUtils {
 
     public static String arrayToString(int[] array) {
         if (array.length == 0) {
-            return "";
+            return "[]";
         }
         StringBuilder str = new StringBuilder();
         str.append("[").append(formatDouble(array[0]));

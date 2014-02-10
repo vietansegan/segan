@@ -11,8 +11,8 @@ import java.util.Set;
  * @author vietan
  */
 public class SparseVector implements Serializable {
+
     private static final long serialVersionUID = 1123581321L;
-    
     private HashMap<Integer, Double> values;
 
     public SparseVector() {
@@ -94,6 +94,9 @@ public class SparseVector implements Serializable {
     }
 
     public double getL2Norm() {
+        if (this.values.isEmpty()) {
+            return 0.0;
+        }
         double sumSquare = 0.0;
         for (double val : this.values.values()) {
             sumSquare += val * val;

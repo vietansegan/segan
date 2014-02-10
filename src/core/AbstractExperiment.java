@@ -79,4 +79,18 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
     public String getDatasetFolder() {
         return data.getFolder();
     }
+    
+    public static void addSamplingOptions() {
+        addOption("burnIn", "Burn-in");
+        addOption("maxIter", "Maximum number of iterations");
+        addOption("sampleLag", "Sample lag");
+        addOption("report", "Report interval");
+    }
+    
+    public static void addCrossValidationOptions() {
+        addOption("num-folds", "Number of folds. Default 5.");
+        addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
+        addOption("cv-folder", "Folder to store cross validation folds");
+        addOption("fold", "The cross-validation fold to run");
+    }
 }

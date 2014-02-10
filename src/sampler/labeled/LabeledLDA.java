@@ -25,8 +25,8 @@ import util.evaluation.MimnoTopicCoherence;
  * @author vietan
  */
 public class LabeledLDA extends AbstractSampler implements Serializable {
-    private static final long serialVersionUID = 1123581321L;
 
+    private static final long serialVersionUID = 1123581321L;
     public static final int ALPHA = 0;
     public static final int BETA = 1;
     protected int[][] words; // [D] x [N_d]
@@ -43,6 +43,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     public void setLabelVocab(ArrayList<String> labelVocab) {
         this.labelVocab = labelVocab;
+    }
+
+    public int[][] getZ() {
+        return this.z;
     }
 
     public void configure(String folder,
@@ -357,7 +361,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
-    public double[] predictNewDocument(int[] newDoc) throws Exception{
+    public double[] predictNewDocument(int[] newDoc) throws Exception {
         // initialize assignments
         DirMult docTopic = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
         int[] newZ = new int[newDoc.length];
@@ -367,23 +371,23 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
         // sample
         for (iter = 0; iter < MAX_ITER; iter++) {
-            for(int n=0; n<newZ.length; n++) {
+            for (int n = 0; n < newZ.length; n++) {
                 // decrement
                 docTopic.decrement(newZ[n]);
-                
+
                 // sample
                 double[] logprobs = new double[L];
-                for(int l=0; l<L; l++) {
+                for (int l = 0; l < L; l++) {
                     logprobs[l] = docTopic.getLogLikelihood(l)
                             + label_words[l].getLogLikelihood(newDoc[n]);
                 }
                 newZ[n] = SamplerUtils.logMaxRescaleSample(logprobs);
-                
+
                 // increment
                 docTopic.increment(newZ[n]);
             }
         }
-        
+
         return docTopic.getDistribution();
     }
 
@@ -491,7 +495,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while outputing state to "
+                    + filepath);
         }
     }
 
@@ -507,7 +512,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             inputAssignments(filepath);
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Excepion while inputing state from "
+                    + filepath);
         }
 
         validate("Done reading state from " + filepath);

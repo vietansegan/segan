@@ -228,7 +228,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         int count = 0;
         for (String filename : filenames) {
             if (count % step == 0) {
-                logln("--- --- Processing file " + count);
+                logln("--- --- Processing file " + count + " / " + filenames.length);
             }
             count++;
 
@@ -650,7 +650,8 @@ public class TextDataset extends AbstractTokenizeDataset {
      * @param trToDevRatio Ratio between the number of training and the number
      * of test data
      */
-    public void createCrossValidation(String cvFolder, int numFolds, double trToDevRatio)
+    public void createCrossValidation(String cvFolder, int numFolds,
+            double trToDevRatio)
             throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = new ArrayList<Integer>();
@@ -724,7 +725,7 @@ public class TextDataset extends AbstractTokenizeDataset {
 
             // directories
             addDataDirectoryOptions();
-            
+
             // text processing
             addCorpusProcessorOptions();
 

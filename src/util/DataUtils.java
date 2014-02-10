@@ -2,6 +2,7 @@ package util;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.util.*;
 
 /**
@@ -110,6 +111,10 @@ public class DataUtils {
                     + "\n");
         }
         writer.close();
+    }
+    
+    public static void outputVocab(File filepath, ArrayList<String> vocab) throws Exception {
+        outputVocab(filepath, vocab);
     }
 
     public static void outputVocab(String filepath, ArrayList<String> vocab) throws Exception {

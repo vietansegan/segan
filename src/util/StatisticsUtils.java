@@ -296,9 +296,7 @@ public class StatisticsUtils {
 
     public static double median(double[] values) {
         double[] copy = new double[values.length];
-        for (int i = 0; i < values.length; i++) {
-            copy[i] = values[i];
-        }
+        System.arraycopy(values, 0, copy, 0, values.length);
         java.util.Arrays.sort(copy);
         int length = values.length;
         if (length % 2 != 0) {

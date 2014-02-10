@@ -1,5 +1,8 @@
 package data;
 
+import core.crossvalidation.CrossValidation;
+import core.crossvalidation.Fold;
+import core.crossvalidation.Instance;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -264,6 +267,85 @@ public class LabelTextDataset extends TextDataset {
         }
         Collections.sort(this.labelVocab);
     }
+    
+    @Override
+    public void createCrossValidation(String cvFolder, int numFolds, 
+            double trToDevRatio) throws Exception {
+        ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
+        ArrayList<Integer> groupIdList = new ArrayList<Integer>();
+        for (int d = 0; d < this.docIdList.size(); d++) {
+            instanceList.add(new Instance<String>(docIdList.get(d)));
+            groupIdList.add(0); // random, no stratified
+        }
+
+        String cvName = "";
+        CrossValidation<String, Instance<String>> cv =
+                new CrossValidation<String, Instance<String>>(
+                cvFolder,
+                cvName,
+                instanceList);
+
+        cv.stratify(groupIdList, numFolds, trToDevRatio);
+        cv.outputFolds();
+
+        for (Fold<String, Instance<String>> fold : cv.getFolds()) {
+            // processor
+            CorpusProcessor cp = new CorpusProcessor(corpProc);
+
+            // training data
+            LabelTextDataset trainData = new LabelTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
+            trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
+            ArrayList<String> trDocIds = new ArrayList<String>();
+            ArrayList<String> trDocTexts = new ArrayList<String>();
+            ArrayList<ArrayList<String>> trLabelList = new ArrayList<ArrayList<String>>();
+            for (int ii = 0; ii < fold.getNumTrainingInstances(); ii++) {
+                int idx = fold.getTrainingInstances().get(ii);
+                trDocIds.add(this.docIdList.get(idx));
+                trDocTexts.add(this.textList.get(idx));
+                trLabelList.add(this.labelList.get(idx));
+            }
+            trainData.setTextData(trDocIds, trDocTexts);
+            trainData.setLabelList(trLabelList);
+            trainData.format(fold.getFoldFolderPath());
+            
+            // development data: process using vocab from training
+            LabelTextDataset devData = new LabelTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
+            devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
+            ArrayList<String> deDocIds = new ArrayList<String>();
+            ArrayList<String> deDocTexts = new ArrayList<String>();
+            ArrayList<ArrayList<String>> deLabelList = new ArrayList<ArrayList<String>>();
+            for (int ii = 0; ii < fold.getNumDevelopmentInstances(); ii++) {
+                int idx = fold.getDevelopmentInstances().get(ii);
+                deDocIds.add(this.docIdList.get(idx));
+                deDocTexts.add(this.textList.get(idx));
+                deLabelList.add(this.labelList.get(idx));
+            }
+            devData.setTextData(deDocIds, deDocTexts);
+            devData.setLabelVocab(trainData.getLabelVocab());
+            devData.setLabelList(deLabelList);
+            devData.format(fold.getFoldFolderPath());
+
+            // test data: process using vocab from training
+            LabelTextDataset testData = new LabelTextDataset(fold.getFoldName(),
+                    cv.getFolderPath(), cp);
+            testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
+            ArrayList<String> teDocIds = new ArrayList<String>();
+            ArrayList<String> teDocTexts = new ArrayList<String>();
+            ArrayList<ArrayList<String>> teLabelList = new ArrayList<ArrayList<String>>();
+            for (int ii = 0; ii < fold.getNumTestingInstances(); ii++) {
+                int idx = fold.getTestingInstances().get(ii);
+                teDocIds.add(this.docIdList.get(idx));
+                teDocTexts.add(this.textList.get(idx));
+                teLabelList.add(this.labelList.get(idx));
+            }
+            testData.setTextData(teDocIds, teDocTexts);
+            testData.setLabelVocab(trainData.getLabelVocab());
+            testData.setLabelList(teLabelList);
+            testData.format(fold.getFoldFolderPath());
+        }
+    }
 
     @Override
     protected void outputDocumentInfo(String outputFolder) throws Exception {
@@ -378,6 +460,31 @@ public class LabelTextDataset extends TextDataset {
         }
         reader.close();
     }
+    
+    /**
+     * Load train/development/test data in a cross validation fold.
+     *
+     * @param fold The given fold
+     */
+    public static LabelTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
+        LabelTextDataset[] foldData = new LabelTextDataset[3];
+        LabelTextDataset trainData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
+        trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
+        trainData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TRAIN] = trainData;
+
+        LabelTextDataset devData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
+        devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
+        devData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.DEV] = devData;
+
+        LabelTextDataset testData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
+        testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
+        testData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TEST] = testData;
+
+        return foldData;
+    }
 
     public static String getHelpString() {
         return "java -cp 'dist/segan.jar:dist/lib/*' "
@@ -394,6 +501,7 @@ public class LabelTextDataset extends TextDataset {
             // directories
             addDataDirectoryOptions();
             addOption("label-file", "Directory of the label file");
+            addOption("min-label-freq", "Minimum label frequency");
 
             // text processing
             addCorpusProcessorOptions();
@@ -439,7 +547,7 @@ public class LabelTextDataset extends TextDataset {
         String textInputData = cmd.getOptionValue("text-data");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         String labelFile = cmd.getOptionValue("label-file");
-
+        
         int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
         double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
         String cvFolder = cmd.getOptionValue("cv-folder");

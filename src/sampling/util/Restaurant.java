@@ -42,11 +42,25 @@ public class Restaurant<T extends FullTable<C, M>, C, M> {
         }
     }
 
+    /**
+     * Add a customer to a table in this restaurant. This will also increment
+     * the number of total customers in this restaurant.
+     *
+     * @param customer The customer to be added
+     * @param tableIndex The table index
+     */
     public void addCustomerToTable(C customer, int tableIndex) {
         this.totalNumCustomers++;
         this.getTable(tableIndex).addCustomer(customer);
     }
 
+    /**
+     * Remove a customer from a table in this restaurant. This will also
+     * decrement the number of total customers in this restaurant.
+     *
+     * @param customer The customer to be removed
+     * @param tableIndex The table index
+     */
     public void removeCustomerFromTable(C customer, int tableIndex) {
         this.totalNumCustomers--;
         this.getTable(tableIndex).removeCustomer(customer);

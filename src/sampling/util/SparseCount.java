@@ -11,6 +11,7 @@ import java.util.Set;
  * @author vietan
  */
 public class SparseCount implements Cloneable, Serializable {
+
     private static final long serialVersionUID = 1123581321L;
     private HashMap<Integer, Integer> counts;
     private int countSum;
@@ -38,6 +39,14 @@ public class SparseCount implements Cloneable, Serializable {
         int curCount = this.getCount(observation);
         this.counts.put(observation, count);
         this.countSum += count - curCount;
+
+        if (counts.get(observation) != null && this.counts.get(observation) < 0) {
+            throw new RuntimeException("Negative count for observation " + observation
+                    + ". count = " + this.counts.get(observation));
+        }
+        if (countSum < 0) {
+            throw new RuntimeException("Negative count sumze " + countSum);
+        }
     }
 
     public ArrayList<Integer> getSortedIndices() {

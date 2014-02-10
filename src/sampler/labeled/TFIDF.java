@@ -21,15 +21,15 @@ import util.SparseVector;
  */
 public class TFIDF {
 
-    private int[][] words;
-    private int[][] labels;
-    private int L;
-    private int V;
-    private int D;
+    protected int[][] words;
+    protected int[][] labels;
+    protected int L;
+    protected int V;
+    protected int D;
     protected double[] idfs; // V-dim vector
     protected SparseVector[] labelVectors; // L x V;
-    private int minWordTypeCount = 5;
-    private double[] labelL2Norms;
+    protected int minWordTypeCount = 5;
+    protected double[] labelL2Norms;
 
     public TFIDF() {
     }
@@ -76,6 +76,7 @@ public class TFIDF {
 
     public void learn() {
         // estimate doc-frequencies of each word type
+        System.out.println("Estimating DFs ...");
         int[] dfs = new int[V];
         for (int d = 0; d < D; d++) {
             Set<Integer> uniqueWords = new HashSet<Integer>();
@@ -97,7 +98,11 @@ public class TFIDF {
             this.labelVectors[ll] = new SparseVector();
         }
         int[] labelDocCounts = new int[L];
+        System.out.println("Aggregate label vectors ...");
         for (int d = 0; d < D; d++) {
+            if (d % 100000 == 0) {
+                System.out.println("--- d = " + d);
+            }
             int[] docTopics = this.labels[d];
             // skip unlabeled document or very short (after filtered) documents
             if (docTopics == null
@@ -135,11 +140,21 @@ public class TFIDF {
         }
 
         // average
+        System.out.println("Averaging ...");
         for (int ll = 0; ll < L; ll++) {
             int docCount = labelDocCounts[ll];
             if (docCount > 0) {
                 this.labelVectors[ll].divide(docCount);
             }
+        }
+        
+        computeLabelL2Norms();
+    }
+
+    protected void computeLabelL2Norms() {
+        labelL2Norms = new double[L];
+        for (int ll = 0; ll < L; ll++) {
+            labelL2Norms[ll] = labelVectors[ll].getL2Norm();
         }
     }
 
@@ -155,13 +170,6 @@ public class TFIDF {
         double[] scores = new double[L];
         if (newWords.length == 0) {
             return scores;
-        }
-
-        if (labelL2Norms == null) {
-            labelL2Norms = new double[L];
-            for (int ll = 0; ll < L; ll++) {
-                labelL2Norms[ll] = labelVectors[ll].getL2Norm();
-            }
         }
 
         SparseCount typeCount = new SparseCount();
@@ -239,6 +247,11 @@ public class TFIDF {
                 this.idfs[v] = Double.parseDouble(reader.readLine());
             }
             reader.close();
+
+            labelL2Norms = new double[L];
+            for (int ll = 0; ll < L; ll++) {
+                labelL2Norms[ll] = labelVectors[ll].getL2Norm();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing model from "
@@ -310,6 +323,11 @@ public class TFIDF {
                 this.idfs[v] = Double.parseDouble(reader.readLine());
             }
             reader.close();
+
+            labelL2Norms = new double[L];
+            for (int ll = 0; ll < L; ll++) {
+                labelL2Norms[ll] = labelVectors[ll].getL2Norm();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

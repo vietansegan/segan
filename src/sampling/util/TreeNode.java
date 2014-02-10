@@ -15,8 +15,8 @@ import java.util.TreeSet;
  *
  * @author vietan
  */
-public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C>>,
-        Serializable {
+public class TreeNode<N extends TreeNode, C>
+        implements Comparable<TreeNode<N, C>>, Serializable {
 
     private static final long serialVersionUID = 1123581321L;
     public static final int ROOT_PARENT_INDEX = -1;
@@ -228,10 +228,7 @@ public class TreeNode<N extends TreeNode, C> implements Comparable<TreeNode<N, C
             return false;
         }
         TreeNode<N, C> r = (TreeNode<N, C>) (obj);
-
-        return r.index == this.index
-                && r.level == this.level
-                && r.getParentIndex() == this.getParentIndex();
+        return r.getPathString().equals(this.getPathString());
     }
 
     @Override
