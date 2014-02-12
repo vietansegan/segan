@@ -146,6 +146,33 @@ public class LabelTextDataset extends TextDataset {
         this.labelVocab = filterLabelVocab;
     }
 
+    /**
+     * Set the label vocabulary of this dataset with a new vocabulary. This
+     * requires updating the label indices for all documents.
+     *
+     * @param newLabelVoc The new label vocabulary
+     */
+    public void resetLabelVocab(ArrayList<String> newLabelVoc) {
+        int[][] newLabels = new int[labels.length][];
+        for (int d = 0; d < labels.length; d++) {
+            ArrayList<Integer> newDocLabelIndices = new ArrayList<Integer>();
+            for (int ii = 0; ii < labels[d].length; ii++) {
+                String labelStr = labelVocab.get(labels[d][ii]);
+                int idx = newLabelVoc.indexOf(labelStr);
+                if (idx >= 0) {
+                    newDocLabelIndices.add(idx);
+                }
+            }
+            newLabels[d] = new int[newDocLabelIndices.size()];
+            for (int ii = 0; ii < newLabels[d].length; ii++) {
+                newLabels[d][ii] = newDocLabelIndices.get(ii);
+            }
+        }
+
+        this.labels = newLabels;
+        this.labelVocab = newLabelVoc;
+    }
+
     public void loadLabels(File labelFile) throws Exception {
         loadLabels(labelFile.getAbsolutePath());
     }
@@ -269,9 +296,9 @@ public class LabelTextDataset extends TextDataset {
         }
         Collections.sort(this.labelVocab);
     }
-    
+
     @Override
-    public void createCrossValidation(String cvFolder, int numFolds, 
+    public void createCrossValidation(String cvFolder, int numFolds,
             double trToDevRatio) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = new ArrayList<Integer>();
@@ -310,7 +337,7 @@ public class LabelTextDataset extends TextDataset {
             trainData.setTextData(trDocIds, trDocTexts);
             trainData.setLabelList(trLabelList);
             trainData.format(fold.getFoldFolderPath());
-            
+
             // development data: process using vocab from training
             LabelTextDataset devData = new LabelTextDataset(fold.getFoldName(),
                     cv.getFolderPath(), cp);
@@ -391,7 +418,7 @@ public class LabelTextDataset extends TextDataset {
             this.labels[ii] = labelIndexList.get(ii);
         }
     }
-    
+
     public void outputArffFile(File filepath) {
         if (verbose) {
             logln("Outputing to " + filepath);
@@ -422,11 +449,14 @@ public class LabelTextDataset extends TextDataset {
             }
 
             // labels
-            ArrayList<String> lbls = labelList.get(dd);
-            for (int ll = 0; ll < labelVocab.size(); ll++) {
-                if (lbls.contains(labelVocab.get(ll))) {
-                    vals[ll + wordVocab.size()] = 1;
-                }
+//            ArrayList<String> lbls = labelList.get(dd);
+//            for (int ll = 0; ll < labelVocab.size(); ll++) {
+//                if (lbls.contains(labelVocab.get(ll))) {
+//                    vals[ll + wordVocab.size()] = 1;
+//                }
+//            }            
+            for(int ll : labels[dd]) {
+                vals[ll + wordVocab.size()] = 1;
             }
 
             data.add(new SparseInstance(1.0, vals));
@@ -462,7 +492,7 @@ public class LabelTextDataset extends TextDataset {
         }
         reader.close();
     }
-    
+
     /**
      * Load train/development/test data in a cross validation fold.
      *
@@ -549,7 +579,7 @@ public class LabelTextDataset extends TextDataset {
         String textInputData = cmd.getOptionValue("text-data");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         String labelFile = cmd.getOptionValue("label-file");
-        
+
         int numFolds = CLIUtils.getIntegerArgument(cmd, "num-folds", 5);
         double trToDevRatio = CLIUtils.getDoubleArgument(cmd, "tr2dev-ratio", 0.8);
         String cvFolder = cmd.getOptionValue("cv-folder");

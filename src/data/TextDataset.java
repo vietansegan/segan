@@ -284,8 +284,8 @@ public class TextDataset extends AbstractTokenizeDataset {
         if (verbose) {
             logln("--- Outputing word vocab ... " + wordVocFile.getAbsolutePath());
         }
-        DataUtils.outputVocab(wordVocFile.getAbsolutePath(),
-                corpProc.getVocab());
+        this.wordVocab = corpProc.getVocab();
+        DataUtils.outputVocab(wordVocFile.getAbsolutePath(), wordVocab);
     }
 
     /**

@@ -1711,8 +1711,8 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
      * Optimize topic regression parameters.
      */
     private void optimizeTopicRegressionParameters() {
-//        optimizeTopicRegressionParametersGurobi();
-        optimizeTopicRegressionParametersLBFGS();
+        optimizeTopicRegressionParametersGurobi();
+//        optimizeTopicRegressionParametersLBFGS();
     }
 
     /**

@@ -193,8 +193,7 @@ public class IOUtils {
             if (folder.isDirectory()) {
                 String[] children = folder.list();
                 for (int i = 0; i < children.length; i++) {
-                    String tempFilename = dir.concat("/").concat(children[i]);
-                    File tempF = new File(tempFilename);
+                    File tempF = new File(dir, children[i]);
                     tempF.delete();
                 }
             }
