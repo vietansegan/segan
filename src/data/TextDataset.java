@@ -609,14 +609,14 @@ public class TextDataset extends AbstractTokenizeDataset {
                 }
             }
 
-            if (filteredDocWords.isEmpty()) {
-                System.out.println();
-                logln("[WARNING] Empty document. d = " + d
-                        + ". original count = " + words[d].length);
-                for (int s = 0; s < sentRawWords[d].length; s++) {
-                    logln(">>> " + s + "\t" + sentRawWords[d][s]);
-                }
-            }
+//            if (debug && verbose && filteredDocWords.isEmpty()) {
+//                System.out.println();
+//                logln("[WARNING] Empty document. d = " + d
+//                        + ". original count = " + words[d].length);
+//                for (int s = 0; s < sentRawWords[d].length; s++) {
+//                    logln(">>> " + s + "\t" + sentRawWords[d][s]);
+//                }
+//            }
 
             words[d] = new int[filteredDocWords.size()];
             for (int n = 0; n < words[d].length; n++) {

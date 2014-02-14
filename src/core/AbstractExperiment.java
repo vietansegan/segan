@@ -85,6 +85,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         addOption("maxIter", "Maximum number of iterations");
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
+        addOption("init", "Report interval");
     }
     
     public static void addCrossValidationOptions() {
@@ -92,5 +93,29 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
         addOption("cv-folder", "Folder to store cross validation folds");
         addOption("fold", "The cross-validation fold to run");
+    }
+    
+    public static void addCorpusProcessorOptions() {
+        addOption("u", "The minimum count of raw unigrams");
+        addOption("b", "The minimum count of raw bigrams");
+        addOption("bs", "The minimum score of bigrams");
+        addOption("V", "Maximum vocab size");
+        addOption("min-tf", "Term frequency minimum cutoff");
+        addOption("max-tf", "Term frequency maximum cutoff");
+        addOption("min-df", "Document frequency minimum cutoff");
+        addOption("max-df", "Document frequency maximum cutoff");
+        addOption("min-doc-length", "Document minimum length");
+        options.addOption("s", false, "Whether stopwords are filtered");
+        options.addOption("l", false, "Whether lemmatization is performed");
+        options.addOption("file", false, "Whether the text input data is stored in a file or a folder");
+    }
+    
+    public static void addGreekParametersOptions() {
+        addOption("alpha", "alpha");
+        addOption("beta", "beta");
+        addOption("gamma", "gamma");
+        addOption("delta", "delta");
+        addOption("lambda", "lambda");
+        addOption("sigma", "sigma");
     }
 }

@@ -1,22 +1,23 @@
 package core;
 
 import java.util.HashMap;
+import java.util.Set;
 
 /**
  *
  * @author vietan
  */
-public abstract class AbstractObject {
+public abstract class AbstractObject<I> {
 
-    protected final String id;
+    protected final I id;
     protected HashMap<String, String> properties;
 
-    public AbstractObject(String id) {
+    public AbstractObject(I id) {
         this.id = id;
         this.properties = new HashMap<String, String>();
     }
 
-    public String getId() {
+    public I getId() {
         return this.id;
     }
 
@@ -37,5 +38,19 @@ public abstract class AbstractObject {
 
     public boolean hasProperty(String propName) {
         return this.properties.containsKey(propName);
+    }
+    
+    public Set<String> getPropertyNames() {
+        return this.properties.keySet();
+    }
+    
+    @Override
+    public String toString() {
+        StringBuilder str = new StringBuilder();
+        str.append("ID ").append(id).append("\n");
+        for (String attr : getPropertyNames()) {
+            str.append(">>> ").append(attr).append(": ").append(getProperty(attr));
+        }
+        return str.toString();
     }
 }
