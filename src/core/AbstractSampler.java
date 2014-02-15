@@ -99,6 +99,22 @@ public abstract class AbstractSampler implements Serializable {
         LAG = lag;
         REP_INTERVAL = repInt;
     }
+    
+    public int getBurnIn() {
+        return this.BURN_IN;
+    }
+    
+    public int getMaxIters() {
+        return this.MAX_ITER;
+    }
+    
+    public int getSampleLag() {
+        return this.LAG;
+    }
+    
+    public int getReportInterval() {
+        return this.REP_INTERVAL;
+    }
 
     public void setReportInterval(int repInt) {
         REP_INTERVAL = repInt;

@@ -117,5 +117,6 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         addOption("delta", "delta");
         addOption("lambda", "lambda");
         addOption("sigma", "sigma");
+        addOption("rho", "rho");
     }
 }
