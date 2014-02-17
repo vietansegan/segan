@@ -22,8 +22,9 @@ import util.RankingItem;
  * @author vietan
  */
 public abstract class AbstractSampler implements Serializable {
-    private static final long serialVersionUID = 1123581321L;
 
+    private static final long serialVersionUID = 1123581321L;
+    public static final int MAX_NUM_PARALLEL_THREADS = 5;
     public static final String IterPredictionFolder = "iter-predictions/";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
@@ -81,13 +82,13 @@ public abstract class AbstractSampler implements Serializable {
                 .withArgName(optName)
                 .create());
     }
-    
+
     public static void addSamplingOptions() {
         addOption("burnIn", "Burn-in");
         addOption("maxIter", "Maximum number of iterations");
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
-        
+
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
         options.addOption("help", false, "Help");
@@ -99,19 +100,19 @@ public abstract class AbstractSampler implements Serializable {
         LAG = lag;
         REP_INTERVAL = repInt;
     }
-    
+
     public int getBurnIn() {
         return this.BURN_IN;
     }
-    
+
     public int getMaxIters() {
         return this.MAX_ITER;
     }
-    
+
     public int getSampleLag() {
         return this.LAG;
     }
-    
+
     public int getReportInterval() {
         return this.REP_INTERVAL;
     }
@@ -422,6 +423,25 @@ public abstract class AbstractSampler implements Serializable {
         if (debug) {
             logln("sampled params: " + MiscUtils.listToString(hyperparams)
                     + "; final llh = " + getLogLikelihood(hyperparams));
+        }
+    }
+    
+    public static void runThreads(ArrayList<Thread> threads) throws Exception {
+        int c = 0;
+        for (int ii = 0; ii < threads.size() / MAX_NUM_PARALLEL_THREADS; ii++) {
+            for (int jj = 0; jj < MAX_NUM_PARALLEL_THREADS; jj++) {
+                threads.get(ii * MAX_NUM_PARALLEL_THREADS + jj).start();
+            }
+            for (int jj = 0; jj < MAX_NUM_PARALLEL_THREADS; jj++) {
+                threads.get(ii * MAX_NUM_PARALLEL_THREADS + jj).join();
+                c++;
+            }
+        }
+        for (int jj = c; jj < threads.size(); jj++) {
+            threads.get(jj).start();
+        }
+        for (int jj = c; jj < threads.size(); jj++) {
+            threads.get(jj).join();
         }
     }
 }

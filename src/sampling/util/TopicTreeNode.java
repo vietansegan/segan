@@ -12,10 +12,6 @@ import sampling.likelihood.DirMult;
  */
 public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends TreeNode<N, C> {
 
-    public static enum PathAssumption {
-
-        MINIMAL, MAXIMAL
-    }
     protected SparseCount pseudoCounts; // pseudo observations from children
     protected double[] logTopics;
 
