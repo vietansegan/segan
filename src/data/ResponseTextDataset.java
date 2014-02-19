@@ -231,6 +231,31 @@ public class ResponseTextDataset extends TextDataset {
         }
         return str.toString();
     }
+    
+    /**
+     * Load train/development/test data in a cross validation fold.
+     *
+     * @param fold The given fold
+     */
+    public static ResponseTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
+        ResponseTextDataset[] foldData = new ResponseTextDataset[3];
+        ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
+        trainData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TRAIN] = trainData;
+
+        ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
+        devData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.DEV] = devData;
+
+        ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
+        testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
+        testData.loadFormattedData(fold.getFoldFolderPath());
+        foldData[Fold.TEST] = testData;
+
+        return foldData;
+    }
 
     public static String getHelpString() {
         return "java -cp 'dist/segan.jar:dist/lib/*' " + ResponseTextDataset.class.getName() + " -help";
@@ -288,7 +313,7 @@ public class ResponseTextDataset extends TextDataset {
         }
     }
 
-    public static void crossValidate() throws Exception {
+    private static void crossValidate() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
@@ -312,7 +337,7 @@ public class ResponseTextDataset extends TextDataset {
         dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio, numClasses);
     }
 
-    public static ResponseTextDataset load(String[] args) throws Exception {
+    private static ResponseTextDataset load() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String formatFolder = cmd.getOptionValue("format-folder");
@@ -324,32 +349,7 @@ public class ResponseTextDataset extends TextDataset {
         return data;
     }
 
-    /**
-     * Load train/development/test data in a cross validation fold.
-     *
-     * @param fold The given fold
-     */
-    public static ResponseTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
-        ResponseTextDataset[] foldData = new ResponseTextDataset[3];
-        ResponseTextDataset trainData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
-        trainData.setFormatFilename(fold.getFoldName() + Fold.TrainingExt);
-        trainData.loadFormattedData(fold.getFoldFolderPath());
-        foldData[Fold.TRAIN] = trainData;
-
-        ResponseTextDataset devData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
-        devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
-        devData.loadFormattedData(fold.getFoldFolderPath());
-        foldData[Fold.DEV] = devData;
-
-        ResponseTextDataset testData = new ResponseTextDataset(fold.getFoldName(), fold.getFolder());
-        testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
-        testData.loadFormattedData(fold.getFoldFolderPath());
-        foldData[Fold.TEST] = testData;
-
-        return foldData;
-    }
-
-    public static void process(String[] args) throws Exception {
+    private static void process() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");

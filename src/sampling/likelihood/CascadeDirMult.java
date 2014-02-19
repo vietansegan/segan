@@ -1,13 +1,15 @@
 package sampling.likelihood;
 
 import java.io.Serializable;
+import sampling.AbstractDiscreteFiniteLikelihoodModel;
 import sampling.util.SparseCount;
 
 /**
  *
  * @author vietan
  */
-public class CascadeMult implements Serializable {
+public class CascadeDirMult extends AbstractDiscreteFiniteLikelihoodModel
+        implements Serializable {
 
     private static final long serialVersionUID = 1123581321L;
 
@@ -15,14 +17,17 @@ public class CascadeMult implements Serializable {
 
         MINIMAL, MAXIMAL
     }
-    private SparseCount observations;
+    
     private SparseCount pseudoObservations;
     private double[] distribution;
+    private double[] logDistribution;
 
-    public CascadeMult() {
+    public CascadeDirMult(int dim) {
+        super(dim);
         this.observations = new SparseCount();
         this.pseudoObservations = null;
         this.distribution = null;
+        this.logDistribution = null;
     }
 
     public boolean containsObservation(int obs) {
@@ -75,13 +80,27 @@ public class CascadeMult implements Serializable {
 
     public void setDistribution(double[] t) {
         this.distribution = t;
+        this.logDistribution = new double[distribution.length];
+        for (int ii = 0; ii < logDistribution.length; ii++) {
+            logDistribution[ii] = Math.log(distribution[ii]);
+        }
     }
 
+    @Override
+    public void sampleFromPrior() {
+        throw new RuntimeException("Not supported");
+    }
+
+    @Override
     public double[] getDistribution() {
         return this.distribution;
     }
 
-    public SparseCount getObservations() {
+    public double[] getLogDistribution() {
+        return this.logDistribution;
+    }
+
+    public SparseCount getSparseCount() {
         return this.observations;
     }
 
@@ -105,11 +124,21 @@ public class CascadeMult implements Serializable {
         this.observations.decrement(obs);
     }
 
+    @Override
+    public String getModelName() {
+        return "Cascaded-Dirichlet-Multinomial";
+    }
+
+    @Override
+    public double getLogLikelihood(int observation) {
+        return this.logDistribution[observation];
+    }
+
+    @Override
     public double getLogLikelihood() {
         double llh = 0.0;
-        for (int idx : this.observations.getIndices()) {
-            int count = this.observations.getCount(idx);
-            llh += count * Math.log(distribution[idx]);
+        for (int obs : this.observations.getIndices()) {
+            llh += this.observations.getCount(obs) * getLogLikelihood(obs);
         }
         return llh;
     }

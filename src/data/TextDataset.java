@@ -831,7 +831,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         return corpProc;
     }
 
-    public static void crossValidate() throws Exception {
+    private static void crossValidate() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
@@ -852,7 +852,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio);
     }
 
-    public static TextDataset load() throws Exception {
+    private static TextDataset load() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String formatFolder = cmd.getOptionValue("format-folder");
@@ -864,7 +864,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         return data;
     }
 
-    public static void process() throws Exception {
+    private static void process() throws Exception {
         String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
         String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
         String textInputData = CLIUtils.getStringArgument(cmd, "text-data", "demo/amazon-data/raw/text.txt");

@@ -143,7 +143,8 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         int j = 0;
         for (int observation : observations.keySet()) {
             for (int i = 0; i < observations.get(observation); i++) {
-                llh += Math.log(concentration * getCenterElement(observation) + getCount(observation) + i)
+                llh += Math.log(concentration * getCenterElement(observation) 
+                        + getCount(observation) + i)
                         - Math.log(concentration + getCountSum() + j);
                 j++;
             }

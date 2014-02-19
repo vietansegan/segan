@@ -805,15 +805,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             throw new RuntimeException("Exception while sampling during test time.");
         }
     }
-    private int testBurnIn = BURN_IN;
-    private int testMaxIter = MAX_ITER;
-    private int testSampleLag = LAG;
 
-    public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
-        this.testBurnIn = tBurnIn;
-        this.testMaxIter = tMaxIter;
-        this.testSampleLag = tSampleLag;
-    }
+    
 
     /**
      * Perform sampling on test documents using a single model learned during

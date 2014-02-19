@@ -54,6 +54,10 @@ public abstract class AbstractSampler implements Serializable {
     protected int MAX_ITER = 100; // maximum number of iterations
     protected int LAG = 1; // for outputing log-likelihood
     protected int REP_INTERVAL = 10; // report interval
+    // test configuration
+    protected int testBurnIn = 50;
+    protected int testMaxIter = 100;
+    protected int testSampleLag = 5;
     protected String folder;
     protected String name;
     protected ArrayList<Double> hyperparams;
@@ -92,6 +96,14 @@ public abstract class AbstractSampler implements Serializable {
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
         options.addOption("help", false, "Help");
+    }
+
+    public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
+        if (tMaxIter < this.testMaxIter) {
+            this.testBurnIn = tBurnIn;
+            this.testMaxIter = tMaxIter;
+            this.testSampleLag = tSampleLag;
+        }
     }
 
     public void setSamplerConfiguration(int burn_in, int max_iter, int lag, int repInt) {
@@ -425,7 +437,7 @@ public abstract class AbstractSampler implements Serializable {
                     + "; final llh = " + getLogLikelihood(hyperparams));
         }
     }
-    
+
     public static void runThreads(ArrayList<Thread> threads) throws Exception {
         int c = 0;
         for (int ii = 0; ii < threads.size() / MAX_NUM_PARALLEL_THREADS; ii++) {

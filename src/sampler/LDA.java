@@ -692,8 +692,6 @@ public class LDA extends AbstractSampler {
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
         boolean debug = cmd.hasOption("d");
-        verbose = true;
-        debug = true;
 
         if (verbose) {
             System.out.println("Loading data ...");

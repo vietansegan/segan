@@ -572,7 +572,7 @@ public class LabelTextDataset extends TextDataset {
         }
     }
 
-    public static void crossValidate() throws Exception {
+    private static void crossValidate() throws Exception {
         CorpusProcessor corpProc = createCorpusProcessor();
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
@@ -599,7 +599,7 @@ public class LabelTextDataset extends TextDataset {
         dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio);
     }
 
-    public static void process() throws Exception {
+    private static void process() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String textInputData = cmd.getOptionValue("text-data");
@@ -622,7 +622,7 @@ public class LabelTextDataset extends TextDataset {
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
     }
 
-    public static LabelTextDataset load() throws Exception {
+    private static LabelTextDataset load() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String formatFolder = cmd.getOptionValue("format-folder");

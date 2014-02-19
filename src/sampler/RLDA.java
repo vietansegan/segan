@@ -112,6 +112,7 @@ public class RLDA extends LDA {
         if (verbose) {
             logln("Iterating ...");
         }
+        updateStatistics();
         logLikelihoods = new ArrayList<Double>();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
@@ -134,7 +135,7 @@ public class RLDA extends LDA {
 
             if (verbose && iter % REP_INTERVAL == 0) {
                 double changeRatio = (double) numTokensChanged / numTokens;
-                String str = "Iter " + iter
+                String str = "Iter " + iter + "/" + MAX_ITER
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
                         + ". change ratio = " + MiscUtils.formatDouble(changeRatio);

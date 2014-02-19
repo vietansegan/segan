@@ -22,7 +22,7 @@ import regression.Regressor;
 import sampler.RLDA;
 import sampler.RecursiveLDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
-import sampling.likelihood.CascadeMult.PathAssumption;
+import sampling.likelihood.CascadeDirMult.PathAssumption;
 import sampling.likelihood.DirMult;
 import sampling.likelihood.TruncatedStickBreaking;
 import sampling.util.FullTable;

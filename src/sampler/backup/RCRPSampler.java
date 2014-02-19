@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package sampler;
+package sampler.backup;
 
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;
@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
+import sampler.LDA;
 import sampling.util.Restaurant;
 import sampling.util.SparseCount;
 import sampling.util.FullTable;
