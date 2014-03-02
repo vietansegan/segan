@@ -16,7 +16,8 @@ public class CLIUtils {
         formatter = new HelpFormatter();
     }
 
-    public static double[] getDoubleArrayArgument(CommandLine cmd, String argName, double[] defaultVals, String splitter) {
+    public static double[] getDoubleArrayArgument(CommandLine cmd, String argName, 
+            double[] defaultVals, String splitter) {
         if (cmd.hasOption(argName)) {
             String argVal = cmd.getOptionValue(argName);
             String[] sval = argVal.split(splitter);
@@ -24,11 +25,13 @@ public class CLIUtils {
             for (int i = 0; i < vals.length; i++) {
                 vals[i] = Double.parseDouble(sval[i]);
             }
+            return vals;
         }
         return defaultVals;
     }
 
-    public static int[] getDoubleArrayArgument(CommandLine cmd, String argName, int[] defaultVals, String splitter) {
+    public static int[] getIntArrayArgument(CommandLine cmd, String argName, 
+            int[] defaultVals, String splitter) {
         if (cmd.hasOption(argName)) {
             String argVal = cmd.getOptionValue(argName);
             String[] sval = argVal.split(splitter);
@@ -36,6 +39,7 @@ public class CLIUtils {
             for (int i = 0; i < vals.length; i++) {
                 vals[i] = Integer.parseInt(sval[i]);
             }
+            return vals;
         }
         return defaultVals;
     }

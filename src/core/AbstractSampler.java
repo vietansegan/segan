@@ -195,7 +195,8 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     public String[] getTopWords(double[] distribution, int numWords) {
-        ArrayList<RankingItem<String>> topicSortedVocab = IOUtils.getSortedVocab(distribution, this.wordVocab);
+        ArrayList<RankingItem<String>> topicSortedVocab 
+                = IOUtils.getSortedVocab(distribution, this.wordVocab);
         String[] topWords = new String[numWords];
         for (int i = 0; i < numWords; i++) {
             topWords[i] = topicSortedVocab.get(i).getObject();

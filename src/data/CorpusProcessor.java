@@ -36,6 +36,7 @@ public class CorpusProcessor {
     private ChiSquareTest chiSquareTest;
     private boolean verbose = true;
     // inputs
+    private int D; // number of input documents
     private String[] rawTexts;
     private Set<String> excludeFromBigrams; // set of bigrams that should not be considered
     // settings
@@ -43,9 +44,11 @@ public class CorpusProcessor {
     protected int bigramCountCutoff; // minimum count of raw bigrams
     protected double bigramScoreCutoff; // minimum bigram score
     protected int maxVocabSize; // maximum vocab size
-    protected int vocabTermFreqMinCutoff; // minimum term frequency (for all items in the vocab, including unigrams and bigrams)
+    // minimum term frequency (for all items in the vocab, including unigrams and bigrams)
+    protected int vocabTermFreqMinCutoff;
     protected int vocabTermFreqMaxCutoff; // maximum term frequency
-    protected int vocabDocFreqMinCutoff; // minimum document frequency (for all items in the vocab, including unigrams and bigrams)
+    // minimum document frequency (for all items in the vocab, including unigrams and bigrams)
+    protected int vocabDocFreqMinCutoff;
     protected int vocabDocFreqMaxCutoff; // maximum document frequency 
     protected int docTypeCountCutoff;  // minumum number of types in a document
     protected int minWordLength = 3; // minimum length of a word type 
@@ -179,6 +182,10 @@ public class CorpusProcessor {
         return this.rawSentences;
     }
 
+    public void setRawSentences(String[][] rawSents) {
+        this.rawSentences = rawSents;
+    }
+
     public void setRawTexts(String[] rawTexts) {
         this.rawTexts = rawTexts;
     }
@@ -254,7 +261,7 @@ public class CorpusProcessor {
         if (sentenceDetector == null) {
             throw new RuntimeException("Sentence detector is not initialized.");
         }
-        int D = rawDocuments.length;
+        D = rawDocuments.length;
         String[][] rawSents = new String[D][];
         int step = MiscUtils.getRoundStepSize(D, 10);
         for (int d = 0; d < D; d++) {
@@ -277,8 +284,7 @@ public class CorpusProcessor {
             System.out.println("Normalizing tokens ...");
         }
 
-        String[][][] normTexts = new String[rawTexts.length][][];
-        int D = rawSentences.length;
+        String[][][] normTexts = new String[D][][];
         int step = MiscUtils.getRoundStepSize(D, 10);
         for (int d = 0; d < D; d++) {
             if (verbose && d % step == 0) {
@@ -304,8 +310,9 @@ public class CorpusProcessor {
      * @param voc An existing vocabulary
      */
     public void process(ArrayList<String> voc) {
-        if (rawTexts == null) {
-            throw new RuntimeException("Raw texts have not been initialized yet");
+        if (rawTexts == null && rawSentences == null) {
+            throw new RuntimeException("Both rawTexts and rawSentences have not "
+                    + "been initialized yet");
         }
 
         // tokenize and normalize texts
@@ -313,8 +320,9 @@ public class CorpusProcessor {
             System.out.println("Tokenizing and counting ...");
         }
 
-        // segment sentences
+        // segment sentences if necessary
         rawSentences = this.segmentSentences(this.rawTexts);
+        D = rawSentences.length;
 
         // tokenize sentences and normalize tokens
         String[][][] normTexts = this.normalizeTokens(rawSentences);
@@ -323,10 +331,10 @@ public class CorpusProcessor {
         if (verbose) {
             System.out.println("Building numeric representations ...");
         }
-        int step = MiscUtils.getRoundStepSize(normTexts.length, 10);
-        for (int d = 0; d < normTexts.length; d++) {
+        int step = MiscUtils.getRoundStepSize(D, 10);
+        for (int d = 0; d < D; d++) {
             if (verbose && d % step == 0) {
-                System.out.println("--- Normalizing tokens d = " + d + " / " + normTexts.length);
+                System.out.println("--- Normalizing tokens d = " + d + " / " + D);
             }
             for (int s = 0; s < normTexts[d].length; s++) {
                 ArrayList<String> tokens = new ArrayList<String>();
@@ -339,7 +347,8 @@ public class CorpusProcessor {
                     // consider a bigram
                     if (i + 1 < normTexts[d][s].length
                             && !normTexts[d][s][i + 1].isEmpty()) {
-                        String bigram = getBigramString(normTexts[d][s][i], normTexts[d][s][i + 1]);
+                        String bigram = getBigramString(normTexts[d][s][i],
+                                normTexts[d][s][i + 1]);
 
                         // if the bigram is not in the vocab, add the current
                         // unigram and move on
@@ -364,15 +373,16 @@ public class CorpusProcessor {
         }
 
         this.vocabulary = voc;
-        this.numericDocs = new int[rawTexts.length][];
-        this.numericSentences = new int[rawTexts.length][][];
-        for (int d = 0; d < this.numericDocs.length; d++) { // for each document
+        this.numericDocs = new int[D][];
+        this.numericSentences = new int[D][][];
+        for (int d = 0; d < D; d++) { // for each document
             ArrayList<Integer> numericDoc = new ArrayList<Integer>();
             this.numericSentences[d] = new int[normTexts[d].length][];
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                    int numericTerm = Collections.binarySearch(this.vocabulary,
+                            normTexts[d][s][w]);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
@@ -396,8 +406,9 @@ public class CorpusProcessor {
      * Process a set of documents
      */
     public void process() {
-        if (rawTexts == null) {
-            throw new RuntimeException("Raw texts have not been initialized yet");
+        if (rawTexts == null && rawSentences == null) {
+            throw new RuntimeException("Both rawTexts and rawSentences have not "
+                    + "been initialized yet");
         }
 
         if (vocabulary != null) {
@@ -412,17 +423,24 @@ public class CorpusProcessor {
         if (verbose) {
             System.out.println("Tokenizing and counting ...");
         }
-        String[][][] normTexts = new String[rawTexts.length][][];
-        rawSentences = new String[rawTexts.length][];
-        int stepsize = MiscUtils.getRoundStepSize(rawTexts.length, 10);
-        for (int d = 0; d < rawTexts.length; d++) {
+
+        // segment sentences if necessary
+        rawSentences = this.segmentSentences(this.rawTexts);
+        process(rawSentences);
+    }
+
+    public void process(String[][] rawSents) {
+        // segment sentences if necessary
+        rawSentences = rawSents;
+        D = rawSentences.length;
+        String[][][] normTexts = new String[D][][];
+        int stepsize = MiscUtils.getRoundStepSize(D, 10);
+        for (int d = 0; d < D; d++) {
             if (verbose && d % stepsize == 0) {
-                System.out.println("--- Tokenizing doc # " + d + " / " + rawTexts.length);
+                System.out.println("--- Tokenizing doc # " + d + " / " + D);
             }
 
             Set<String> uniqueDocTokens = new HashSet<String>();
-            String rawText = rawTexts[d];
-            rawSentences[d] = sentenceDetector.sentDetect(rawText);
             normTexts[d] = new String[rawSentences[d].length][];
 
             for (int s = 0; s < rawSentences[d].length; s++) {
@@ -555,7 +573,7 @@ public class CorpusProcessor {
             }
 
             double tf = Math.log(rawTf + 1);
-            double idf = Math.log(rawTexts.length) - Math.log(df);
+            double idf = Math.log(D) - Math.log(df + 1);
             double tfidf = tf * idf;
             rankVocab.add(new RankingItem<String>(term, tfidf));
         }
@@ -572,8 +590,8 @@ public class CorpusProcessor {
         }
         Collections.sort(this.vocabulary);
 
-        this.numericDocs = new int[rawTexts.length][];
-        this.numericSentences = new int[rawTexts.length][][];
+        this.numericDocs = new int[D][];
+        this.numericSentences = new int[D][][];
         for (int d = 0; d < this.numericDocs.length; d++) { // for each document
             ArrayList<Integer> numericDoc = new ArrayList<Integer>();
             this.numericSentences[d] = new int[normTexts[d].length][];

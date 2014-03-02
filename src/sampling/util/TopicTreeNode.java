@@ -3,6 +3,7 @@ package sampling.util;
 import cc.mallet.types.Dirichlet;
 import java.util.Arrays;
 import sampling.likelihood.DirMult;
+import util.IOUtils;
 
 /**
  * Implementation of tree node which stores a topic (i.e., a multinomial
@@ -117,6 +118,10 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
             double[] parentTopic = ((C) parent.getContent()).getSamplingDistribution();
             for (int v = 0; v < V; v++) {
                 meanVector[v] += parentTopic[v] * gamma;
+            }
+        } else {
+            for (int v = 0; v < V; v++) {
+                meanVector[v] += gamma / V; // uniform
             }
         }
         Dirichlet dir = new Dirichlet(meanVector);

@@ -27,7 +27,7 @@ public class StatisticsUtils {
         }
         return disVals;
     }
-    
+
     public static ArrayList<Integer> discretize(ArrayList<Double> values, int numClasses) {
         ArrayList<Integer> disVals = new ArrayList<Integer>();
         double min = StatisticsUtils.min(values);
@@ -68,6 +68,15 @@ public class StatisticsUtils {
         return corr.correlation(trueValues, predValues);
     }
 
+    public static double computeMeanAbsoluteError(double[] trueValues, double[] predValues) {
+        double sae = 0.0;
+        for (int ii = 0; ii < trueValues.length; ii++) {
+            double absDiff = Math.abs(trueValues[ii] - predValues[ii]);
+            sae += absDiff;
+        }
+        return sae / trueValues.length;
+    }
+
     public static double computeMeanSquaredError(double[] trueValues, double[] predValues) {
         double sse = 0.0;
         for (int i = 0; i < trueValues.length; i++) {
@@ -89,7 +98,7 @@ public class StatisticsUtils {
     }
 
     public static double logNormalProbability(double observation,
-            double mean, double stdv ){
+            double mean, double stdv) {
         double llh = 0;
         llh -= 0.5 * Math.log(2 * Math.PI);
         llh -= Math.log(stdv);
@@ -162,10 +171,10 @@ public class StatisticsUtils {
         }
         return sum;
     }
-    
+
     public static int[] bin(double[] data, int numBins, double min, double max) {
         int[] bins = new int[numBins];
-        
+
         double stepSize = (max - min) / numBins;
 
         for (double value : data) {

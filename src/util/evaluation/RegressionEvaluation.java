@@ -31,6 +31,10 @@ public class RegressionEvaluation {
         this.measurements.add(new Measurement("MSE", StatisticsUtils.computeMeanSquaredError(trueValues, predValues)));
     }
 
+    public void computeMeanAbsoluteError() {
+        this.measurements.add(new Measurement("MAE", StatisticsUtils.computeMeanAbsoluteError(trueValues, predValues)));
+    }
+
     public void computeCorrelationCoefficient() {
         this.measurements.add(new Measurement("Correlation-coefficient", StatisticsUtils.computeCorrelationCoefficient(trueValues, predValues)));
     }

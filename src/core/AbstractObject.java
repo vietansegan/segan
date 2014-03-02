@@ -23,11 +23,13 @@ public abstract class AbstractObject<I> {
 
     public void addProperty(String propName, String propValue) {
         if (this.properties.containsKey(propName)) {
-            System.out.println("[WARNING] Adding to existing property"
-                    + ". object id = " + id
-                    + ". property = " + propName
-                    + ". current value = " + properties.get(propName)
-                    + ". new value = " + propValue);
+            if (!this.properties.get(propName).equals(propValue)) {
+                System.out.println("[WARNING] Adding to existing property"
+                        + ". object id = " + id
+                        + ". property = " + propName
+                        + ". current value = " + properties.get(propName)
+                        + ". new value = " + propValue);
+            }
         }
         this.properties.put(propName, propValue);
     }
@@ -39,11 +41,11 @@ public abstract class AbstractObject<I> {
     public boolean hasProperty(String propName) {
         return this.properties.containsKey(propName);
     }
-    
+
     public Set<String> getPropertyNames() {
         return this.properties.keySet();
     }
-    
+
     @Override
     public String toString() {
         StringBuilder str = new StringBuilder();

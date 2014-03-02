@@ -85,6 +85,24 @@ public class PredictionUtils {
         }
     }
 
+    public static double[] inputPredictedValues(File inputFile) {
+        double[] predVals = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            int count = Integer.parseInt(reader.readLine());
+            predVals = new double[count];
+            for (int ii = 0; ii < count; ii++) {
+                predVals[ii] = (Double.parseDouble(reader.readLine().split("\t")[2]));
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing predictions from "
+                    + inputFile);
+        }
+        return predVals;
+    }
+
     public static void outputClassificationPredictions(
             File outputFile,
             String[] instanceIds,
@@ -137,7 +155,7 @@ public class PredictionUtils {
                 writer.write(m.getName() + "\t" + m.getValue() + "\n");
             }
             writer.close();
-            
+
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing results to "
@@ -163,6 +181,7 @@ public class PredictionUtils {
             RegressionEvaluation eval = new RegressionEvaluation(trueValues, predValues);
             eval.computeCorrelationCoefficient();
             eval.computeMeanSquareError();
+            eval.computeMeanAbsoluteError();
             eval.computeRSquared();
             eval.computePredictiveRSquared();
             measurements = eval.getMeasurements();
@@ -182,7 +201,7 @@ public class PredictionUtils {
             File outputFile,
             int[] trueLabels,
             double[] predValues) {
-        
+
         int numPositives = 0;
         for (int ii = 0; ii < trueLabels.length; ii++) {
             if (trueLabels[ii] == POSITVE) {
@@ -347,11 +366,11 @@ public class PredictionUtils {
             double[] trueResponses) {
         try {
             String[] filenames = iterPredFolder.list();
-            
+
             // debug
 //            System.out.println("iter folder: " + iterPredFolder);
 //            System.out.println("# files: " + filenames.length);
-            
+
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
                 double[][] predictions = inputSingleModelPredictions(
