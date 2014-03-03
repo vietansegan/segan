@@ -73,6 +73,10 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         }
     }
 
+    public void setCorpusProcessor(CorpusProcessor cp) {
+        this.corpProc = cp;
+    }
+
     protected void outputDataPreprocessingConfigurations() throws Exception {
         BufferedWriter writer = IOUtils.getBufferedWriter(folder);
         writer.write(this.corpProc.getSettings() + "\n");

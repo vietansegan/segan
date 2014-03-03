@@ -596,9 +596,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             empBackgroundTopic[v] /= tokenCount;
         }
 
-        int init_burnin = BURN_IN;
-        int init_maxiter = MAX_ITER;
-        int init_samplelag = LAG;
+        int init_burnin = 50;
+        int init_maxiter = 100;
+        int init_samplelag = 5;
 
         if (initBranchingFactors == null) {
             initBranchingFactors = new int[L - 1];
@@ -3649,150 +3649,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                 testData.getDocIds(), testData.getResponses());
     }
 
-//    private static void runModel() throws Exception {
-////        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
-////        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
-////        String resultFolder = CLIUtils.getStringArgument(cmd, "output", "demo/amazon-data/model");
-////        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-response");
-////        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-//
-////        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
-////        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder",
-////                "/Users/vietan/Dropbox/github/teaparty/data/govtrack");
-////        String resultFolder = CLIUtils.getStringArgument(cmd, "output",
-////                "/Users/vietan/Dropbox/github/teaparty/data/govtrack/112/format-teaparty-model");
-////        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
-////        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-//
-//        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
-//        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder",
-//                "L:/Datasets/teaparty/govtrack");
-//        String resultFolder = CLIUtils.getStringArgument(cmd, "output",
-//                "L:/Datasets/teaparty/govtrack/112/format-teaparty-model");
-//        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-teaparty");
-//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-//
-//        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-//
-//        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-//        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-//        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-//        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-//        double T = CLIUtils.getDoubleArgument(cmd, "T", 500);
-//
-//        String branchFactorStr = CLIUtils.getStringArgument(cmd, "init-branch-factor", "10-5");
-//        String[] sstr = branchFactorStr.split("-");
-//        int[] branch = new int[sstr.length];
-//        for (int ii = 0; ii < branch.length; ii++) {
-//            branch[ii] = Integer.parseInt(sstr[ii]);
-//        }
-//
-//        boolean paramOpt = cmd.hasOption("paramOpt");
-//        boolean verbose = cmd.hasOption("v");
-//        boolean debug = cmd.hasOption("d");
-//        InitialState initState = InitialState.PRESET;
-//
-//        if (verbose) {
-//            System.out.println("\nLoading formatted data ...");
-//        }
-//        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
-//        data.setFormatFilename(formatFile);
-//        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
-//        data.prepareTopicCoherence(numTopWords);
-//
-//        int V = data.getWordVocab().size();
-//        int L = CLIUtils.getIntegerArgument(cmd, "tree-height", 3);
-//        double gem_mean = CLIUtils.getDoubleArgument(cmd, "gem-mean", 0.3);
-//        double gem_scale = CLIUtils.getDoubleArgument(cmd, "gem-scale", 50);
-//
-//        double[] defaultBetas = new double[L];
-//        defaultBetas[0] = 1;
-//        for (int i = 1; i < L; i++) {
-//            defaultBetas[i] = 1.0 / (i + 1);
-//        }
-//        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
-//
-//        double[] defaultGammas = new double[L - 1];
-//        for (int i = 0; i < defaultGammas.length; i++) {
-//            defaultGammas[i] = 1.0 / (i + 1);
-//        }
-//
-//        double[] gammas = CLIUtils.getDoubleArrayArgument(cmd, "gammas", defaultGammas, ",");
-//
-//        if (cmd.hasOption("z")) {
-//            data.zNormalize();
-//        } else {
-//            System.out.println("--- [WARNING] Running with unnormalized response "
-//                    + "variables. Use option -z to perform z-normalization.");
-//        }
-//
-//        double meanResponse = StatisticsUtils.mean(data.getResponses());
-//        double[] defaultMus = new double[L];
-//        for (int i = 0; i < L; i++) {
-//            defaultMus[i] = meanResponse;
-//        }
-//        double[] mus = CLIUtils.getDoubleArrayArgument(cmd, "mus", defaultMus, ",");
-//
-//        double[] defaultSigmas = new double[L];
-//        defaultSigmas[0] = 0.0001; // root node
-//        for (int l = 1; l < L; l++) {
-//            defaultSigmas[l] = 0.5 * l;
-//        }
-//        double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
-//        double tau_mean = CLIUtils.getDoubleArgument(cmd, "tau-mean", 0.0);
-//        double tau_scale = CLIUtils.getDoubleArgument(cmd, "tau-scale", 1.0);
-//        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 1.0);
-//        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-//
-//        if (verbose) {
-//            System.out.println("\nRunning sampler ...");
-//        }
-//
-//        SHLDA sampler = new SHLDA();
-//        sampler.setVerbose(verbose);
-//        sampler.setDebug(debug);
-//        sampler.setLog(true);
-//        sampler.setReport(true);
-//        sampler.setWordVocab(data.getWordVocab());
-//        sampler.setInitialBranchingFactor(branch);
-//
-//        Regularizer reg = Regularizer.L1;
-//        double regPr = T;
-//        sampler.configure(resultFolder,
-//                V, L,
-//                alpha,
-//                rho,
-//                gem_mean, gem_scale,
-//                tau_mean, tau_scale,
-//                betas, gammas,
-//                mus, sigmas,
-//                initState,
-//                PathAssumption.MAXIMAL,
-//                reg, regPr,
-//                paramOpt,
-//                burnIn, maxIters, sampleLag, repInterval);
-//
-//        File samplerFolder = new File(resultFolder, sampler.getSamplerFolder());
-//        IOUtils.createFolder(samplerFolder);
-//
-//        sampler.train(data);
-//        sampler.initialize();
-//        sampler.iterate();
-//
-//        sampler.inputFinalState();
-//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-//        sampler.outputSentences(new File(samplerFolder, "sentences.txt"), data.getRawSentences(), 15);
-////        sampler.outputHTML(new File(samplerFolder, "sentences.html"),
-////                data.getDocIds(),
-////                data.getRawSentences(),
-////                15,
-////                15);
-//
-////        sampler.outputTopicCoherence(new File(shldaFolder, TopicCoherenceFile), topicCoherence);
-////        sampler.outputLexicalWeights(new File(samplerFolder, "lexical-reg-params.txt"));
-////        sampler.outputDocPathAssignments(new File(samplerFolder, "doc-topic.txt"));
-////        sampler.outputTopicWordDistributions(new File(samplerFolder, "topic-word.txt"));
-//    }
     private static void runCrossValidation() throws Exception {
         String cvFolder = cmd.getOptionValue("cv-folder");
         int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
@@ -3919,6 +3775,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             IOUtils.createFolder(samplerFolder);
 
             if (runMode.equals("train")) {
+                sampler.train(trainData);
                 sampler.sample();
                 sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), 
                         numTopWords);
@@ -3931,6 +3788,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
                         testData.getDocIds(), testData.getResponses());
             } else if (runMode.equals("train-test")) {
                 // train
+                sampler.train(trainData);
                 sampler.sample();
                 sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), 
                         numTopWords);

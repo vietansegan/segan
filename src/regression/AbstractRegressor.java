@@ -19,32 +19,32 @@ import util.evaluation.RankingPerformance;
  * @author vietan
  */
 public abstract class AbstractRegressor extends AbstractRunner {
-
+    
     public static final String DATA_FILE = "data";
     public static final String MODEL_FILE = "model";
     public static final String PREDICTION_FILE = "predictions";
     public static final String RESULT_FILE = "result";
     protected String folder;
     protected String name;
-
+    
     public AbstractRegressor(String folder) {
         this.folder = folder;
     }
-
+    
     public abstract String getName();
-
+    
     public void setName(String name) {
         this.name = name;
     }
-
+    
     public String getFolder() {
         return this.folder;
     }
-
+    
     public String getRegressorFolder() {
         return new File(folder, getName()).getAbsolutePath();
     }
-
+    
     public double[] inputPredictions(File inputFile) {
         if (verbose) {
             logln(">>> Input predictions to " + inputFile);
@@ -89,7 +89,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
         }
         return PredictionUtils.outputRegressionResults(outputFile, trueValues, predValues);
     }
-
+    
     public ArrayList<Measurement> outputClassificationResults(
             File outputFile,
             int[] trueClasses,
@@ -108,12 +108,15 @@ public abstract class AbstractRegressor extends AbstractRunner {
         writer.close();
         return measurements;
     }
-
+    
     public void outputRankingPerformance(
             File rankFolder,
             String[] instanceIds,
             double[] trueValues,
             double[] predValues) {
+        if (verbose) {
+            logln(">>> Output ranking performance to " + rankFolder);
+        }
         IOUtils.createFolder(rankFolder);
 
         // predictions
@@ -129,12 +132,12 @@ public abstract class AbstractRegressor extends AbstractRunner {
             truths.addRankingItem(new RankingItem<String>(instanceIds[ii], trueValues[ii]));
         }
         truths.sortDescending();
-
+        
         RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds,
                 rankFolder.getAbsolutePath());
         rankPerf.computeAndOutputNDCGs(truths);
     }
-
+    
     public void outputRankingPerformance(
             File rankFolder,
             String[] instanceIds,
@@ -147,22 +150,22 @@ public abstract class AbstractRegressor extends AbstractRunner {
             preds.addRankingItem(new RankingItem<String>(instanceIds[ii], predValues[ii]));
         }
         preds.sortDescending();
-
+        
         Set<String> groundtruth = new HashSet<String>();
         for (int ii = 0; ii < instanceIds.length; ii++) {
             if (trueValues[ii] >= threshold) {
                 groundtruth.add(instanceIds[ii]);
             }
         }
-
+        
         RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds,
                 groundtruth, rankFolder.getAbsolutePath());
         rankPerf.computePrecisionsAndRecalls();
         rankPerf.outputPrecisionRecallF1();
-
+        
         rankPerf.outputAUCListFile();
         rankPerf.outputRankingResultsWithGroundtruth();
-
+        
         rankPerf.computeAUC();
         rankPerf.outputAUC();
     }

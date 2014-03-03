@@ -34,17 +34,17 @@ public class AbstractRunner {
     public static void setDebug(boolean d) {
         debug = d;
     }
-    
+
     public static void log(String msg) {
         System.out.print("[LOG] " + msg);
     }
-    
+
     public static void logln(String msg) {
         System.out.println("[LOG] " + msg);
     }
-    
+
     public static String getHelpString(String className) {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " 
+        return "java -cp 'dist/segan.jar:dist/lib/*' "
                 + className + " -help";
     }
 }

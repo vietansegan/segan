@@ -86,6 +86,10 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
         addOption("init", "Report interval");
+        
+        addOption("test-burnIn", "Burn-in");
+        addOption("test-maxIter", "Maximum number of iterations");
+        addOption("test-sampleLag", "Sample lag");
     }
 
     public static void addCrossValidationOptions() {

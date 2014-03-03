@@ -455,7 +455,7 @@ public class LabelTextDataset extends TextDataset {
 //                    vals[ll + wordVocab.size()] = 1;
 //                }
 //            }            
-            for(int ll : labels[dd]) {
+            for (int ll : labels[dd]) {
                 vals[ll + wordVocab.size()] = 1;
             }
 
@@ -479,7 +479,8 @@ public class LabelTextDataset extends TextDataset {
             this.inputLabelVocab(new File(fFolder, formatFilename + labelVocabExt));
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while loading formatted data "
+                    + "from " + fFolder);
         }
     }
 

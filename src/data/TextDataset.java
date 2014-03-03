@@ -422,7 +422,8 @@ public class TextDataset extends AbstractTokenizeDataset {
             inputSentenceTextData(new File(fFolder, formatFilename + numSentDataExt));
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while loading formatted data "
+                    + "from " + fFolder);
         }
     }
 
