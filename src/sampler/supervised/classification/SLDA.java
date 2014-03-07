@@ -15,7 +15,7 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class SLDAClassificationSampler {
+public class SLDA {
 //extends AbstractSampler {
 //    public static final int ALPHA = 0;
 //    public static final int BETA = 1;

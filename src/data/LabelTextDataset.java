@@ -35,6 +35,10 @@ public class LabelTextDataset extends TextDataset {
     protected int maxLabelVocSize = Integer.MAX_VALUE;
     protected int minLabelDocFreq = 1;
 
+    public LabelTextDataset(String name) {
+        super(name);
+    }
+
     public LabelTextDataset(String name, String folder) {
         super(name, folder);
     }
@@ -204,6 +208,7 @@ public class LabelTextDataset extends TextDataset {
             ArrayList<String> docLabels = docLabelMap.get(docIdList.get(ii));
             this.labelList.add(docLabels);
         }
+        logln("--- --- Loaded " + labelList.size() + " label instances");
     }
 
     @Override
@@ -214,10 +219,7 @@ public class LabelTextDataset extends TextDataset {
     @Override
     public void format(String outputFolder) throws Exception {
         IOUtils.createFolder(outputFolder);
-
         formatLabels(outputFolder);
-
-        // perform normal processing
         super.format(outputFolder);
     }
 
@@ -447,14 +449,6 @@ public class LabelTextDataset extends TextDataset {
             for (int idx : count.getIndices()) {
                 vals[idx] = count.getCount(idx);
             }
-
-            // labels
-//            ArrayList<String> lbls = labelList.get(dd);
-//            for (int ll = 0; ll < labelVocab.size(); ll++) {
-//                if (lbls.contains(labelVocab.get(ll))) {
-//                    vals[ll + wordVocab.size()] = 1;
-//                }
-//            }            
             for (int ll : labels[dd]) {
                 vals[ll + wordVocab.size()] = 1;
             }

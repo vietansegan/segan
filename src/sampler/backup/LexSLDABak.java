@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.backup;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizer;
@@ -14,13 +14,13 @@ import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import regression.Regressor;
-import util.PredictionUtils;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
+import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.StatisticsUtils;
@@ -32,7 +32,7 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
+public class LexSLDABak extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final int ALPHA = 0;
     public static final int BETA = 1;
@@ -1357,7 +1357,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + LexSLDA.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + LexSLDABak.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -1489,7 +1489,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
             double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
             double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
 
-            LexSLDA sampler = new LexSLDA();
+            LexSLDABak sampler = new LexSLDABak();
             sampler.setVerbose(verbose);
             sampler.setDebug(debug);
             sampler.setLog(true);
@@ -1586,7 +1586,7 @@ public class LexSLDA extends AbstractSampler implements Regressor<ResponseTextDa
         if (verbose) {
             System.out.println("Running SLDA ...");
         }
-        LexSLDA sampler = new LexSLDA();
+        LexSLDABak sampler = new LexSLDABak();
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setWordVocab(data.getWordVocab());

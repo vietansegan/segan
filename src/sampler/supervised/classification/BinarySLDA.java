@@ -49,10 +49,22 @@ public class BinarySLDA extends AbstractSampler {
     private int numTokensChanged = 0;
     private int numTokens = 0;
     private ArrayList<double[]> lambdasOverTime;
-    // for prediction
-    private int testBurnIn = BURN_IN;
-    private int testMaxIter = MAX_ITER;
-    private int testSampleLag = LAG;
+
+    public void configure(BinarySLDA sampler) {
+        this.configure(sampler.folder,
+                sampler.V,
+                sampler.K,
+                sampler.hyperparams.get(ALPHA),
+                sampler.hyperparams.get(BETA),
+                sampler.hyperparams.get(LAMBDA_MEAN),
+                sampler.hyperparams.get(LAMBDA_VAR),
+                sampler.initState,
+                sampler.paramOptimized,
+                sampler.BURN_IN,
+                sampler.MAX_ITER,
+                sampler.LAG,
+                sampler.REP_INTERVAL);
+    }
 
     public void configure(
             String folder,
@@ -156,6 +168,20 @@ public class BinarySLDA extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             this.numTokens += words[d].length;
         }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+            logln("--- responses:");
+            int posCount = 0;
+            for (int dd = 0; dd < labels.length; dd++) {
+                if (labels[dd] == POSITVE) {
+                    posCount++;
+                }
+            }
+            logln("--- --- # postive: " + posCount + " (" + ((double) posCount / D) + ")");
+            logln("--- --- # negative: " + (D - posCount));
+        }
     }
 
     @Override
@@ -180,27 +206,6 @@ public class BinarySLDA extends AbstractSampler {
             logln("--- Done initializing. " + getCurrentState());
             getLogLikelihood();
             evaluateLabelPrediction();
-        }
-    }
-
-    private void evaluateLabelPrediction() {
-        double[] predVals = computePredictionValues();
-        ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
-        for (int d = 0; d < D; d++) {
-            rankDocs.add(new RankingItem<Integer>(d, predVals[d]));
-        }
-        Collections.sort(rankDocs);
-        int[] preds = new int[D];
-        for (int ii = 0; ii < numPostives; ii++) {
-            int d = rankDocs.get(ii).getObject();
-            preds[d] = POSITVE;
-        }
-
-        ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
-        eval.computePRF1();
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
-            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
 
@@ -421,7 +426,7 @@ public class BinarySLDA extends AbstractSampler {
         try {
             if (paramOptimized && log) {
                 this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        "hyperparameters.txt").getAbsolutePath());
+                        HyperparameterFile));
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -543,6 +548,27 @@ public class BinarySLDA extends AbstractSampler {
             predResponses[d] = docPred;
         }
         return predResponses;
+    }
+
+    private void evaluateLabelPrediction() {
+        double[] predVals = computePredictionValues();
+        ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
+        for (int d = 0; d < D; d++) {
+            rankDocs.add(new RankingItem<Integer>(d, predVals[d]));
+        }
+        Collections.sort(rankDocs);
+        int[] preds = new int[D];
+        for (int ii = 0; ii < numPostives; ii++) {
+            int d = rankDocs.get(ii).getObject();
+            preds[d] = POSITVE;
+        }
+
+        ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
+        eval.computePRF1();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        }
     }
 
     @Override
@@ -763,17 +789,7 @@ public class BinarySLDA extends AbstractSampler {
         writer.close();
     }
 
-    public File getIterationPredictionFolder() {
-        return new File(getSamplerFolderPath(), IterPredictionFolder);
-    }
-
-    public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
-        this.testBurnIn = tBurnIn;
-        this.testMaxIter = tMaxIter;
-        this.testSampleLag = tSampleLag;
-    }
-    
-    public void test(int[][] newWords) {
+    public void test(int[][] newWords, File iterPredFolder) {
         if (verbose) {
             logln("Test sampling ...");
         }
@@ -784,17 +800,16 @@ public class BinarySLDA extends AbstractSampler {
         }
         String[] filenames = reportFolder.list();
 
-        File iterPredFolder = getIterationPredictionFolder();
-        IOUtils.createFolder(iterPredFolder);
-
         try {
+            IOUtils.createFolder(iterPredFolder);
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
                 if (!filename.contains("zip")) {
                     continue;
                 }
 
-                File partialResultFile = new File(iterPredFolder, IOUtils.removeExtension(filename) + ".txt");
+                File partialResultFile = new File(iterPredFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
                 sampleNewDocuments(
                         new File(reportFolder, filename).getAbsolutePath(),
                         newWords,
@@ -814,7 +829,7 @@ public class BinarySLDA extends AbstractSampler {
      * @param newWords Test documents
      * @param outputResultFile Prediction file
      */
-    private void sampleNewDocuments(
+    protected void sampleNewDocuments(
             String stateFile,
             int[][] newWords,
             String outputResultFile) throws Exception {
@@ -925,13 +940,46 @@ public class BinarySLDA extends AbstractSampler {
                 predResponsesList);
     }
     // End prediction ----------------------------------------------------------
-    
+
     public static String getHelpString() {
         return "java -cp dist/segan.jar " + BinarySLDA.class.getName() + " -help";
     }
-    
-    public static void main(String[] args) {
-        
+}
+
+class SLDATestRunner implements Runnable {
+
+    BinarySLDA sampler;
+    int[][] newWords;
+    String stateFile;
+    String outputFile;
+
+    public SLDATestRunner(BinarySLDA sampler,
+            int[][] newWords,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+    }
+
+    @Override
+    public void run() {
+        BinarySLDA testSampler = new BinarySLDA();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
+
+        try {
+            testSampler.sampleNewDocuments(stateFile, newWords, outputFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
     }
 }
 

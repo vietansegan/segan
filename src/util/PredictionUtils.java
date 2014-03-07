@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
+import util.evaluation.RankingPerformance;
 import util.evaluation.RegressionEvaluation;
 
 /**
@@ -175,6 +176,7 @@ public class PredictionUtils {
             File outputFile,
             double[] trueValues,
             double[] predValues) {
+        System.out.println("Outputing regression results to " + outputFile);
         ArrayList<Measurement> measurements = null;
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
@@ -195,6 +197,41 @@ public class PredictionUtils {
                     + "results to " + outputFile);
         }
         return measurements;
+    }
+
+    /**
+     * Output ranking performance.
+     *
+     * @param rankFolder Output ranking folder
+     * @param instanceIds Instance IDs
+     * @param trueValues The true values
+     * @param predValues The predicted values
+     */
+    public static void outputRankingPerformance(
+            File rankFolder,
+            String[] instanceIds,
+            double[] trueValues,
+            double[] predValues) {
+        System.out.println("Outputing ranking performance " + rankFolder);
+        IOUtils.createFolder(rankFolder);
+
+        // predictions
+        RankingItemList<String> preds = new RankingItemList<String>();
+        for (int ii = 0; ii < instanceIds.length; ii++) {
+            preds.addRankingItem(new RankingItem<String>(instanceIds[ii], predValues[ii]));
+        }
+        preds.sortDescending();
+
+        // groundtruth
+        RankingItemList<String> truths = new RankingItemList<String>();
+        for (int ii = 0; ii < instanceIds.length; ii++) {
+            truths.addRankingItem(new RankingItem<String>(instanceIds[ii], trueValues[ii]));
+        }
+        truths.sortDescending();
+
+        RankingPerformance<String> rankPerf = new RankingPerformance<String>(preds,
+                rankFolder.getAbsolutePath());
+        rankPerf.computeAndOutputNDCGsNormalize(truths);
     }
 
     public static ArrayList<Measurement> outputBinaryClassificationResults(
@@ -296,10 +333,67 @@ public class PredictionUtils {
             File outputFolder,
             String[] docIds,
             double[] trueResponses) {
-        computeSingleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
-        computeSingleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
-        computeMultipleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
-        return computeMultipleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
+        double[] singleFinalPred = computeSingleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
+        double[] singleAvgPred = computeSingleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
+        double[] multipleFinalPred = computeMultipleFinal(iterPredFolder, outputFolder, docIds, trueResponses);
+        double[] multipleAvgPred = computeMultipleAverage(iterPredFolder, outputFolder, docIds, trueResponses);
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(outputFolder, "summary.txt"));
+            ArrayList<Measurement> sfRe = evaluateRegression(trueResponses, singleFinalPred);
+            ArrayList<Measurement> saRe = evaluateRegression(trueResponses, singleAvgPred);
+            ArrayList<Measurement> mfRe = evaluateRegression(trueResponses, multipleFinalPred);
+            ArrayList<Measurement> maRe = evaluateRegression(trueResponses, multipleAvgPred);
+
+            // headers
+            for (Measurement m : sfRe) {
+                writer.write("\t" + m.getName());
+            }
+            writer.write("\n");
+
+            // contents
+            writer.write("single-final");
+            for (Measurement m : sfRe) {
+                writer.write("\t" + m.getValue());
+            }
+            writer.write("\n");
+
+            writer.write("single-avg");
+            for (Measurement m : saRe) {
+                writer.write("\t" + m.getValue());
+            }
+            writer.write("\n");
+
+            writer.write("multiple-final");
+            for (Measurement m : mfRe) {
+                writer.write("\t" + m.getValue());
+            }
+            writer.write("\n");
+
+            writer.write("multiple-avg");
+            for (Measurement m : maRe) {
+                writer.write("\t" + m.getValue());
+            }
+            writer.write("\n");
+
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while evaluating regression "
+                    + outputFolder);
+        }
+
+        return multipleAvgPred;
+    }
+
+    private static ArrayList<Measurement> evaluateRegression(double[] trueValues, double[] predValues) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueValues, predValues);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeMeanAbsoluteError();
+        eval.computeRSquared();
+        eval.computePredictiveRSquared();
+        return eval.getMeasurements();
     }
 
     public static double[] evaluateBinaryClassification(
@@ -359,18 +453,14 @@ public class PredictionUtils {
      * @param outputFolder The output folder
      * @param trueResponses The true values
      */
-    public static void computeSingleFinal(
+    public static double[] computeSingleFinal(
             File iterPredFolder,
             File outputFolder,
             String[] docIds,
             double[] trueResponses) {
+        double[] finalPred = null;
         try {
             String[] filenames = iterPredFolder.list();
-
-            // debug
-//            System.out.println("iter folder: " + iterPredFolder);
-//            System.out.println("# files: " + filenames.length);
-
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
                 double[][] predictions = inputSingleModelPredictions(
@@ -378,7 +468,7 @@ public class PredictionUtils {
                         trueResponses.length);
 
                 // get the predictions at the final iterations during test time
-                double[] finalPred = new double[predictions.length];
+                finalPred = new double[predictions.length];
                 for (int d = 0; d < finalPred.length; d++) {
                     finalPred[d] = predictions[d][predictions[0].length - 1];
                 }
@@ -394,6 +484,7 @@ public class PredictionUtils {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-final");
         }
+        return finalPred;
     }
 
     /**
@@ -405,11 +496,12 @@ public class PredictionUtils {
      * @param outputFolder The output folder
      * @param trueResponses The true values
      */
-    public static void computeSingleAverage(
+    public static double[] computeSingleAverage(
             File iterPredFolder,
             File outputFolder,
             String[] docIds,
             double[] trueResponses) {
+        double[] avgPred = null;
         try {
             String[] filenames = iterPredFolder.list();
             for (int i = 0; i < filenames.length; i++) {
@@ -421,7 +513,7 @@ public class PredictionUtils {
                         trueResponses.length);
 
                 // compute the prediction values as the average values
-                double[] avgPred = new double[predictions.length];
+                avgPred = new double[predictions.length];
                 for (int d = 0; d < avgPred.length; d++) {
                     avgPred[d] = StatisticsUtils.mean(predictions[d]);
                 }
@@ -437,6 +529,7 @@ public class PredictionUtils {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-avg.");
         }
+        return avgPred;
     }
 
     /**
@@ -448,14 +541,15 @@ public class PredictionUtils {
      * @param outputFolder The output folder
      * @param trueResponses The true values
      */
-    public static void computeMultipleFinal(
+    public static double[] computeMultipleFinal(
             File iterPredFolder,
             File outputFolder,
             String[] docIds,
             double[] trueResponses) {
+        double[] predResponses = null;
         try {
             String[] filenames = iterPredFolder.list();
-            double[] predResponses = new double[trueResponses.length];
+            predResponses = new double[trueResponses.length];
             int numModels = filenames.length;
 
             for (int i = 0; i < filenames.length; i++) {
@@ -482,6 +576,7 @@ public class PredictionUtils {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-final.");
         }
+        return predResponses;
     }
 
     /**

@@ -78,7 +78,7 @@ public class MLR<D extends ResponseTextDataset> extends
         train(trWords, trResponses, V);
     }
 
-    public double[] test(int[][] teWords, double[] teResponses, int V) {
+    public double[] test(int[][] teWords, int V) {
         input(new File(getRegressorFolder(), MODEL_FILE));
 
         int D = teWords.length;
@@ -114,7 +114,7 @@ public class MLR<D extends ResponseTextDataset> extends
         double[] teResponses = testData.getResponses();
         int V = testData.getWordVocab().size();
 
-        double[] predictions = test(teWords, teResponses, V);
+        double[] predictions = test(teWords, V);
         File predFile = new File(getRegressorFolder(), PREDICTION_FILE + Fold.TestExt);
         outputPredictions(predFile, teDocIds, teResponses, predictions);
 

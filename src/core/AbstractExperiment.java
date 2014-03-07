@@ -1,5 +1,7 @@
 package core;
 
+import regression.AbstractRegressor;
+
 /**
  *
  * @author vietan
@@ -7,10 +9,18 @@ package core;
 public abstract class AbstractExperiment<D extends AbstractDataset>
         extends AbstractRunner {
 
-    public static final String SummaryFile = "summary.txt";
-    public static final String SupervisedFolder = "supervised/";
-    public static final String UnsupervisedFolder = "unsupervised/";
-    public static final String SamplerFolder = "data/sampler/";
+    public static final String PREDICTION_FILE = AbstractRegressor.PREDICTION_FILE;
+    public static final String RESULT_FILE = AbstractRegressor.RESULT_FILE;
+    public static final String SUMMARY_FILE = "summary.txt";
+    public static final String SUPERVISED_FOLDER = "supervised/";
+    public static final String UNSUPERVISED_FOLDER = "unsupervised/";
+    public static final String SAMPLER_FOLDER = "data/sampler/";
+    public static final String TRAIN_PREFIX = "tr_";
+    public static final String DEV_PREFIX = "de_";
+    public static final String TEST_PREFIX = "te_";
+    public static final String RESULT_FOLDER = "result";
+    public static final String RANKING_FOLDER = "ranking";
+    public static final String SURVEY_FOLDER = "survey";
     public static final int UNOBSERVED = -1;
 
     public static enum RunType {
