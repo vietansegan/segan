@@ -60,7 +60,7 @@ public abstract class AbstractSampler implements Serializable {
     protected int testSampleLag = 5;
     protected String folder;
     protected String name;
-    protected ArrayList<Double> hyperparams;
+    protected ArrayList<Double> hyperparams; // should have used a HashMap instead of ArrayList
     protected boolean paramOptimized = false;
     protected String prefix = "";// to store description of predefined configurations (e.g., initialization)
     protected InitialState initState;
@@ -136,7 +136,7 @@ public abstract class AbstractSampler implements Serializable {
     public abstract void initialize();
 
     public abstract void iterate();
-
+    
     public abstract double getLogLikelihood();
 
     public abstract double getLogLikelihood(ArrayList<Double> testHyperparameters);
@@ -195,8 +195,7 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     public String[] getTopWords(double[] distribution, int numWords) {
-        ArrayList<RankingItem<String>> topicSortedVocab 
-                = IOUtils.getSortedVocab(distribution, this.wordVocab);
+        ArrayList<RankingItem<String>> topicSortedVocab = IOUtils.getSortedVocab(distribution, this.wordVocab);
         String[] topWords = new String[numWords];
         for (int i = 0; i < numWords; i++) {
             topWords[i] = topicSortedVocab.get(i).getObject();

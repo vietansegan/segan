@@ -20,6 +20,31 @@ public class SamplerUtils {
         rand = new Random(RAND_SEED);
     }
 
+    /**
+     * sample number of components m that a DP(alpha, G0) has after n samples.
+     * This was first published by Antoniak (1974).
+     *
+     * @param alpha
+     * @param n
+     * @return
+     */
+    public static int randAntoniak(double alpha, int n) {
+        int totalCount = 0;
+        int numSamples = 20;
+
+        for (int ii = 0; ii < numSamples; ii++) {
+            int count = 0;
+            for (int r = 0; r < n; r++) {
+                double prob = alpha / (alpha + r);
+                if (rand.nextDouble() < prob) {
+                    count++;
+                }
+            }
+            totalCount += count;
+        }
+        return totalCount / numSamples;
+    }
+
     public static int[] getSortedTopic(double[] distribution) {
         int[] sortedTopic = new int[distribution.length];
         ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();

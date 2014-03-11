@@ -3,7 +3,6 @@ package sampling.util;
 import cc.mallet.types.Dirichlet;
 import java.util.Arrays;
 import sampling.likelihood.DirMult;
-import util.IOUtils;
 
 /**
  * Implementation of tree node which stores a topic (i.e., a multinomial
@@ -103,6 +102,29 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
      * @param gamma Dirichlet-Multinomial chain parameter
      */
     public void sampleTopic(double beta, double gamma) {
+        int V = content.getDimension();
+        double[] meanVector = new double[V];
+        if (parent == null) { // root
+            Arrays.fill(meanVector, beta / V);
+        } else {
+            SparseCount observations = this.content.getSparseCounts();
+            for (int obs : observations.getIndices()) {
+                meanVector[obs] += observations.getCount(obs);
+            }
+            for (int obs : this.pseudoCounts.getIndices()) {
+                meanVector[obs] += this.pseudoCounts.getCount(obs);
+            }
+            double[] parentTopic = ((C) parent.getContent()).getSamplingDistribution();
+            for (int v = 0; v < V; v++) {
+                meanVector[v] += parentTopic[v] * gamma;
+            }
+        }
+        Dirichlet dir = new Dirichlet(meanVector);
+        double[] topic = dir.nextDistribution();
+        this.setTopic(topic);
+    }
+
+    public void sampleTopicOld(double beta, double gamma) {
         int V = content.getDimension();
         double[] meanVector = new double[V];
         Arrays.fill(meanVector, beta);

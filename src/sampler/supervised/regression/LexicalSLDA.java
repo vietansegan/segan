@@ -84,7 +84,6 @@ public class LexicalSLDA extends SLDA {
         this.initState = initState;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
-        this.regressionParameters = new ArrayList<double[]>();
         this.setName();
 
         if (!debug) {
@@ -205,11 +204,6 @@ public class LexicalSLDA extends SLDA {
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
 
-            // store regression parameters after every iteration
-            double[] rp = new double[K];
-            System.arraycopy(topicParams, 0, rp, 0, K);
-            this.regressionParameters.add(rp);
-
             if (verbose && iter % REP_INTERVAL == 0) {
                 String str = "Iter " + iter + "\t llh = " + loglikelihood
                         + "\n" + getCurrentState();
@@ -228,7 +222,8 @@ public class LexicalSLDA extends SLDA {
             }
 
             // update the regression parameters
-            if (iter % 5 == 0) {
+            int step = (int) Math.log(iter + 1) + 1;
+            if (iter % step == 0) {
                 updateTopicRegressionParameters();
             }
 

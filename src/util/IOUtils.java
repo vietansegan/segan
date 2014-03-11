@@ -115,6 +115,11 @@ public class IOUtils {
         return out;
     }
 
+    public static BufferedWriter getBufferedWriterAppend(File file)
+            throws FileNotFoundException, UnsupportedEncodingException {
+        return new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "UTF-8"));
+    }
+
     public static BufferedWriter getBufferedWriterAppend(String filepath)
             throws FileNotFoundException, UnsupportedEncodingException {
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filepath, true), "UTF-8"));

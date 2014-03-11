@@ -16,8 +16,7 @@ import util.IOUtils;
  *
  * @author vietan
  */
-public class MLR<D extends ResponseTextDataset> extends 
-        AbstractRegressor implements Regressor<D> {
+public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
 
     public static enum Regularizer {
 
@@ -41,6 +40,21 @@ public class MLR<D extends ResponseTextDataset> extends
         return name;
     }
 
+    public void train(double[][] designMatrix, double[] responses) {
+        if (regularizer == Regularizer.L1) {
+            GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, responses, param);
+            this.weights = mlr.solve();
+        } else if (regularizer == Regularizer.L2) {
+            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responses);
+            mlr.setSigma(param);
+            this.weights = mlr.solve();
+        } else {
+            throw new RuntimeException(regularizer + " regularization is not supported");
+        }
+        IOUtils.createFolder(getRegressorFolder());
+        output(new File(getRegressorFolder(), MODEL_FILE));
+    }
+
     public void train(int[][] trWords, double[] trResponses, int V) {
         int D = trWords.length;
         double[][] designMatrix = new double[D][V];
@@ -52,19 +66,7 @@ public class MLR<D extends ResponseTextDataset> extends
                 designMatrix[d][v] /= trWords[d].length;
             }
         }
-
-        if (regularizer == Regularizer.L1) {
-            GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, trResponses, param);
-            this.weights = mlr.solve();
-        } else if (regularizer == Regularizer.L2) {
-            GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, trResponses);
-            mlr.setSigma(param);
-            this.weights = mlr.solve();
-        } else {
-            throw new RuntimeException(regularizer + " regularization is not supported");
-        }
-        IOUtils.createFolder(getRegressorFolder());
-        output(new File(getRegressorFolder(), MODEL_FILE));
+        train(designMatrix, trResponses);
     }
 
     @Override
@@ -76,6 +78,20 @@ public class MLR<D extends ResponseTextDataset> extends
         double[] trResponses = trainData.getResponses();
         int V = trainData.getWordVocab().size();
         train(trWords, trResponses, V);
+    }
+
+    public double[] test(double[][] designMatrix) {
+        int D = designMatrix.length;
+        double[] predictions = new double[D];
+        for (int d = 0; d < D; d++) {
+            double predVal = 0.0;
+            for (int v = 0; v < designMatrix[d].length; v++) {
+                predVal += designMatrix[d][v] * this.weights[v];
+            }
+
+            predictions[d] = predVal;
+        }
+        return predictions;
     }
 
     public double[] test(int[][] teWords, int V) {
@@ -91,17 +107,7 @@ public class MLR<D extends ResponseTextDataset> extends
                 designMatrix[d][v] /= teWords[d].length;
             }
         }
-
-        double[] predictions = new double[D];
-        for (int d = 0; d < D; d++) {
-            double predVal = 0.0;
-            for (int v = 0; v < V; v++) {
-                predVal += designMatrix[d][v] * this.weights[v];
-            }
-
-            predictions[d] = predVal;
-        }
-        return predictions;
+        return test(designMatrix);
     }
 
     @Override
@@ -164,7 +170,7 @@ public class MLR<D extends ResponseTextDataset> extends
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " 
+        return "java -cp 'dist/segan.jar:dist/lib/*' "
                 + MLR.class.getName() + " -help";
     }
 

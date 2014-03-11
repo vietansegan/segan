@@ -143,11 +143,7 @@ public class LDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
-            for (int d = 0; d < D; d++) {
-                for (int t = 0; t < words[d].length; t++) {
-                    sampleZ(d, t, !REMOVE, !ADD);
-                }
-            }
+            sampleZ(!REMOVE, !ADD);
 
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
@@ -258,11 +254,9 @@ public class LDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
-            for (int d = 0; d < D; d++) {
-                for (int t = 0; t < words[d].length; t++) {
-                    sampleZ(d, t, REMOVE, ADD);
-                }
-            }
+            long sTime = System.currentTimeMillis();
+            sampleZ(REMOVE, ADD);
+            long eTime = System.currentTimeMillis() - sTime;
 
             if (debug) {
                 validate("Iter " + iter);
@@ -276,11 +270,49 @@ public class LDA extends AbstractSampler {
                 String str = "Iter " + iter
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
-                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
+                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio)
+                        + ". time = " + eTime;
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
                 } else {
                     logln("--- Sampling. " + str);
+                }
+            }
+        }
+    }
+
+    /**
+     * Sample the topic assignments for all tokens
+     *
+     * @param remove Whether the current assignments should be removed from the
+     * current assigned topic
+     * @param add Whether the new assignments should be added to the sampled
+     * topic
+     */
+    protected void sampleZ(boolean remove, boolean add) {
+        double totalBeta = V * hyperparams.get(BETA);
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                doc_topics[d].decrement(z[d][n]);
+                if (remove) {
+                    topic_words[z[d][n]].decrement(words[d][n]);
+                }
+
+                double[] probs = new double[K];
+                for (int k = 0; k < K; k++) {
+                    probs[k] = (doc_topics[d].getCount(k) + hyperparams.get(ALPHA))
+                            * (topic_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                            / (topic_words[k].getCountSum() + totalBeta);
+                }
+                int sampledZ = SamplerUtils.scaleSample(probs);
+                if (sampledZ != z[d][n]) {
+                    numTokensChanged++;
+                }
+                z[d][n] = sampledZ;
+
+                doc_topics[d].increment(z[d][n]);
+                if (add) {
+                    topic_words[z[d][n]].increment(words[d][n]);
                 }
             }
         }
@@ -296,18 +328,19 @@ public class LDA extends AbstractSampler {
      * @param add Whether this token should be added to the sampled topic
      */
     protected void sampleZ(int d, int n, boolean remove, boolean add) {
+        double totalBeta = V * hyperparams.get(BETA);
         doc_topics[d].decrement(z[d][n]);
         if (remove) {
             topic_words[z[d][n]].decrement(words[d][n]);
         }
 
-        double[] logprobs = new double[K];
+        double[] probs = new double[K];
         for (int k = 0; k < K; k++) {
-            logprobs[k] =
-                    doc_topics[d].getLogLikelihood(k)
-                    + topic_words[k].getLogLikelihood(words[d][n]);
+            probs[k] = (doc_topics[d].getCount(k) + hyperparams.get(ALPHA))
+                    * (topic_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                    / (topic_words[k].getCountSum() + totalBeta);
         }
-        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+        int sampledZ = SamplerUtils.scaleSample(probs);
         if (sampledZ != z[d][n]) {
             numTokensChanged++;
         }

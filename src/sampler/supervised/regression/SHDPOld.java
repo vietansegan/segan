@@ -1,25 +1,25 @@
 package sampler.supervised.regression;
 
-import cc.mallet.optimize.LimitedMemoryBFGS;
-import cc.mallet.optimize.Optimizer;
 import core.AbstractSampler;
 import core.AbstractSampler.InitialState;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import util.PredictionUtils;
+import regression.Regressor;
 import sampler.LDA;
-import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
 import sampling.util.FullTable;
 import sampling.util.Restaurant;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
+import util.PredictionUtils;
 import util.SamplerUtils;
 import util.StatisticsUtils;
 import util.evaluation.Measurement;
@@ -30,7 +30,7 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class SHDP extends AbstractSampler {
+public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final int PSEUDO_INDEX = -1;
     public static final int ALPHA_GLOBAL = 0;
@@ -39,7 +39,6 @@ public class SHDP extends AbstractSampler {
     public static final int MU = 3;
     public static final int SIGMA = 4;
     public static final int RHO = 5;
-    protected boolean supervised = true;
     protected int V; // vocabulary size
     protected int D; // number of documents
     protected int K; // initial number of tables
@@ -48,8 +47,7 @@ public class SHDP extends AbstractSampler {
     private SHDPTable[][] z; // local table index
     private Restaurant<SHDPDish, SHDPTable, DirMult> globalRestaurant;
     private Restaurant<SHDPTable, Integer, SHDPDish>[] localRestaurants;
-    private GaussianIndLinearRegObjective optimizable;
-    private Optimizer optimizer;
+    private double[] docRegressMeans;
     private int numTokens = 0;
     private double[] uniform;
     private DirMult emptyModel;
@@ -58,7 +56,6 @@ public class SHDP extends AbstractSampler {
     private int numConverged;
 
     public void configure(String folder,
-            int[][] words, double[] responses,
             int V,
             double alpha_global, double alpha_local, double beta,
             double mu, double sigma, double rho,
@@ -70,11 +67,7 @@ public class SHDP extends AbstractSampler {
         }
         this.folder = folder;
 
-        this.words = words;
-        this.responses = responses;
-
         this.V = V;
-        this.D = this.words.length;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha_global);
@@ -103,10 +96,6 @@ public class SHDP extends AbstractSampler {
             this.uniform[v] = 1.0 / V;
         }
 
-        for (int d = 0; d < D; d++) {
-            numTokens += this.words[d].length;
-        }
-        
         if (verbose) {
             logln("--- folder\t" + folder);
             logln("--- num topics:\t" + K);
@@ -122,15 +111,12 @@ public class SHDP extends AbstractSampler {
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
             logln("--- # tokens:\t" + numTokens);
-
-            logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
-            for (int ii = 0; ii < histogram.length; ii++) {
-                logln("--- --- " + ii + "\t" + histogram[ii]);
-            }
         }
+    }
+
+    @Override
+    public String getName() {
+        return this.name;
     }
 
     protected void setName() {
@@ -150,8 +136,65 @@ public class SHDP extends AbstractSampler {
         this.name = str.toString();
     }
 
+    public void train(int[][] ws, double[] rs) {
+        this.words = ws;
+        this.responses = rs;
+        this.D = this.words.length;
+
+        // statistics
+        this.numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+        }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
+            int[] histogram = StatisticsUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
+        }
+    }
+
     public void setK(int K) {
         this.K = K;
+    }
+
+    protected void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeMeanAbsoluteError();
+        eval.computeRSquared();
+        eval.computePredictiveRSquared();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        }
+    }
+
+    public double[] getPredictedResponses() {
+        return this.docRegressMeans;
+    }
+
+    @Override
+    public void train(ResponseTextDataset trainData) {
+        train(trainData.getWords(), trainData.getResponses());
+    }
+
+    @Override
+    public void test(ResponseTextDataset testData) {
+        test(testData.getWords(), new File(getSamplerFolderPath(), IterPredictionFolder));
+    }
+
+    public void test(int[][] newWords, File iterPredFolder) {
+        if (verbose) {
+            logln("Test sampling ...");
+        }
     }
 
     @Override
@@ -168,6 +211,8 @@ public class SHDP extends AbstractSampler {
 
         initializeAssignments();
 
+        optimize();
+
         if (debug) {
             validate("Initialized");
         }
@@ -179,12 +224,6 @@ public class SHDP extends AbstractSampler {
 
     protected void initializeModelStructure() {
         this.globalRestaurant = new Restaurant<SHDPDish, SHDPTable, DirMult>();
-
-        this.localRestaurants = new Restaurant[D];
-        for (int d = 0; d < D; d++) {
-            this.localRestaurants[d] = new Restaurant<SHDPTable, Integer, SHDPDish>();
-        }
-
         this.emptyModel = new DirMult(V, hyperparams.get(BETA), uniform);
     }
 
@@ -193,6 +232,13 @@ public class SHDP extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             z[d] = new SHDPTable[words[d].length];
         }
+
+        this.localRestaurants = new Restaurant[D];
+        for (int d = 0; d < D; d++) {
+            this.localRestaurants[d] = new Restaurant<SHDPTable, Integer, SHDPDish>();
+        }
+
+        docRegressMeans = new double[D];
     }
 
     protected void initializeAssignments() {
@@ -225,25 +271,28 @@ public class SHDP extends AbstractSampler {
         double lda_alpha = 0.1;
         double lda_beta = 0.1;
 
-        lda.configure(null, words, V, K, lda_alpha, lda_beta, initState,
+        lda.configure(folder, words, V, K, lda_alpha, lda_beta, initState,
                 paramOptimized, lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
 
         int[][] ldaZ = null;
         try {
-            String ldaFile = this.folder + "lda-init-" + K + ".txt";
-            File ldaZFile = new File(ldaFile);
-            if (ldaZFile.exists()) {
-                ldaZ = inputLDAInitialization(ldaFile);
+            File ldaFile = new File(lda.getSamplerFolderPath(), "model.zip");
+            if (ldaFile.exists()) {
+                logln("--- Loading LDA from " + ldaFile);
+                lda.inputState(ldaFile);
             } else {
-                lda.sample();
-                ldaZ = lda.getZ();
-                outputLDAInitialization(ldaFile, ldaZ);
+                logln("--- LDA file not found " + ldaFile + ". Sampling LDA ...");
+                lda.initialize();
+                lda.iterate();
+                IOUtils.createFolder(lda.getSamplerFolderPath());
+                lda.outputState(ldaFile);
                 lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(new File(this.folder, "lda-topwords.txt"), 15);
+                lda.outputTopicTopWords(new File(lda.getSamplerFolderPath(), TopWordFile), 20);
             }
+            ldaZ = lda.getZ();
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while running LDA for initialization");
         }
         setLog(true);
 
@@ -251,7 +300,15 @@ public class SHDP extends AbstractSampler {
         if (verbose) {
             logln("--- LDA loaded. Start initializing assingments ...");
         }
-
+        
+        for(int k=0; k<K; k++) {
+            SHDPDish dish = createDish();
+        }
+        
+        for(int d=0; d<D; d++) {
+            
+        }
+ 
         for (int d = 0; d < D; d++) {
             // create tables
             for (int k = 0; k < K; k++) {
@@ -284,56 +341,6 @@ public class SHDP extends AbstractSampler {
         if (verbose) {
             logln("--- After assignment initialization\n"
                     + getCurrentState() + "\n");
-        }
-
-        // optimize
-        optimize();
-    }
-
-    private int[][] inputLDAInitialization(String filepath) {
-        if (verbose) {
-            logln("--- --- LDA init file found. Loading from " + filepath);
-        }
-
-        int[][] ldaZ = null;
-        try {
-            BufferedReader reader = IOUtils.getBufferedReader(filepath);
-            int numDocs = Integer.parseInt(reader.readLine());
-            ldaZ = new int[numDocs][];
-            for (int d = 0; d < numDocs; d++) {
-                String[] sline = reader.readLine().split("\t")[1].split(" ");
-                ldaZ[d] = new int[sline.length];
-                for (int n = 0; n < ldaZ[d].length; n++) {
-                    ldaZ[d][n] = Integer.parseInt(sline[n]);
-                }
-            }
-            reader.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
-        return ldaZ;
-    }
-
-    private void outputLDAInitialization(String filepath, int[][] z) {
-        if (verbose) {
-            logln("--- --- Outputing LDA init state to file " + filepath);
-        }
-
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(filepath);
-            writer.write(z.length + "\n");
-            for (int d = 0; d < z.length; d++) {
-                writer.write(z[d].length + "\t");
-                for (int n = 0; n < z[d].length; n++) {
-                    writer.write(z[d][n] + " ");
-                }
-                writer.write("\n");
-            }
-            writer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
         }
     }
 
@@ -386,13 +393,8 @@ public class SHDP extends AbstractSampler {
 
             for (int d = 0; d < D; d++) {
                 for (int n = 0; n < words[d].length; n++) {
-                    this.sampleTableForToken(d, n, REMOVE, ADD, OBSERVED, EXTEND);
-                }
-
-                for (SHDPTable table : localRestaurants[d].getTables()) {
-                    if (table.getContent() == null) {
-                        throw new RuntimeException("Null dish. d = " + d + ". table. " + table.getTableId());
-                    }
+                    this.sampleTableForToken(d, n, REMOVE, ADD,
+                            REMOVE, ADD, OBSERVED, EXTEND);
                 }
 
                 for (SHDPTable table : this.localRestaurants[d].getTables()) {
@@ -400,21 +402,26 @@ public class SHDP extends AbstractSampler {
                 }
             }
 
-            // optimize regression parameters of local restaurants
-            this.optimize();
+            // optimize regression parameters of global restaurants
+            int step = (int) Math.log(iter + 1) + 1;
+            if (iter % step == 0) {
+                this.optimize();
+            }
 
             if (verbose && iter % REP_INTERVAL == 0) {
-                double[] trPredResponses = getRegressionValues();
-                RegressionEvaluation eval = new RegressionEvaluation(
-                        (responses),
-                        (trPredResponses));
-                eval.computeCorrelationCoefficient();
-                eval.computeMeanSquareError();
-                eval.computeRSquared();
-                ArrayList<Measurement> measurements = eval.getMeasurements();
-                for (Measurement measurement : measurements) {
-                    logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
-                }
+                evaluateRegressPrediction(responses, docRegressMeans);
+
+//                double[] trPredResponses = getRegressionValues();
+//                RegressionEvaluation eval = new RegressionEvaluation(
+//                        (responses),
+//                        (trPredResponses));
+//                eval.computeCorrelationCoefficient();
+//                eval.computeMeanSquareError();
+//                eval.computeRSquared();
+//                ArrayList<Measurement> measurements = eval.getMeasurements();
+//                for (Measurement measurement : measurements) {
+//                    logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+//                }
             }
 
             if (iter >= BURN_IN && iter % LAG == 0) {
@@ -440,7 +447,7 @@ public class SHDP extends AbstractSampler {
             }
 
             // store model
-            if (report && iter >= BURN_IN && iter % LAG == 0) {
+            if (report && iter > BURN_IN && iter % LAG == 0) {
                 outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
             }
         }
@@ -459,11 +466,11 @@ public class SHDP extends AbstractSampler {
         try {
             if (paramOptimized && log) {
                 this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        "hyperparameters.txt").getAbsolutePath());
+                        HyperparameterFile));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception iter = " + iter);
         }
     }
 
@@ -582,35 +589,36 @@ public class SHDP extends AbstractSampler {
      *
      * @param d Document index
      * @param n Token index
-     * @param remove Whether the current assignment should be removed
-     * @param add Whether the new assignment should be added
+     * @param removeFromModel Whether the current observation assignments should
+     * be removed from model
+     * @param addToModel Whether the new observation assignments should be added
+     * to model
+     * @param removeFromData
+     * @param addToData
      * @param resObserved Whether the response variable is observed
      * @param extend Whether the token should be added to the topic structure
      */
     private void sampleTableForToken(
             int d, int n,
-            boolean remove, boolean add,
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData,
             boolean resObserved, boolean extend) {
         int curObs = words[d][n];
         SHDPTable curTable = z[d][n];
-
-        if (remove) {
-            removeCustomerFromTable(d, curTable.getIndex(), n);
+        
+        if (removeFromModel) {
+            curTable.getContent().getContent().decrement(words[d][n]);
+            if (curTable.isEmpty()) {
+                removeTableFromDish(d, curTable.getIndex(), null);
+            }
         }
 
-        if (this.localRestaurants[d].isEmpty()) {
-            SHDPTable table = new SHDPTable(iter, 0, null, d);
-            this.localRestaurants[d].addTable(table);
-            z[d][n] = table;
-            localRestaurants[d].addCustomerToTable(n, z[d][n].getIndex());
-            return;
-        }
-
-        double preSum = 0.0;
-        if (supervised && resObserved) {
-            for (SHDPTable table : this.localRestaurants[d].getTables()) {
-                preSum += table.getContent().getRegressionParameter()
-                        * table.getNumCustomers();
+        if (removeFromData) {
+            localRestaurants[d].removeCustomerFromTable(n, curTable.getIndex());
+            docRegressMeans[d] -= curTable.getContent().getRegressionParameter()
+                    / words[d].length;
+            if (curTable.isEmpty()) {
+                localRestaurants[d].removeTable(curTable.getIndex());
             }
         }
 
@@ -622,9 +630,9 @@ public class SHDP extends AbstractSampler {
             double wordLlh = table.getContent().getContent().getLogLikelihood(curObs);
             double lp = logPrior + wordLlh;
 
-            if (supervised && resObserved) {
-                double mean = (preSum
-                        + table.getContent().getRegressionParameter()) / words[d].length;
+            if (resObserved) {
+                double mean = docRegressMeans[d]
+                        + table.getContent().getRegressionParameter() / words[d].length;
                 double resLlh = StatisticsUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
                 lp += resLlh;
@@ -646,8 +654,8 @@ public class SHDP extends AbstractSampler {
                 throw new RuntimeException("Number of dishes mismatch");
             }
 
-            if (supervised && resObserved) {
-                dishResLlhs = getDishResponseLogLikelihoods(d, preSum);
+            if (resObserved) {
+                dishResLlhs = getDishResponseLogLikelihoods(d, docRegressMeans[d]);
 
                 if (dishLogPriors.size() != dishResLlhs.size()) {
                     throw new RuntimeException("Number of dishes mismatch");
@@ -658,7 +666,7 @@ public class SHDP extends AbstractSampler {
             for (int dishIndex : dishLogPriors.keySet()) {
                 double lp = dishLogPriors.get(dishIndex) + dishWordLlhs.get(dishIndex);
 
-                if (supervised && resObserved) {
+                if (resObserved) {
                     lp += dishResLlhs.get(dishIndex);
                 }
 
@@ -714,8 +722,14 @@ public class SHDP extends AbstractSampler {
 
         z[d][n] = table;
 
-        if (add) {
-            addCustomerToTable(d, z[d][n].getIndex(), n);
+        if (addToData) {
+            localRestaurants[d].addCustomerToTable(n, table.getIndex());
+            docRegressMeans[d] += table.getContent().getRegressionParameter()
+                    / words[d].length;
+        }
+
+        if (addToModel) {
+            table.getContent().getContent().increment(words[d][n]);
         }
 
         if (table.getContent() == null) {
@@ -731,13 +745,13 @@ public class SHDP extends AbstractSampler {
      * @param d Document index
      * @param tableIndex Table index
      * @param remove Whether the current assignment should be removed
-     * @param add Whether the new assignment should be added
+     * @param addToModel Whether the new assignment should be added
      * @param resObserved Whether the response variable is observed
      * @param extend Whether the table should be added to the topic structure
      */
     private void sampleDishForTable(
             int d, int tableIndex,
-            boolean remove, boolean add,
+            boolean removeFromModel, boolean addToModel,
             boolean resObserved, boolean extend) {
         SHDPTable curTable = localRestaurants[d].getTable(tableIndex);
 
@@ -753,25 +767,17 @@ public class SHDP extends AbstractSampler {
             }
         }
 
-        if (globalRestaurant.isEmpty()) {
-            SHDPDish dish = createDish();
-            curTable.setContent(dish);
-            addObservations(dish, observations);
-            globalRestaurant.addCustomerToTable(curTable, dish.getIndex());
-            return;
-        }
-
         int curDishIndex = PSEUDO_INDEX;
         if (curTable.getContent() != null) {
             curDishIndex = curTable.getContent().getIndex();
         }
 
-        if (remove) {
+        if (removeFromModel) {
             removeTableFromDish(d, tableIndex, observations);
         }
 
         double preSum = 0.0;
-        if (supervised && resObserved) {
+        if (resObserved) {
             for (SHDPTable table : this.localRestaurants[d].getTables()) {
                 if (table.getIndex() == tableIndex) {
                     continue;
@@ -789,7 +795,7 @@ public class SHDP extends AbstractSampler {
         }
 
         HashMap<Integer, Double> dishResLlhs = new HashMap<Integer, Double>();
-        if (supervised && resObserved) {
+        if (resObserved) {
             dishResLlhs = getDishResponseLogLikelihoods(d, preSum);
 
             if (dishLogPriors.size() != dishResLlhs.size()) {
@@ -812,7 +818,7 @@ public class SHDP extends AbstractSampler {
         // update
         curTable.setContent(dish);
 
-        if (add) {
+        if (addToModel) {
             globalRestaurant.addCustomerToTable(curTable, dish.getIndex());
             addObservations(dish, observations);
         }
@@ -828,18 +834,6 @@ public class SHDP extends AbstractSampler {
             dishes.add(dish);
         }
 
-        // current regression parameters and priors
-        double[] regParams = new double[numDishes];
-        double[] priorMeans = new double[numDishes];
-        double[] priorStdvs = new double[numDishes];
-
-        for (int idx = 0; idx < dishes.size(); idx++) {
-            SHDPDish dish = dishes.get(idx);
-            regParams[idx] = dish.getRegressionParameter();
-            priorMeans[idx] = hyperparams.get(MU);
-            priorStdvs[idx] = Math.sqrt(hyperparams.get(SIGMA));
-        }
-
         double[][] designMatrix = new double[D][numDishes];
         for (int d = 0; d < D; d++) {
             int[] dishCount = new int[numDishes];
@@ -853,29 +847,24 @@ public class SHDP extends AbstractSampler {
             }
         }
 
-        this.optimizable = new GaussianIndLinearRegObjective(
-                regParams, designMatrix, responses,
-                Math.sqrt(hyperparams.get(RHO)), priorMeans, priorStdvs);
-        this.optimizer = new LimitedMemoryBFGS(optimizable);
-        boolean converged = false;
-        try {
-            converged = optimizer.optimize();
-        } catch (Exception ex) {
-            // This exception may be thrown if L-BFGS
-            //  cannot step in the current direction.
-            // This condition does not necessarily mean that
-            //  the optimizer has failed, but it doesn't want
-            //  to claim to have succeeded... 
-            // do nothing
+        GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responses);
+        mlr.setRho(hyperparams.get(RHO));
+        mlr.setMean(hyperparams.get(MU));
+        mlr.setSigma(hyperparams.get(SIGMA));
+        double[] newParams = mlr.solve();
+        for (int ii = 0; ii < dishes.size(); ii++) {
+            dishes.get(ii).setRegressionParameter(newParams[ii]);
         }
+        updatePredictionValues();
+    }
 
-        if (converged) // if the optimization converges
-        {
-            numConverged++;
-        }
-
-        for (int i = 0; i < dishes.size(); i++) {
-            dishes.get(i).setRegressionParameter(optimizable.getParameter(i));
+    protected void updatePredictionValues() {
+        this.docRegressMeans = new double[D];
+        for (int d = 0; d < D; d++) {
+            for (SHDPTable table : localRestaurants[d].getTables()) {
+                docRegressMeans[d] += table.getContent().getRegressionParameter()
+                        * table.getNumCustomers() / words[d].length;
+            }
         }
     }
 
@@ -893,7 +882,7 @@ public class SHDP extends AbstractSampler {
             }
 
             double lp = dishLogPriors.get(idx) + dishWordLlhs.get(idx);
-            if (supervised && resObserved) {
+            if (resObserved) {
                 lp += dishResLlhs.get(idx);
             }
 
@@ -1101,6 +1090,16 @@ public class SHDP extends AbstractSampler {
     }
 
     @Override
+    public void output(File samplerFile) {
+        this.outputState(samplerFile.getAbsolutePath());
+    }
+
+    @Override
+    public void input(File samplerFile) {
+        this.inputModel(samplerFile.getAbsolutePath());
+    }
+
+    @Override
     public void outputState(String filepath) {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
@@ -1175,30 +1174,36 @@ public class SHDP extends AbstractSampler {
      *
      * @param zipFilepath Path to the compressed state file (.zip)
      */
-    private void inputModel(String zipFilepath) throws Exception {
+    private void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath);
         }
 
         // initialize
-        this.initializeModelStructure();
+        try {
+            this.initializeModelStructure();
 
-        String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
-        BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
-        int numDishes = Integer.parseInt(reader.readLine());
-        for (int i = 0; i < numDishes; i++) {
-            int dishIdx = Integer.parseInt(reader.readLine());
-            int iterCreated = Integer.parseInt(reader.readLine());
-            int numCusts = Integer.parseInt(reader.readLine());
-            double regParam = Double.parseDouble(reader.readLine());
-            DirMult dmm = DirMult.input(reader.readLine());
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
+            int numDishes = Integer.parseInt(reader.readLine());
+            for (int i = 0; i < numDishes; i++) {
+                int dishIdx = Integer.parseInt(reader.readLine());
+                int iterCreated = Integer.parseInt(reader.readLine());
+                int numCusts = Integer.parseInt(reader.readLine());
+                double regParam = Double.parseDouble(reader.readLine());
+                DirMult dmm = DirMult.input(reader.readLine());
 
-            SHDPDish dish = new SHDPDish(iterCreated, dishIdx, dmm, regParam, numCusts);
-            globalRestaurant.addTable(dish);
+                SHDPDish dish = new SHDPDish(iterCreated, dishIdx, dmm, regParam, numCusts);
+                globalRestaurant.addTable(dish);
+            }
+            reader.close();
+
+            globalRestaurant.fillInactiveTableIndices();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing model from "
+                    + zipFilepath);
         }
-        reader.close();
-
-        globalRestaurant.fillInactiveTableIndices();
     }
 
     /**
@@ -1260,7 +1265,7 @@ public class SHDP extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(String outputFile, int numWords)
+    public void outputTopicTopWords(File outputFile, int numWords)
             throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1419,6 +1424,14 @@ public class SHDP extends AbstractSampler {
         }
     }
 
+    /**
+     * Perform sampling on test documents using a single model learned during
+     * training time.
+     *
+     * @param stateFile The state file of the trained model
+     * @param newWords Test documents
+     * @param outputResultFile Prediction file
+     */
     private double[] regressNewDocuments(
             String stateFile,
             int[][] newWords,
@@ -1427,12 +1440,7 @@ public class SHDP extends AbstractSampler {
             logln("Perform regression using model from " + stateFile);
         }
 
-        try {
-            inputModel(stateFile);
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
+        inputModel(stateFile);
 
         words = newWords;
         responses = null; // for evaluation
@@ -1474,11 +1482,13 @@ public class SHDP extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             for (int d = 0; d < D; d++) {
                 for (int n = 0; n < words[d].length; n++) {
-                    sampleTableForToken(d, n, REMOVE, ADD, !OBSERVED, !EXTEND);
+                    sampleTableForToken(d, n, !REMOVE, !ADD,
+                            REMOVE, ADD, !OBSERVED, !EXTEND);
                 }
 
                 for (SHDPTable table : localRestaurants[d].getTables()) {
-                    sampleDishForTable(d, table.getIndex(), REMOVE, ADD, !OBSERVED, !EXTEND);
+                    sampleDishForTable(d, table.getIndex(), !REMOVE, !ADD,
+                            !OBSERVED, !EXTEND);
                 }
             }
 
@@ -1573,11 +1583,11 @@ public class SHDP extends AbstractSampler {
             return str.toString();
         }
     }
-    
+
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + SHDP.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + SHDPOld.class.getName() + " -help";
     }
-    
+
     public static void main(String[] args) {
         try {
             // create the command line parser
@@ -1624,7 +1634,7 @@ public class SHDP extends AbstractSampler {
             options.addOption("d", false, "debug");
             options.addOption("z", false, "standardize (z-score normalization)");
             options.addOption("help", false, "Help");
-            
+
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp(getHelpString(), options);
@@ -1644,204 +1654,204 @@ public class SHDP extends AbstractSampler {
     }
 
     /*public static void runCrossValidation() throws Exception {
-//        String datasetName = cmd.getOptionValue("dataset");
-//        String datasetFolder = cmd.getOptionValue("data-folder");
-        String resultFolder = cmd.getOptionValue("output");
-//        String formatFolder = cmd.getOptionValue("format-folder");
-//        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+     //        String datasetName = cmd.getOptionValue("dataset");
+     //        String datasetFolder = cmd.getOptionValue("data-folder");
+     String resultFolder = cmd.getOptionValue("output");
+     //        String formatFolder = cmd.getOptionValue("format-folder");
+     //        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+     int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
 
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+     int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+     int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+     int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+     int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
 
-        boolean paramOpt = cmd.hasOption("paramOpt");
-        boolean verbose = cmd.hasOption("v");
-        boolean debug = cmd.hasOption("d");
-        InitialState initState = InitialState.RANDOM;
+     boolean paramOpt = cmd.hasOption("paramOpt");
+     boolean verbose = cmd.hasOption("v");
+     boolean debug = cmd.hasOption("d");
+     InitialState initState = InitialState.RANDOM;
 
-        String cvFolder = cmd.getOptionValue("cv-folder");
-        int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
-        String runMode = cmd.getOptionValue("run-mode");
-        int foldIndex = -1;
-        if (cmd.hasOption("fold")) {
-            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-        }
+     String cvFolder = cmd.getOptionValue("cv-folder");
+     int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
+     String runMode = cmd.getOptionValue("run-mode");
+     int foldIndex = -1;
+     if (cmd.hasOption("fold")) {
+     foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+     }
 
-        for (int ii = 0; ii < numFolds; ii++) {
-            if (foldIndex != -1 && ii != foldIndex) {
-                continue;
-            }
-            if (verbose) {
-                System.out.println("\nRunning fold " + foldIndex);
-            }
+     for (int ii = 0; ii < numFolds; ii++) {
+     if (foldIndex != -1 && ii != foldIndex) {
+     continue;
+     }
+     if (verbose) {
+     System.out.println("\nRunning fold " + foldIndex);
+     }
 
-            Fold fold = new Fold(ii, cvFolder);
-            File foldFolder = new File(resultFolder, fold.getFoldName());
-            ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
-            ResponseTextDataset trainData = foldData[Fold.TRAIN];
-            ResponseTextDataset devData = foldData[Fold.DEV];
-            ResponseTextDataset testData = foldData[Fold.TEST];
+     Fold fold = new Fold(ii, cvFolder);
+     File foldFolder = new File(resultFolder, fold.getFoldName());
+     ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
+     ResponseTextDataset trainData = foldData[Fold.TRAIN];
+     ResponseTextDataset devData = foldData[Fold.DEV];
+     ResponseTextDataset testData = foldData[Fold.TEST];
 
-            if (cmd.hasOption("z")) {
-                ResponseTextDataset.zNormalize(trainData, devData, testData);
-            }
+     if (cmd.hasOption("z")) {
+     ResponseTextDataset.zNormalize(trainData, devData, testData);
+     }
             
-            if (verbose) {
-                System.out.println("Fold " + fold.getFoldName());
-                System.out.println("--- training: " + trainData.toString());
-                System.out.println("--- development: " + devData.toString());
-                System.out.println("--- test: " + testData.toString());
-                System.out.println();
-            }
+     if (verbose) {
+     System.out.println("Fold " + fold.getFoldName());
+     System.out.println("--- training: " + trainData.toString());
+     System.out.println("--- development: " + devData.toString());
+     System.out.println("--- test: " + testData.toString());
+     System.out.println();
+     }
 
-            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
-            double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
-            double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-            double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-            double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+     double meanResponse = StatisticsUtils.mean(trainData.getResponses());
+     double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
+     double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
+     double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
+     double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
             
-            SHDP sampler = new SHDP();
-            sampler.setVerbose(verbose);
-            sampler.setDebug(debug);
-            sampler.setLog(true);
-            sampler.setReport(true);
-            sampler.setWordVocab(trainData.getWordVocab());
+     SHDP sampler = new SHDP();
+     sampler.setVerbose(verbose);
+     sampler.setDebug(debug);
+     sampler.setLog(true);
+     sampler.setReport(true);
+     sampler.setWordVocab(trainData.getWordVocab());
 
-            sampler.train(trainData);
-            sampler.configure(foldFolder.getAbsolutePath(),
-                    trainData.getWordVocab().size(), K,
-                    alpha, beta,
-                    mu, sigma, rho,
-                    initState, paramOpt,
-                    burnIn, maxIters, sampleLag, repInterval);
+     sampler.train(trainData);
+     sampler.configure(foldFolder.getAbsolutePath(),
+     trainData.getWordVocab().size(), K,
+     alpha, beta,
+     mu, sigma, rho,
+     initState, paramOpt,
+     burnIn, maxIters, sampleLag, repInterval);
 
-            File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
-            File iterPredFolder = sampler.getIterationPredictionFolder();
-            IOUtils.createFolder(samplerFolder);
-        }
+     File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
+     File iterPredFolder = sampler.getIterationPredictionFolder();
+     IOUtils.createFolder(samplerFolder);
+     }
         
         
         
-        if (resultFolder == null) {
-            throw new RuntimeException("Result folder (--output) is not set.");
-        }
+     if (resultFolder == null) {
+     throw new RuntimeException("Result folder (--output) is not set.");
+     }
 
-        if (verbose) {
-            System.out.println("\nLoading formatted data ...");
-        }
+     if (verbose) {
+     System.out.println("\nLoading formatted data ...");
+     }
 
-        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
-        data.setFormatFilename(formatFile);
-        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
-        data.prepareTopicCoherence(numTopWords);
+     ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
+     data.setFormatFilename(formatFile);
+     data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
+     data.prepareTopicCoherence(numTopWords);
 
 
-        // hyperparameters
-        double alpha_global = CLIUtils.getDoubleArgument(cmd, "alpha-global", 0.1);
-        double alpha_local = CLIUtils.getDoubleArgument(cmd, "alpha-local", 0.1);
-        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-        double[] responses = data.getResponses();
-        if (cmd.hasOption("z")) {
-            ZNormalizer zNorm = new ZNormalizer(responses);
-            for (int i = 0; i < responses.length; i++) {
-                responses[i] = zNorm.normalize(responses[i]);
-            }
-        }
+     // hyperparameters
+     double alpha_global = CLIUtils.getDoubleArgument(cmd, "alpha-global", 0.1);
+     double alpha_local = CLIUtils.getDoubleArgument(cmd, "alpha-local", 0.1);
+     double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+     double[] responses = data.getResponses();
+     if (cmd.hasOption("z")) {
+     ZNormalizer zNorm = new ZNormalizer(responses);
+     for (int i = 0; i < responses.length; i++) {
+     responses[i] = zNorm.normalize(responses[i]);
+     }
+     }
 
-        double meanResponse = StatisticsUtils.mean(responses);
-        double stddevResponse = StatisticsUtils.standardDeviation(responses);
+     double meanResponse = StatisticsUtils.mean(responses);
+     double stddevResponse = StatisticsUtils.standardDeviation(responses);
 
-        double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+     double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
+     double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
+     double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
 
-        if (verbose) {
-            System.out.println("\nLoading cross validation info from " + cvFolder);
-        }
-        ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
-        for (int i = 0; i < data.getDocIds().length; i++) {
-            instanceList.add(new RegressionDocumentInstance(
-                    data.getDocIds()[i],
-                    data.getWords()[i],
-                    data.getResponses()[i]));
-        }
-        String cvName = "";
-        CrossValidation<String, RegressionDocumentInstance> crossValidation =
-                new CrossValidation<String, RegressionDocumentInstance>(
-                cvFolder,
-                cvName,
-                instanceList);
-        crossValidation.inputFolds(numFolds);
-        int foldIndex = -1;
-        if (cmd.hasOption("fold")) {
-            foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-        }
+     if (verbose) {
+     System.out.println("\nLoading cross validation info from " + cvFolder);
+     }
+     ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
+     for (int i = 0; i < data.getDocIds().length; i++) {
+     instanceList.add(new RegressionDocumentInstance(
+     data.getDocIds()[i],
+     data.getWords()[i],
+     data.getResponses()[i]));
+     }
+     String cvName = "";
+     CrossValidation<String, RegressionDocumentInstance> crossValidation =
+     new CrossValidation<String, RegressionDocumentInstance>(
+     cvFolder,
+     cvName,
+     instanceList);
+     crossValidation.inputFolds(numFolds);
+     int foldIndex = -1;
+     if (cmd.hasOption("fold")) {
+     foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
+     }
 
-        for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
-            if (foldIndex != -1 && fold.getIndex() != foldIndex) {
-                continue;
-            }
-            if (verbose) {
-                System.out.println("\nRunning fold " + foldIndex);
-            }
+     for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
+     if (foldIndex != -1 && fold.getIndex() != foldIndex) {
+     continue;
+     }
+     if (verbose) {
+     System.out.println("\nRunning fold " + foldIndex);
+     }
 
-            File foldFolder = new File(resultFolder, fold.getFoldName());
+     File foldFolder = new File(resultFolder, fold.getFoldName());
 
-            SHDP sampler = new SHDP();
-            sampler.setVerbose(verbose);
-            sampler.setDebug(debug);
-            sampler.setLog(true);
-            sampler.setReport(true);
-            sampler.setWordVocab(data.getWordVocab());
+     SHDP sampler = new SHDP();
+     sampler.setVerbose(verbose);
+     sampler.setDebug(debug);
+     sampler.setLog(true);
+     sampler.setReport(true);
+     sampler.setWordVocab(data.getWordVocab());
 
-            // training data
-            ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
-            int[][] trRevWords = data.getDocWords(trInstIndices);
-            double[] trResponses = data.getResponses(trInstIndices);
+     // training data
+     ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
+     int[][] trRevWords = data.getDocWords(trInstIndices);
+     double[] trResponses = data.getResponses(trInstIndices);
 
-            // test data
-            ArrayList<Integer> teInstIndices = fold.getTestingInstances();
-            int[][] teRevWords = data.getDocWords(teInstIndices);
-            double[] teResponses = data.getResponses(teInstIndices);
+     // test data
+     ArrayList<Integer> teInstIndices = fold.getTestingInstances();
+     int[][] teRevWords = data.getDocWords(teInstIndices);
+     double[] teResponses = data.getResponses(teInstIndices);
 
-            sampler.configure(foldFolder.getAbsolutePath(), trRevWords, trResponses,
-                    data.getWordVocab().size(), alpha_global, alpha_local, beta,
-                    mu, sigma, rho,
-                    initState, paramOpt,
-                    burnIn, maxIters, sampleLag, repInterval);
+     sampler.configure(foldFolder.getAbsolutePath(), trRevWords, trResponses,
+     data.getWordVocab().size(), alpha_global, alpha_local, beta,
+     mu, sigma, rho,
+     initState, paramOpt,
+     burnIn, maxIters, sampleLag, repInterval);
 
-            String samplerFolder = new File(foldFolder, sampler.getSamplerFolder()).getAbsolutePath();
-            File iterPredFolder = sampler.getIterationPredictionFolder();
-            IOUtils.createFolder(samplerFolder);
+     String samplerFolder = new File(foldFolder, sampler.getSamplerFolder()).getAbsolutePath();
+     File iterPredFolder = sampler.getIterationPredictionFolder();
+     IOUtils.createFolder(samplerFolder);
 
-            if (runMode.equals("train")) {
-                sampler.initialize();
-                sampler.iterate();
-                sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
-                sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
-            } else if (runMode.equals("test")) {
-                sampler.regressNewDocuments(teRevWords);
+     if (runMode.equals("train")) {
+     sampler.initialize();
+     sampler.iterate();
+     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
+     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
+     } else if (runMode.equals("test")) {
+     sampler.regressNewDocuments(teRevWords);
 
-                File teResultFolder = new File(samplerFolder, "te-results");
-                IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
-            } else if (runMode.equals("train-test")) {
-                // train
-                sampler.initialize();
-                sampler.iterate();
-                sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
-                sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
+     File teResultFolder = new File(samplerFolder, "te-results");
+     IOUtils.createFolder(teResultFolder);
+     GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
+     } else if (runMode.equals("train-test")) {
+     // train
+     sampler.initialize();
+     sampler.iterate();
+     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
+     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
 
-                // test
-                sampler.regressNewDocuments(teRevWords);
-                File teResultFolder = new File(samplerFolder, "te-results");
-                IOUtils.createFolder(teResultFolder);
-                GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
-            } else {
-                throw new RuntimeException("Run mode " + runMode + " not supported");
-            }
-        }
-    }*/
+     // test
+     sampler.regressNewDocuments(teRevWords);
+     File teResultFolder = new File(samplerFolder, "te-results");
+     IOUtils.createFolder(teResultFolder);
+     GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
+     } else {
+     throw new RuntimeException("Run mode " + runMode + " not supported");
+     }
+     }
+     }*/
 }

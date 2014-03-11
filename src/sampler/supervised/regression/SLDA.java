@@ -51,7 +51,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     // internal
     protected int numTokensChanged = 0;
     protected int numTokens = 0;
-    protected ArrayList<double[]> regressionParameters;
     private String optType = "gurobi";
 
     public void setOptimizerType(String ot) {
@@ -112,7 +111,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.initState = initState;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
-        this.regressionParameters = new ArrayList<double[]>();
         this.setName();
 
         if (!debug) {
@@ -322,7 +320,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             ldaZ = lda.getZ();
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while running LDA for initialization");
         }
         setLog(true);
 
@@ -368,11 +366,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
 
-            // store regression parameters after every iteration
-            double[] rp = new double[K];
-            System.arraycopy(topicParams, 0, rp, 0, K);
-            this.regressionParameters.add(rp);
-
             if (verbose && iter % REP_INTERVAL == 0) {
                 String str = "Iter " + iter + "\t llh = " + loglikelihood
                         + "\n" + getCurrentState();
@@ -391,7 +384,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             }
 
             // update the regression parameters
-            int step = (int) Math.log(iter);
+            int step = (int) Math.log(iter + 1) + 1;
             if (iter % step == 0) {
                 updateTopicRegressionParameters();
             }
@@ -959,7 +952,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         // initialize assignments
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
-                sampleZ(d, n, !REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
+                sampleZ(d, n, !REMOVE, !ADD, !REMOVE, ADD, !OBSERVED);
             }
         }
 

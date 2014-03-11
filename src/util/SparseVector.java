@@ -31,6 +31,10 @@ public class SparseVector implements Serializable {
         return sum;
     }
 
+    public void remove(int index) {
+        this.values.remove(index);
+    }
+
     public Double get(int index) {
         return this.values.get(index);
     }
