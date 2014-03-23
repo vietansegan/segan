@@ -140,7 +140,7 @@ public class ResponseTextDataset extends TextDataset {
      * of test data
      * @param numClasses Number of discrete classes for stratified sampling
      */
-    public void createCrossValidation(String cvFolder, int numFolds, 
+    public void createCrossValidation(String cvFolder, int numFolds,
             double trToDevRatio, int numClasses) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = StatisticsUtils.discretize(responses, numClasses);
@@ -231,7 +231,7 @@ public class ResponseTextDataset extends TextDataset {
         }
         return str.toString();
     }
-    
+
     /**
      * Load train/development/test data in a cross validation fold.
      *
@@ -356,7 +356,7 @@ public class ResponseTextDataset extends TextDataset {
         String formatFolder = cmd.getOptionValue("format-folder");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         String responseFile = cmd.getOptionValue("response-file");
-        
+
         CorpusProcessor corpProc = createCorpusProcessor();
         ResponseTextDataset dataset = new ResponseTextDataset(
                 datasetName, datasetFolder, corpProc);
@@ -370,6 +370,23 @@ public class ResponseTextDataset extends TextDataset {
         }
         dataset.loadResponses(responseFile); // load response data
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
+    }
+
+    public static void logit(
+            ResponseTextDataset train,
+            ResponseTextDataset dev,
+            ResponseTextDataset test) {
+        train.setResponses(logit(train.getResponses()));
+        dev.setResponses(logit(dev.getResponses()));
+        test.setResponses(logit(test.getResponses()));
+    }
+
+    private static double[] logit(double[] array) {
+        double[] logitArray = new double[array.length];
+        for (int ii = 0; ii < logitArray.length; ii++) {
+            logitArray[ii] = 1.0 / (1.0 + Math.exp(-array[ii]));
+        }
+        return logitArray;
     }
 
     /**

@@ -260,10 +260,10 @@ public class L2H extends AbstractSampler {
         llda.setDebug(debug);
         llda.setVerbose(verbose);
         llda.setLog(false);
-        llda.configure(null, words, labels,
+        llda.configure(null,
                 V, L, lda_alpha, lda_beta, initState, false,
                 lda_burnin, lda_maxiter, lda_samplelag, lda_repInterval);
-
+        llda.train(words, labels);
         try {
             File lldaZFile = new File(this.folder, "labeled-lda-init-" + L + ".zip");
             if (lldaZFile.exists()) {

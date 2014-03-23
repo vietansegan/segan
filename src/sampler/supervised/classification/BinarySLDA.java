@@ -935,7 +935,7 @@ public class BinarySLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        PredictionUtils.outputSingleModelPredictions(
+        PredictionUtils.outputSingleModelRegressions(
                 new File(outputResultFile),
                 predResponsesList);
     }

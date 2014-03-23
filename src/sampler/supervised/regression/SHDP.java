@@ -1019,7 +1019,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        PredictionUtils.outputSingleModelPredictions(
+        PredictionUtils.outputSingleModelRegressions(
                 new File(outputResultFile),
                 predResponsesList);
     }

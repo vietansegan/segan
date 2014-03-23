@@ -62,6 +62,10 @@ public class TFIDF {
         }
     }
 
+    public String getName() {
+        return "tf-idf";
+    }
+
     public SparseVector[] getLabelVectors() {
         return this.labelVectors;
     }
@@ -147,7 +151,7 @@ public class TFIDF {
                 this.labelVectors[ll].divide(docCount);
             }
         }
-        
+
         computeLabelL2Norms();
     }
 
@@ -260,6 +264,7 @@ public class TFIDF {
     }
 
     public void outputPredictor(File predictorFile) {
+        System.out.println("Outputing learned model to " + predictorFile);
         try {
             StringBuilder labelVecStr = new StringBuilder();
             labelVecStr.append("num-labels\t").append(L).append("\n");
@@ -299,6 +304,7 @@ public class TFIDF {
     }
 
     public void inputPredictor(File predictorFile) {
+        System.out.println("Inputing learned model from " + predictorFile);
         try {
             String filename = IOUtils.removeExtension(predictorFile.getName());
 

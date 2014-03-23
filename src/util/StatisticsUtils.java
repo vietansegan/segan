@@ -106,6 +106,14 @@ public class StatisticsUtils {
         return llh;
     }
 
+    public static double normalProbability(double observation, double mean,
+            double stdv) {
+        double var = stdv * stdv;
+        double diff = observation - mean;
+        double prob = (1 / stdv) * Math.exp(-diff * diff / (2 * var));
+        return prob;
+    }
+
     /**
      * Compute the value of digamma function
      */

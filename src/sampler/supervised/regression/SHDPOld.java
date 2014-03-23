@@ -1509,7 +1509,7 @@ public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDa
         }
 
         // output result during test time
-        PredictionUtils.outputSingleModelPredictions(new File(outputResultFile), predResponsesList);
+        PredictionUtils.outputSingleModelRegressions(new File(outputResultFile), predResponsesList);
         return finalPredResponses;
     }
 

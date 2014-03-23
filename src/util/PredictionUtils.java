@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
+import util.evaluation.MultilabelClassificationEvaluation;
 import util.evaluation.RankingPerformance;
 import util.evaluation.RegressionEvaluation;
 
@@ -261,14 +262,131 @@ public class PredictionUtils {
     }
 
     /**
-     * Output the predictions of a single model (learning at an iteration during
+     * Output the predictions of a single model for classification.
+     *
+     * @param predictions D x L 2D array
+     */
+    public static void outputSingleModelClassifications(File file,
+            double[][] predictions) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            writer.write(predictions.length + "\n");
+            for (int dd = 0; dd < predictions.length; dd++) {
+                writer.write(Integer.toString(dd));
+                for (int jj = 0; jj < predictions[dd].length; jj++) {
+                    writer.write("\t" + predictions[dd][jj]);
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing predictions to "
+                    + file);
+        }
+    }
+
+    /**
+     * Input the predictions for classification from a file.
+     *
+     * @param file The prediction file
+     */
+    public static double[][] inputSingleModelClassifications(File file) {
+        double[][] predictions = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(file);
+            int count = Integer.parseInt(reader.readLine());
+            predictions = new double[count][];
+
+            for (int dd = 0; dd < count; dd++) {
+                String[] sline = reader.readLine().split("\t");
+                if (Integer.parseInt(sline[0]) != dd) {
+                    throw new RuntimeException("Mismatch");
+                }
+
+                predictions[dd] = new double[sline.length - 1];
+                for (int ii = 0; ii < predictions[dd].length; ii++) {
+                    predictions[dd][ii] = Double.parseDouble(sline[ii + 1]);
+                }
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing predictions from "
+                    + file);
+        }
+        return predictions;
+    }
+
+    public static double[][] evaluateClassifications(
+            File iterPredFolder,
+            File outputFile,
+            int[][] trueLabels) {
+        System.out.println("Evaluating predictions in folder " + iterPredFolder
+                + "\nAnd outputing to " + outputFile);
+
+        double[][] avgPreds = null;
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            String[] filenames = iterPredFolder.list();
+            for (int ff = 0; ff < filenames.length; ff++) {
+                double[][] singlePredictions = inputSingleModelClassifications(
+                        new File(iterPredFolder, filenames[ff]));
+                MultilabelClassificationEvaluation eval = new MultilabelClassificationEvaluation(trueLabels, singlePredictions);
+                eval.computeMeasurements(); 
+
+                if (ff == 0) {
+                    writer.write("File");
+                    for (Measurement m : eval.getMeasurements()) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+
+                    avgPreds = new double[singlePredictions.length][singlePredictions[0].length];
+                }
+                writer.write(filenames[ff]);
+                for (Measurement m : eval.getMeasurements()) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
+
+                for (int dd = 0; dd < avgPreds.length; dd++) {
+                    for (int jj = 0; jj < avgPreds[dd].length; jj++) {
+                        avgPreds[dd][jj] += singlePredictions[dd][jj];
+                    }
+                }
+            }
+            // average
+            for (int dd = 0; dd < avgPreds.length; dd++) {
+                for (int jj = 0; jj < avgPreds[dd].length; jj++) {
+                    avgPreds[dd][jj] /= filenames.length;
+                }
+            }
+            MultilabelClassificationEvaluation eval = new MultilabelClassificationEvaluation(trueLabels, avgPreds);
+            eval.computeMeasurements();
+            writer.write("Average");
+            for (Measurement m : eval.getMeasurements()) {
+                writer.write("\t" + m.getValue());
+            }
+            writer.write("\n");
+
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while evaluating classification");
+        }
+        return avgPreds;
+    }
+
+    /**
+     * Output the predictions of a single model (learned at an iteration during
      * training) on test documents.
      *
      * @param file The output file
      * @param predictions The list of predicted values, each for a test
      * document.
      */
-    public static void outputSingleModelPredictions(
+    public static void outputSingleModelRegressions(
             File file,
             ArrayList<double[]> predictions) {
         try {
@@ -296,7 +414,7 @@ public class PredictionUtils {
      * @param file The file containing the prediction result
      * @param numDocs Number of test documents
      */
-    public static double[][] inputSingleModelPredictions(File file, int numDocs) {
+    public static double[][] inputSingleModelRegressions(File file, int numDocs) {
         double[][] preds = new double[numDocs][];
         try {
             BufferedReader reader = IOUtils.getBufferedReader(file);
@@ -419,7 +537,7 @@ public class PredictionUtils {
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
 
-                double[][] predictions = inputSingleModelPredictions(
+                double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueLabels.length);
 
@@ -463,7 +581,7 @@ public class PredictionUtils {
             String[] filenames = iterPredFolder.list();
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
-                double[][] predictions = inputSingleModelPredictions(
+                double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
 
@@ -508,7 +626,7 @@ public class PredictionUtils {
                 String filename = filenames[i];
 
                 // load predicted values
-                double[][] predictions = inputSingleModelPredictions(
+                double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
 
@@ -555,7 +673,7 @@ public class PredictionUtils {
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
 
-                double[][] predictions = inputSingleModelPredictions(
+                double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
 
@@ -602,7 +720,7 @@ public class PredictionUtils {
             for (int i = 0; i < filenames.length; i++) {
                 String filename = filenames[i];
 
-                double[][] predictions = inputSingleModelPredictions(
+                double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
 

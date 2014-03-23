@@ -500,15 +500,19 @@ public class LabelTextDataset extends TextDataset {
         trainData.loadFormattedData(fold.getFoldFolderPath());
         foldData[Fold.TRAIN] = trainData;
 
-        LabelTextDataset devData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
-        devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
-        devData.loadFormattedData(fold.getFoldFolderPath());
-        foldData[Fold.DEV] = devData;
+        if (new File(fold.getFoldFolderPath(), fold.getFoldName() + Fold.DevelopExt + wordVocabExt).exists()) {
+            LabelTextDataset devData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
+            devData.setFormatFilename(fold.getFoldName() + Fold.DevelopExt);
+            devData.loadFormattedData(fold.getFoldFolderPath());
+            foldData[Fold.DEV] = devData;
+        }
 
-        LabelTextDataset testData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
-        testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
-        testData.loadFormattedData(fold.getFoldFolderPath());
-        foldData[Fold.TEST] = testData;
+        if (new File(fold.getFoldFolderPath(), fold.getFoldName() + Fold.TestExt + wordVocabExt).exists()) {
+            LabelTextDataset testData = new LabelTextDataset(fold.getFoldName(), fold.getFolder());
+            testData.setFormatFilename(fold.getFoldName() + Fold.TestExt);
+            testData.loadFormattedData(fold.getFoldFolderPath());
+            foldData[Fold.TEST] = testData;
+        }
 
         return foldData;
     }

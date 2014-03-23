@@ -37,6 +37,10 @@ public class TreeNode<N extends TreeNode, C>
         this.children = new HashMap<Integer, N>();
     }
 
+    public void setIndex(int idx) {
+        this.index = idx;
+    }
+
     /**
      * Fill in the inactive indices (after all children nodes are loaded)
      */

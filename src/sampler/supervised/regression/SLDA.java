@@ -367,7 +367,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             logLikelihoods.add(loglikelihood);
 
             if (verbose && iter % REP_INTERVAL == 0) {
-                String str = "Iter " + iter + "\t llh = " + loglikelihood
+                String str = getClass().toString() + ". " + getSamplerName()
+                        + "\nIter " + iter
+                        + "\tllh = " + loglikelihood
                         + "\n" + getCurrentState();
                 if (iter <= BURN_IN) {
                     logln("--- Burning in. " + str);
@@ -377,11 +379,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             }
 
             // sample topic assignments
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    sampleZ(d, n, REMOVE, ADD, REMOVE, ADD, OBSERVED);
-                }
-            }
+            sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
 
             // update the regression parameters
             int step = (int) Math.log(iter + 1) + 1;
@@ -413,14 +411,11 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                         + ". # token changed: " + numTokensChanged
                         + ". change ratio: " + (double) numTokensChanged / numTokens
                         + "\n");
+                System.out.println();
             }
 
             if (debug) {
                 validate("iter " + iter);
-            }
-
-            if (verbose && iter % REP_INTERVAL == 0) {
-                System.out.println();
             }
 
             // store model
@@ -448,6 +443,61 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception iter = " + iter);
+        }
+    }
+
+    /**
+     * Sample topic assignments for all tokens. This is a bit faster than using
+     * sampleZ.
+     *
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     * @param observe Whether the response variable of this document is observed
+     */
+    protected void sampleZs(boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData,
+            boolean observe) {
+        double totalBeta = V * hyperparams.get(BETA);
+        double sqrtRho = Math.sqrt(hyperparams.get(RHO));
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                if (removeFromModel) {
+                    topicWords[z[d][n]].decrement(words[d][n]);
+                }
+                if (removeFromData) {
+                    docTopics[d].decrement(z[d][n]);
+                    docRegressMeans[d] -= topicParams[z[d][n]] / words[d].length;
+                }
+
+                double[] probs = new double[K];
+                for (int k = 0; k < K; k++) {
+                    probs[k] = (docTopics[d].getCount(k) + hyperparams.get(ALPHA))
+                            * (topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                            / (topicWords[k].getCountSum() + totalBeta);
+                    if (observe) {
+                        double mean = docRegressMeans[d] + topicParams[k] / words[d].length;
+                        probs[k] *= StatisticsUtils.normalProbability(responses[d], mean, sqrtRho);
+                    }
+                }
+
+                int sampledZ = SamplerUtils.scaleSample(probs);
+
+                if (z[d][n] != sampledZ) {
+                    numTokensChanged++; // for debugging
+                }
+                // update
+                z[d][n] = sampledZ;
+
+                if (addToModel) {
+                    topicWords[z[d][n]].increment(words[d][n]);
+                }
+                if (addToData) {
+                    docTopics[d].increment(z[d][n]);
+                    docRegressMeans[d] += topicParams[z[d][n]] / words[d].length;
+                }
+            }
         }
     }
 
@@ -950,11 +1000,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
 
         // initialize assignments
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                sampleZ(d, n, !REMOVE, !ADD, !REMOVE, ADD, !OBSERVED);
-            }
-        }
+        sampleZs(!REMOVE, !ADD, !REMOVE, ADD, !OBSERVED);
 
         this.updatePredictionValues();
 
@@ -977,11 +1023,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         // iterate
         ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
         for (iter = 0; iter < this.testMaxIter; iter++) {
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    sampleZ(d, n, !REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
-                }
-            }
+            sampleZs(!REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
 
             this.updatePredictionValues();
 
@@ -1016,7 +1058,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (verbose) {
             logln("--- Outputing result to " + outputResultFile);
         }
-        PredictionUtils.outputSingleModelPredictions(
+        PredictionUtils.outputSingleModelRegressions(
                 new File(outputResultFile),
                 predResponsesList);
     }

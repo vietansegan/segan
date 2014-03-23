@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import sampling.AbstractDiscreteFiniteLikelihoodModel;
+import sampling.util.SparseCount;
 import util.SamplerUtils;
 import weka.core.SerializedObject;
 
@@ -14,19 +15,19 @@ import weka.core.SerializedObject;
  * @author vietan
  */
 public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Serializable {
+
     private static final long serialVersionUID = 1123581321L;
-    
     private double concentration; // concentration parameter
     private double[] center; // the mean vector for asymmetric distribution
     private double centerElement; // an element in the mean vector for symmetric distribution
     private double[] distribution;
-    
+
     public DirMult(int dim, double concentration, double centerElement) {
         super(dim);
         this.centerElement = centerElement;
         this.concentration = concentration;
     }
-    
+
     /*TODO: dim can be inferred from the dimension of centerVector. remove the
      * argument "dim"! */
     public DirMult(int dim, double concentration, double[] centerVector) {
@@ -143,13 +144,17 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         int j = 0;
         for (int observation : observations.keySet()) {
             for (int i = 0; i < observations.get(observation); i++) {
-                llh += Math.log(concentration * getCenterElement(observation) 
+                llh += Math.log(concentration * getCenterElement(observation)
                         + getCount(observation) + i)
                         - Math.log(concentration + getCountSum() + j);
                 j++;
             }
         }
         return llh;
+    }
+
+    public double getLogLikelihood(SparseCount observations) {
+        return getLogLikelihood(observations.getObservations());
     }
 
     @Override
@@ -299,14 +304,14 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
 //            testPrior();
 
 //            testLlh();
-            
+
             testSerializable();
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
     }
-    
+
     private static void testSerializable() throws Exception {
         double[] mean = {0.5, 0.5};
         double scale = 2;
@@ -314,7 +319,7 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         dmm.increment(0);
         System.out.println(dmm);
         System.out.println(DirMult.output(dmm));
-        
+
         DirMult copy = (DirMult) new SerializedObject(dmm).getObject();
         System.out.println(copy);
         System.out.println(DirMult.output(copy));

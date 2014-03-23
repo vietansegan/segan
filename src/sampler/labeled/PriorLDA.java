@@ -115,10 +115,6 @@ public class PriorLDA extends AbstractSampler {
         this.name = str.toString();
     }
 
-    public File getReportFolderPath() {
-        return new File(this.getSamplerFolderPath(), ReportFolder);
-    }
-
     public void setTopicVocab(ArrayList<String> topicVocab) {
         this.topicVocab = topicVocab;
     }

@@ -136,7 +136,7 @@ public abstract class AbstractSampler implements Serializable {
     public abstract void initialize();
 
     public abstract void iterate();
-    
+
     public abstract double getLogLikelihood();
 
     public abstract double getLogLikelihood(ArrayList<Double> testHyperparameters);
@@ -152,6 +152,10 @@ public abstract class AbstractSampler implements Serializable {
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
         return str.toString();
+    }
+
+    public void inputFinalState() {
+        this.inputState(new File(getReportFolderPath(), "iter-" + MAX_ITER + ".zip"));
     }
 
     public void outputState(File file) {
@@ -195,6 +199,9 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     public String[] getTopWords(double[] distribution, int numWords) {
+        if (this.wordVocab == null) {
+            throw new RuntimeException("Word vocab empty");
+        }
         ArrayList<RankingItem<String>> topicSortedVocab = IOUtils.getSortedVocab(distribution, this.wordVocab);
         String[] topWords = new String[numWords];
         for (int i = 0; i < numWords; i++) {
@@ -215,6 +222,10 @@ public abstract class AbstractSampler implements Serializable {
         return new File(folder, name).getAbsolutePath();
     }
 
+    public String getReportFolderPath() {
+        return new File(getSamplerFolderPath(), ReportFolder).getAbsolutePath();
+    }
+
     public String getFormatNumberString(double value) {
         if (value > 0.001) {
             return formatter.format(value);
@@ -228,7 +239,7 @@ public abstract class AbstractSampler implements Serializable {
             openLogger();
         }
 
-        logln(getClass().toString());
+        logln(getClass().toString() + "\t" + getSamplerName());
         startTime = System.currentTimeMillis();
 
         initialize();
@@ -243,13 +254,16 @@ public abstract class AbstractSampler implements Serializable {
         }
 
         try {
+            if (logLikelihoods != null) {
+                outputLogLikelihoods(new File(getSamplerFolderPath(), LikelihoodFile));
+            }
             if (paramOptimized && log) {
                 this.outputSampledHyperparameters(
-                        new File(getSamplerFolderPath(), "hyperparameters.txt").getAbsolutePath());
+                        new File(getSamplerFolderPath(), HyperparameterFile));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while sampling");
         }
     }
 

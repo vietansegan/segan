@@ -13,6 +13,7 @@ import sampling.likelihood.DirMult;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
+import util.PredictionUtils;
 import util.SamplerUtils;
 import util.evaluation.MimnoTopicCoherence;
 
@@ -49,8 +50,21 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         return this.z;
     }
 
+    public void configure(LabeledLDA sampler) {
+        this.configure(sampler.folder,
+                sampler.V,
+                sampler.L,
+                sampler.hyperparams.get(ALPHA),
+                sampler.hyperparams.get(BETA),
+                sampler.initState,
+                sampler.paramOptimized,
+                sampler.BURN_IN,
+                sampler.MAX_ITER,
+                sampler.LAG,
+                sampler.REP_INTERVAL);
+    }
+
     public void configure(String folder,
-            int[][] words, int[][] labels,
             int V, int L,
             double alpha,
             double beta,
@@ -60,12 +74,9 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("Configuring ...");
         }
         this.folder = folder;
-        this.words = words;
-        this.labels = labels;
 
         this.L = L;
         this.V = V;
-        this.D = this.words.length;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
@@ -84,19 +95,12 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         this.prefix += initState.toString();
         this.setName();
 
-        this.numTokens = 0;
-        for (int d = 0; d < D; d++) {
-            this.numTokens += words[d].length;
-        }
-
         if (!debug) {
             System.err.close();
         }
 
         if (verbose) {
             logln("--- folder\t" + folder);
-            logln("--- # documents:\t" + D);
-            logln("--- # tokens:\t" + numTokens);
             logln("--- label vocab:\t" + L);
             logln("--- word vocab:\t" + V);
             logln("--- alpha:\t" + MiscUtils.formatDouble(alpha));
@@ -125,6 +129,25 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     public DirMult[] getTopicWordDistributions() {
         return this.label_words;
+    }
+
+    public void train(int[][] ws, int[][] ls) {
+        this.words = ws;
+        this.labels = ls;
+        this.D = this.words.length;
+
+        this.numTokens = 0;
+        int numLabels = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+            numLabels += labels[d].length;
+        }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+            logln("--- # label instances:\t" + numLabels);
+        }
     }
 
     @Override
@@ -205,7 +228,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while creating report folder "
+                    + new File(getSamplerFolderPath(), ReportFolder));
         }
 
         if (log && !isLogging()) {
@@ -240,6 +264,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 } else {
                     logln("--- Sampling. " + str + "\n");
                 }
+                System.out.println();
             }
 
             if (iter % LAG == 0 && iter >= BURN_IN) {
@@ -264,12 +289,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 }
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
-                System.out.println();
-            }
-
             // store model
-            if (report && iter >= BURN_IN && iter % LAG == 0) {
+            if (report && iter > BURN_IN && iter % LAG == 0) {
                 outputState(new File(
                         new File(getSamplerFolderPath(), ReportFolder),
                         "iter-" + iter + ".zip"));
@@ -292,7 +313,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         try {
             if (log) {
                 BufferedWriter writer = IOUtils.getBufferedWriter(
-                        new File(getSamplerFolderPath(), "likelihoods.txt"));
+                        new File(getSamplerFolderPath(), LikelihoodFile));
                 for (int i = 0; i < logLikelihoods.size(); i++) {
                     writer.write(i + "\t" + logLikelihoods.get(i) + "\n");
                 }
@@ -300,12 +321,70 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
                 if (paramOptimized) {
                     outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                            "hyperparameters.txt"));
+                            HyperparameterFile));
                 }
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Iteration " + iter);
+        }
+    }
+
+    /**
+     * Sample topic assignments for all tokens. This is a little bit faster than
+     * calling sampleZ repeatedly.
+     *
+     * @param removeFromModel Whether the current assignment should be removed
+     * from the model (i.e., label-word distributions)
+     * @param addToModel Whether the new assignment should be added to the model
+     * @param removeFromData Whether the current assignment should be removed
+     * from the data (i.e., doc-label distributions)
+     * @param addToData Whether the new assignment should be added to the data
+     */
+    public void sampleZs(boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        double totalBeta = V * hyperparams.get(BETA);
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                if (removeFromModel) {
+                    label_words[z[d][n]].decrement(words[d][n]);
+                }
+                if (removeFromData) {
+                    doc_labels[d].decrement(z[d][n]);
+                }
+
+                int sampledZ;
+                if (labels != null && labels[d].length > 0) {
+                    double[] probs = new double[labels[d].length];
+                    for (int ii = 0; ii < labels[d].length; ii++) {
+                        int k = labels[d][ii];
+                        probs[ii] = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
+                                * (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (label_words[k].getCountSum() + totalBeta);
+                    }
+                    sampledZ = labels[d][SamplerUtils.scaleSample(probs)];
+                } else { // for documents without labels and for test documents
+                    double[] probs = new double[L];
+                    for (int ll = 0; ll < L; ll++) {
+                        probs[ll] = (doc_labels[d].getCount(ll) + hyperparams.get(ALPHA))
+                                * (label_words[ll].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (label_words[ll].getCountSum() + totalBeta);
+                    }
+                    sampledZ = SamplerUtils.scaleSample(probs);
+                }
+
+                if (sampledZ != z[d][n]) {
+                    numTokensChange++;
+                }
+                z[d][n] = sampledZ;
+
+                if (addToModel) {
+                    label_words[z[d][n]].increment(words[d][n]);
+                }
+                if (addToData) {
+                    doc_labels[d].increment(z[d][n]);
+                }
+            }
         }
     }
 
@@ -332,14 +411,14 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
 
         int sampledZ;
-        if (labels[d].length > 0) {
+        if (labels != null && labels[d].length > 0) {
             double[] logprobs = new double[labels[d].length];
             for (int ii = 0; ii < labels[d].length; ii++) {
                 logprobs[ii] = doc_labels[d].getLogLikelihood(labels[d][ii])
                         + label_words[labels[d][ii]].getLogLikelihood(words[d][n]);
             }
             sampledZ = labels[d][SamplerUtils.logMaxRescaleSample(logprobs)];
-        } else {
+        } else { // for documents without labels and for test documents
             double[] logprobs = new double[L];
             for (int ll = 0; ll < L; ll++) {
                 logprobs[ll] = doc_labels[d].getLogLikelihood(ll)
@@ -604,8 +683,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         writer.close();
     }
 
-    public void outputTopicCoherence(
-            File file,
+    public void outputTopicCoherence(File file,
             MimnoTopicCoherence topicCoherence) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -631,6 +709,159 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         writer.close();
     }
 
+    public void test(int[][] newWords, File iterPredFolder) {
+        if (verbose) {
+            logln("Test sampling ...");
+        }
+        this.setTestConfigurations(BURN_IN, MAX_ITER, LAG);
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        try {
+            IOUtils.createFolder(iterPredFolder);
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File partialResultFile = new File(iterPredFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                sampleNewDocuments(
+                        new File(reportFolder, filename).getAbsolutePath(),
+                        newWords,
+                        partialResultFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+    }
+
+    public void sampleNewDocuments(String stateFile,
+            int[][] newWords,
+            String outputResultFile) throws Exception {
+        if (verbose) {
+            System.out.println();
+            logln("Perform prediction using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        words = newWords;
+        labels = null; // for evaluation
+        D = words.length;
+
+        // initialize structure
+        initializeDataStructure();
+
+        if (verbose) {
+            logln("test data");
+            logln("--- V = " + V);
+            logln("--- D = " + D);
+            int docTopicCount = 0;
+            for (int d = 0; d < D; d++) {
+                docTopicCount += doc_labels[d].getCountSum();
+            }
+            int topicWordCount = 0;
+            for (int k = 0; k < label_words.length; k++) {
+                topicWordCount += label_words[k].getCountSum();
+            }
+            logln("--- docTopics: " + doc_labels.length + ". " + docTopicCount);
+            logln("--- topicWords: " + label_words.length + ". " + topicWordCount);
+        }
+
+        // initialize assignments
+        sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
+
+        if (verbose) {
+            logln("After initialization");
+            int docTopicCount = 0;
+            for (int d = 0; d < D; d++) {
+                docTopicCount += doc_labels[d].getCountSum();
+            }
+            int topicWordCount = 0;
+            for (int k = 0; k < label_words.length; k++) {
+                topicWordCount += label_words[k].getCountSum();
+            }
+            logln("--- docTopics: " + doc_labels.length + ". " + docTopicCount);
+            logln("--- topicWords: " + label_words.length + ". " + topicWordCount);
+        }
+
+        // sample an store predictions
+        double[][] predictedScores = new double[D][L];
+        int count = 0;
+        for (iter = 0; iter < testMaxIter; iter++) {
+            sampleZs(!REMOVE, !ADD, REMOVE, ADD);
+
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                if (verbose) {
+                    logln("--- iter = " + iter + " / " + this.testMaxIter);
+                }
+                for (int dd = 0; dd < D; dd++) {
+                    double[] predProbs = doc_labels[dd].getDistribution();
+                    for (int ll = 0; ll < L; ll++) {
+                        predictedScores[dd][ll] += predProbs[ll];
+                    }
+                }
+                count++;
+            }
+        }
+
+        // output result during test time
+        if (verbose) {
+            logln("--- Outputing result to " + outputResultFile);
+        }
+        for (int dd = 0; dd < D; dd++) {
+            for (int ll = 0; ll < L; ll++) {
+                predictedScores[dd][ll] /= count;
+            }
+        }
+        PredictionUtils.outputSingleModelClassifications(
+                new File(outputResultFile), predictedScores);
+    }
+
+    public static void parallelTest(int[][] newWords, File iterPredFolder, LabeledLDA sampler) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPredFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPredFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                LabeledLDATestRunner runner = new LabeledLDATestRunner(sampler,
+                        newWords, stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath());
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+
+            // run MAX_NUM_PARALLEL_THREADS threads at a time
+            runThreads(threads);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during parallel test.");
+        }
+    }
+
     public static void main(String[] args) {
         run(args);
     }
@@ -651,10 +882,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             addOption("output", "Output folder");
 
             // sampling configurations
-            addOption("burnIn", "Burn-in");
-            addOption("maxIter", "Maximum number of iterations");
-            addOption("sampleLag", "Sample lag");
-            addOption("report", "Report interval");
+            addSamplingOptions();
 
             // model parameters
             addOption("K", "Number of topics");
@@ -666,12 +894,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                     + "for topic distributions");
             addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
                     + "for word distributions");
-
-            // running configurations
-//            addOption("cv-folder", "Cross validation folder");
-//            addOption("num-folds", "Number of folds");
-//            addOption("fold", "The cross-validation fold to run");
-//            addOption("run-mode", "Running mode");
 
             options.addOption("paramOpt", false, "Whether hyperparameter "
                     + "optimization using slice sampling is performed");
@@ -740,10 +962,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         sampler.setWordVocab(data.getWordVocab());
         sampler.setLabelVocab(data.getLabelVocab());
 
-        sampler.configure(outputFolder, data.getWords(), data.getLabels(),
+        sampler.configure(outputFolder,
                 V, K, alpha, beta, initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
-
+        sampler.train(data.getWords(), data.getLabels());
         File lldaFolder = new File(outputFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(lldaFolder);
         sampler.sample();
@@ -753,5 +975,42 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         sampler.outputTopicCoherence(
                 new File(lldaFolder, TopicCoherenceFile),
                 data.getTopicCoherence());
+    }
+}
+
+class LabeledLDATestRunner implements Runnable {
+
+    LabeledLDA sampler;
+    int[][] newWords;
+    String stateFile;
+    String outputFile;
+
+    public LabeledLDATestRunner(LabeledLDA sampler,
+            int[][] newWords,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+    }
+
+    @Override
+    public void run() {
+        LabeledLDA testSampler = new LabeledLDA();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
+
+        try {
+            testSampler.sampleNewDocuments(stateFile, newWords, outputFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
     }
 }

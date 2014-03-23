@@ -1,6 +1,18 @@
 package core;
 
+import core.crossvalidation.Fold;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import regression.AbstractRegressor;
+import util.IOUtils;
+import util.StatisticsUtils;
+import util.evaluation.Measurement;
+import util.evaluation.RankingPerformance;
 
 /**
  *
@@ -96,7 +108,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
         addOption("init", "Report interval");
-        
+
         addOption("test-burnIn", "Burn-in");
         addOption("test-maxIter", "Maximum number of iterations");
         addOption("test-sampleLag", "Sample lag");
@@ -107,6 +119,11 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
         addOption("cv-folder", "Folder to store cross validation folds");
         addOption("fold", "The cross-validation fold to run");
+        addOption("num-classes", "Number of classes when performing stratified sampling");
+        options.addOption("train", false, "Train");
+        options.addOption("dev", false, "Develop");
+        options.addOption("test", false, "Test");
+        options.addOption("parallel", false, "Parallel sampling");
     }
 
     public static void addCorpusProcessorOptions() {
@@ -132,5 +149,183 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("lambda", "lambda");
         addOption("sigma", "sigma");
         addOption("rho", "rho");
+        addOption("epsilon", "epsilon");
+    }
+
+    /**
+     * Summarize evaluation measurements over multiple folds.
+     *
+     * @param numFolds Number of folds
+     * @param resultFolder The folder containing results
+     * @param modelFolder The sub-folder in each foldFolder which stores the
+     * outputs of different models
+     * @param phase Whether it is training/development/test
+     * @param resultFile Result file
+     */
+    protected void evaluate(
+            String resultFolder,
+            String modelFolder,
+            int numFolds,
+            String phase,
+            String resultFile) throws Exception {
+        ArrayList<String> modelNames = new ArrayList<String>();
+        HashMap<String, ArrayList<Measurement>>[] results = new HashMap[numFolds];
+        for (int f = 0; f < numFolds; f++) {
+            Fold fold = new Fold(f, null);
+            String foldName = fold.getFoldName();
+            File foldFolder = new File(resultFolder, foldName);
+            if (!foldFolder.exists()) {
+                continue;
+            }
+            File foldModelFolder = foldFolder;
+            if (modelFolder != null) {
+                foldModelFolder = new File(foldFolder, modelFolder);
+            }
+            if (!foldModelFolder.exists()) {
+                continue;
+            }
+            if (verbose) {
+                System.out.println("--- Reading results from " + foldModelFolder);
+            }
+
+            String[] modelFolders = foldModelFolder.list();
+            ArrayList<String> modelFolderList = new ArrayList<String>();
+            modelFolderList.addAll(Arrays.asList(modelFolders));
+            Collections.sort(modelFolderList);
+
+            results[f] = new HashMap<String, ArrayList<Measurement>>();
+
+            File foldSummary = new File(foldModelFolder, phase + "summary.txt");
+            BufferedWriter writer = IOUtils.getBufferedWriter(foldSummary);
+            if (verbose) {
+                System.out.println("--- Summarizing fold " + f + ". Writing to " + foldSummary);
+            }
+
+            int count = 0;
+            for (String mFolder : modelFolderList) {
+                File teResultFolder = new File(new File(foldModelFolder, mFolder), phase + RESULT_FOLDER);
+                if (!teResultFolder.exists()) {
+                    continue;
+                }
+                File teResultFile = new File(teResultFolder, resultFile);
+                if (!teResultFile.exists()) {
+                    continue;
+                }
+
+                // read measurements
+                BufferedReader reader = IOUtils.getBufferedReader(teResultFile);
+                String line;
+                ArrayList<Measurement> measurements = new ArrayList<Measurement>();
+                while ((line = reader.readLine()) != null) {
+                    Measurement m = new Measurement(line.split("\t")[0],
+                            Double.parseDouble(line.split("\t")[1]));
+                    measurements.add(m);
+                }
+                reader.close();
+
+                // read ranking measurement
+                File ndcgFile = new File(new File(teResultFolder, phase + RANKING_FOLDER),
+                        RankingPerformance.NDCGFile);
+                if (ndcgFile.exists()) {
+                    double[] ndcgs = RankingPerformance.inputNDCG(
+                            new File(new File(teResultFolder, phase + RANKING_FOLDER),
+                            RankingPerformance.NDCGFile));
+                    measurements.add(new Measurement("NDCG@1", ndcgs[0]));
+                    measurements.add(new Measurement("NDCG@5", ndcgs[4]));
+                    measurements.add(new Measurement("NDCG@10", ndcgs[9]));
+                }
+
+                if (!modelNames.contains(mFolder)) {
+                    modelNames.add(mFolder);
+                }
+                results[f].put(mFolder, measurements);
+
+                if (count == 0) {
+                    writer.write("Model");
+                    for (Measurement m : measurements) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+                }
+
+                writer.write(mFolder);
+                for (Measurement m : measurements) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
+
+                count++;
+            }
+            writer.close();
+        }
+        Collections.sort(modelNames);
+
+        // summarize across folds
+        File metaSumFile = new File(resultFolder, phase + "meta-summary.txt");
+        if (verbose) {
+            System.out.println("--- Meta summarizing " + metaSumFile);
+        }
+        ArrayList<String> measureNames = null;
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(metaSumFile);
+        for (int f = 0; f < results.length; f++) {
+            if (results[f] == null) {
+                continue;
+            }
+            writer.write("Fold " + f + "\n");
+            for (String modelName : modelNames) {
+                ArrayList<Measurement> modelFoldMeasurements = results[f].get(modelName);
+                if (modelFoldMeasurements != null) {
+                    writer.write(modelName);
+                    for (Measurement m : modelFoldMeasurements) {
+                        writer.write("\t" + m.getValue());
+                    }
+
+                    if (measureNames == null) {
+                        measureNames = new ArrayList<String>();
+                        for (Measurement m : modelFoldMeasurements) {
+                            measureNames.add(m.getName());
+                        }
+                    }
+                    writer.write("\n");
+                }
+            }
+            writer.write("\n\n");
+        }
+
+        // average
+        if (measureNames != null) {
+            for (String measure : measureNames) {
+                writer.write(measure + "\n");
+                writer.write("Model\tNum-folds\tAverage\tStdv\n");
+                for (String model : modelNames) {
+                    ArrayList<Double> vals = new ArrayList<Double>();
+                    for (int f = 0; f < results.length; f++) {
+                        if (results[f] == null) {
+                            continue;
+                        }
+                        ArrayList<Measurement> modelFoldMeasurements = results[f].get(model);
+                        if (modelFoldMeasurements != null) {
+                            for (Measurement m : modelFoldMeasurements) {
+                                if (m.getName().equals(measure)) {
+                                    vals.add(m.getValue());
+                                }
+                            }
+                        }
+                    }
+
+                    double avg = StatisticsUtils.mean(vals);
+                    double std = StatisticsUtils.standardDeviation(vals);
+                    writer.write(model
+                            + "\t" + vals.size()
+                            + "\t" + avg
+                            + "\t" + std
+                            + "\n");
+                }
+                writer.write("\n\n");
+            }
+        }
+
+        writer.close();
     }
 }
