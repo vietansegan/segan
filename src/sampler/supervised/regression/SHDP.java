@@ -721,6 +721,13 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
     @Override
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
+        str.append("# components: ").append(topicWords.getNumComponents())
+                .append("\n");
+        return str.toString();
+    }
+
+    protected String printDebug() {
+        StringBuilder str = new StringBuilder();
         double totalWeight = 0.0;
         for (int k : topicWords.getSortedIndices()) {
             double[] distrs = topicWords.getComponent(k).topic.getDistribution();
