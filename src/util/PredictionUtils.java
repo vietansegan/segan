@@ -5,9 +5,12 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
 import util.evaluation.MultilabelClassificationEvaluation;
+import util.evaluation.RankingEvaluation;
 import util.evaluation.RankingPerformance;
 import util.evaluation.RegressionEvaluation;
 
@@ -103,6 +106,39 @@ public class PredictionUtils {
                     + inputFile);
         }
         return predVals;
+    }
+
+    public static void outputClassificationResults(File outputFile,
+            String[] instanceIds,
+            int[] trueLabels, // binary: 0 and 1 only
+            double[] predValues) {
+        if (instanceIds.length != trueLabels.length
+                || instanceIds.length != predValues.length) {
+            throw new RuntimeException("Lengths mismatched. "
+                    + "\t" + instanceIds.length
+                    + "\t" + trueLabels.length
+                    + "\t" + predValues.length);
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            Set<Integer> relevants = new HashSet<Integer>();
+            for (int ii = 0; ii < trueLabels.length; ii++) {
+                if (trueLabels[ii] == 1) {
+                    relevants.add(ii);
+                }
+            }
+            RankingEvaluation eval = new RankingEvaluation(predValues, relevants);
+            eval.computePRF();
+            for (Measurement m : eval.getMeasurements()) {
+                writer.write(m.getName() + "\t" + m.getValue() + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing results to "
+                    + outputFile);
+        }
     }
 
     public static void outputClassificationPredictions(
@@ -333,7 +369,7 @@ public class PredictionUtils {
                 double[][] singlePredictions = inputSingleModelClassifications(
                         new File(iterPredFolder, filenames[ff]));
                 MultilabelClassificationEvaluation eval = new MultilabelClassificationEvaluation(trueLabels, singlePredictions);
-                eval.computeMeasurements(); 
+                eval.computeMeasurements();
 
                 if (ff == 0) {
                     writer.write("File");

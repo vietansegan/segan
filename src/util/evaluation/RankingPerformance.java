@@ -37,7 +37,7 @@ public class RankingPerformance<A> {
     protected double aucROC;
     protected double aucPR;
     protected double f1;
-
+    
     public RankingPerformance(RankingItemList<A> rankedItems, Set<A> groundtruthSet, String folder) {
         this.rankingItemLists = rankedItems;
         this.groundtruthSet = groundtruthSet;

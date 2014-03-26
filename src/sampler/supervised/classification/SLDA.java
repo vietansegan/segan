@@ -7,14 +7,12 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import sampler.LDA;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
-import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
 import util.StatisticsUtils;
@@ -29,6 +27,7 @@ public class SLDA extends AbstractSampler {
     public static final int ALPHA = 0;
     public static final int BETA = 1;
     protected double sigma;
+    protected double gamma;
     // inputs
     protected int[][] words; // [D] x [N_d]
     protected int[][] labels; // D x L_d
@@ -49,7 +48,7 @@ public class SLDA extends AbstractSampler {
     private int numLabels;
     // info
     protected ArrayList<String> labelVocab;
-    
+
     public void setLabelVocab(ArrayList<String> lVoc) {
         this.labelVocab = lVoc;
     }
@@ -62,6 +61,7 @@ public class SLDA extends AbstractSampler {
                 sampler.hyperparams.get(ALPHA),
                 sampler.hyperparams.get(BETA),
                 sampler.sigma,
+                sampler.gamma,
                 sampler.initState,
                 sampler.paramOptimized,
                 sampler.BURN_IN,
@@ -74,6 +74,7 @@ public class SLDA extends AbstractSampler {
             int V, int K, int L,
             double alpha, double beta,
             double sigma,
+            double gamma,
             InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
@@ -90,6 +91,7 @@ public class SLDA extends AbstractSampler {
         this.hyperparams.add(alpha);
         this.hyperparams.add(beta);
         this.sigma = sigma;
+        this.gamma = gamma;
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
@@ -132,7 +134,10 @@ public class SLDA extends AbstractSampler {
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
-                .append("_K-").append(K);
+                .append("_K-").append(K)
+                .append("_s-").append(sigma)
+                .append("_g-").append(gamma)
+                .append("-");
         for (double hp : this.hyperparams) {
             str.append(hp).append("-");
         }
@@ -147,7 +152,7 @@ public class SLDA extends AbstractSampler {
         this.docLabels = new SparseCount[D];
         for (int d = 0; d < D; d++) {
             this.docLabels[d] = new SparseCount();
-            for(int ii=0; ii<labels[d].length; ii++) {
+            for (int ii = 0; ii < labels[d].length; ii++) {
                 this.docLabels[d].increment(labels[d][ii]);
             }
         }
@@ -224,7 +229,8 @@ public class SLDA extends AbstractSampler {
 
         initializeAssignments();
 
-        updateVs();
+//        updateVs();
+        updateManualVs();
 
         if (debug) {
             validate("Initialized");
@@ -366,7 +372,8 @@ public class SLDA extends AbstractSampler {
         startTime = System.currentTimeMillis();
         for (iter = 0; iter < MAX_ITER; iter++) {
             long sampleTime = sampleZs(REMOVE, ADD, REMOVE, ADD);
-            long updateTime = updateVs();
+//            long updateTime = updateVs();
+            long updateTime = updateManualVs();
 
             // store llh after every iteration
             double loglikelihood = this.getLogLikelihood();
@@ -454,25 +461,56 @@ public class SLDA extends AbstractSampler {
                     }
                 }
 
-                double[] probs = new double[K];
+                double[] logprobs = new double[K];
                 for (int k = 0; k < K; k++) {
-                    probs[k] = (docTopics[d].getCount(k) + hyperparams.get(ALPHA))
-                            * (topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                            / (topicWords[k].getCountSum() + totalBeta);
+                    logprobs[k] = Math.log(docTopics[d].getCount(k) + hyperparams.get(ALPHA))
+                            + Math.log((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                            / (topicWords[k].getCountSum() + totalBeta));
 
                     if (labels != null) {
                         double totalScore = 0.0;
                         double[] updatedScores = new double[L];
                         for (int l = 0; l < L; l++) {
-                            updatedScores[l] = Math.exp(scores[d][l] + v[l][k] / words[d].length);
-                            totalScore += updatedScores[l];
+                            updatedScores[l] = scores[d][l] + v[l][k] / words[d].length;
+                            totalScore = SamplerUtils.logAdd(totalScore, updatedScores[l]);
                         }
                         for (int ll : labels[d]) {
-                            probs[k] *= updatedScores[ll] / totalScore;
+                            logprobs[k] += updatedScores[ll] - totalScore;
                         }
                     }
                 }
-                int sampledZ = SamplerUtils.scaleSample(probs);
+                int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+
+                // debug
+                if (sampledZ == K) {
+                    for (int k = 0; k < K; k++) {
+                        double labelLlh = 1.0;
+                        double totalScore = 0.0;
+                        double[] updatedScores = new double[L];
+                        for (int l = 0; l < L; l++) {
+                            updatedScores[l] = Math.exp(scores[d][l] + v[l][k] / words[d].length);
+                            totalScore += updatedScores[l];
+
+                            System.out.println("l = " + l
+                                    + "\t" + scores[d][l]
+                                    + "\t" + v[l][k]
+                                    + "\t" + updatedScores[l]
+                                    + "\t" + totalScore);
+                        }
+
+                        for (int ll : labels[d]) {
+                            labelLlh *= updatedScores[ll] / totalScore;
+                        }
+                        logln("iter = " + iter
+                                + ". d = " + d
+                                + ". n = " + n
+                                + ". " + MiscUtils.formatDouble((docTopics[d].getCount(k) + hyperparams.get(ALPHA)))
+                                + ". " + MiscUtils.formatDouble((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (topicWords[k].getCountSum() + totalBeta))
+                                + ". " + (labelLlh)
+                                + ". " + logprobs[k]);
+                    }
+                }
 
                 if (sampledZ != z[d][n]) {
                     numTokensChanged++;
@@ -485,7 +523,7 @@ public class SLDA extends AbstractSampler {
                 if (addToData) {
                     docTopics[d].increment(z[d][n]);
                     for (int l = 0; l < L; l++) {
-                        scores[d][l] -= v[l][z[d][n]] / words[d].length;
+                        scores[d][l] += v[l][z[d][n]] / words[d].length;
                     }
                 }
             }
@@ -496,6 +534,9 @@ public class SLDA extends AbstractSampler {
 
     private long updateVs() {
         long sTime = System.currentTimeMillis();
+        
+        // debug
+        printLabelLogLikelihood();
 
         Objective obj = new Objective(v);
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(obj);
@@ -518,7 +559,69 @@ public class SLDA extends AbstractSampler {
         }
 
         updateScores();
+        
+        // debug
+        printLabelLogLikelihood();
 
+        return System.currentTimeMillis() - sTime;
+    }
+
+    private long updateManualVs() {
+        long sTime = System.currentTimeMillis();
+        
+        // debug
+//        printLabelLogLikelihood();
+        
+        // precompute
+        SparseVector[] expDocDotProds = new SparseVector[D];
+        double[] docNorms = new double[D];
+        for (int d = 0; d < D; d++) {
+            double[] expDocDPs = new double[L];
+            for (int l = 0; l < L; l++) {
+                for (int k : docTopics[d].getSparseCounts().getIndices()) {
+                    expDocDPs[l] += v[l][k] * docTopics[d].getCount(k) / words[d].length;
+                }
+                expDocDPs[l] = Math.exp(expDocDPs[l]);
+            }
+            docNorms[d] = StatisticsUtils.sum(expDocDPs);
+
+            // sparse vector
+            expDocDotProds[d] = new SparseVector();
+            for (int l : docLabels[d].getIndices()) {
+                expDocDotProds[d].set(l, expDocDPs[l]);
+            }
+        }
+
+        // likelihood
+        double[][] grads = new double[L][K];
+        for (int d = 0; d < D; d++) {
+            for (int l : docLabels[d].getIndices()) {
+                for (int k = 0; k < K; k++) {
+                    grads[l][k] += docLabels[d].getCount(l)
+                            * (docTopics[d].getCount(k) / words[d].length)
+                            * (1 - expDocDotProds[d].get(l) / docNorms[d]);
+                }
+            }
+        }
+
+        // prior
+        for (int l = 0; l < L; l++) {
+            for (int k = 0; k < K; k++) {
+                grads[l][k] -= v[l][k] / sigma;
+            }
+        }
+
+        for (int l = 0; l < L; l++) {
+            for (int k = 0; k < K; k++) {
+                v[l][k] += gamma * grads[l][k];
+            }
+        }
+
+        updateScores();
+        
+        // debug
+//        printLabelLogLikelihood();
+        
         return System.currentTimeMillis() - sTime;
     }
 
@@ -564,9 +667,9 @@ public class SLDA extends AbstractSampler {
 
         // initialize assignments
         sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
-        
+
         updateScores();
-        
+
         if (verbose) {
             logln("After initialization");
             int docTopicCount = 0;
@@ -613,6 +716,35 @@ public class SLDA extends AbstractSampler {
         PredictionUtils.outputSingleModelClassifications(
                 new File(outputResultFile), predictedScores);
     }
+    
+    private void printLabelLogLikelihood() {
+        double labelLlh = 0.0;
+        for (int d = 0; d < D; d++) {
+            double[] docDotProds = new double[L];
+            double docTotal = 0.0;
+            for (int l = 0; l < L; l++) {
+                for (int k : docTopics[d].getSparseCounts().getIndices()) {
+                    docDotProds[l] += v[l][k] * docTopics[d].getCount(k) / words[d].length;
+                }
+                docTotal = SamplerUtils.logAdd(docTotal, docDotProds[l]);
+            }
+
+            for (int l : docLabels[d].getIndices()) {
+                labelLlh += docLabels[d].getCount(l) * (docDotProds[l] - docTotal);
+            }
+        }
+
+        double paramPrior = 0.0;
+        for (int l = 0; l < L; l++) {
+            for (int k = 0; k < K; k++) {
+                paramPrior -= v[l][k] * v[l][k];
+            }
+        }
+        paramPrior /= 2 * sigma;
+        
+        logln("label = " + MiscUtils.formatDouble(labelLlh)
+                + ". param = " + MiscUtils.formatDouble(paramPrior));
+    }
 
     @Override
     public double getLogLikelihood() {
@@ -653,7 +785,7 @@ public class SLDA extends AbstractSampler {
         logln("*** word: " + MiscUtils.formatDouble(wordLlh)
                 + ". topic: " + MiscUtils.formatDouble(topicLlh)
                 + ". label: " + MiscUtils.formatDouble(labelLlh)
-                + ". lambdaLlh: " + MiscUtils.formatDouble(labelLlh));
+                + ". param: " + MiscUtils.formatDouble(paramPrior));
         double llh = wordLlh
                 + topicLlh
                 + labelLlh
@@ -804,7 +936,7 @@ public class SLDA extends AbstractSampler {
                     + zipFilepath);
         }
     }
-    
+
     public void outputTopicTopWords(File file, int numTopWords) throws Exception {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -814,7 +946,7 @@ public class SLDA extends AbstractSampler {
             logln("Outputing per-topic top words to " + file);
         }
 
-        
+
         BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < K; k++) {
             double[] distrs = topicWords[k].getDistribution();
@@ -862,7 +994,7 @@ public class SLDA extends AbstractSampler {
         }
         writer.close();
     }
-    
+
     public static void parallelTest(int[][] newWords, File iterPredFolder, SLDA sampler) {
         File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
         if (!reportFolder.exists()) {
@@ -937,10 +1069,13 @@ public class SLDA extends AbstractSampler {
             for (int l = 0; l < L; l++) {
                 for (int k = 0; k < K; k++) {
                     double vv = getParameter(l, k);
-                    prior += vv * vv;
+                    prior -= vv * vv;
                 }
             }
             prior /= 2 * sigma;
+
+            // debug
+            System.out.println("llh = " + llh + ". prior = " + prior);
 
             return prior + llh;
         }
@@ -967,6 +1102,7 @@ public class SLDA extends AbstractSampler {
                 }
             }
 
+            // likelihood
             double[][] grads = new double[L][K];
             for (int d = 0; d < D; d++) {
                 for (int l : docLabels[d].getIndices()) {
@@ -978,12 +1114,14 @@ public class SLDA extends AbstractSampler {
                 }
             }
 
+            // prior
             for (int l = 0; l < L; l++) {
                 for (int k = 0; k < K; k++) {
                     grads[l][k] -= getParameter(l, k) / sigma;
                 }
             }
 
+            // update
             int count = 0;
             for (int l = 0; l < L; l++) {
                 for (int k = 0; k < K; k++) {
