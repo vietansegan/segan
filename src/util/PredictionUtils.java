@@ -130,6 +130,7 @@ public class PredictionUtils {
             }
             RankingEvaluation eval = new RankingEvaluation(predValues, relevants);
             eval.computePRF();
+            eval.computeAUCs();
             for (Measurement m : eval.getMeasurements()) {
                 writer.write(m.getName() + "\t" + m.getValue() + "\n");
             }
