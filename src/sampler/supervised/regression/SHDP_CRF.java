@@ -9,14 +9,11 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import optimization.GurobiMLRL2Norm;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.Options;
 import regression.Regressor;
 import sampler.LDA;
 import sampling.likelihood.DirMult;
 import sampling.util.FullTable;
 import sampling.util.Restaurant;
-import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
@@ -27,10 +24,13 @@ import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
 
 /**
+ * Implementation of Supervised Hierarchical Dirichlet Process using the Chinese
+ * restaurant franchise representation (i.e., based on the first inference
+ * algorithm in Teh et al. JASA06).
  *
  * @author vietan
  */
-public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDataset> {
+public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final int PSEUDO_INDEX = -1;
     public static final int ALPHA_GLOBAL = 0;
@@ -300,15 +300,14 @@ public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDa
         if (verbose) {
             logln("--- LDA loaded. Start initializing assingments ...");
         }
-        
-        for(int k=0; k<K; k++) {
+
+        for (int k = 0; k < K; k++) {
             SHDPDish dish = createDish();
         }
-        
-        for(int d=0; d<D; d++) {
-            
+
+        for (int d = 0; d < D; d++) {
         }
- 
+
         for (int d = 0; d < D; d++) {
             // create tables
             for (int k = 0; k < K; k++) {
@@ -605,7 +604,7 @@ public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDa
             boolean resObserved, boolean extend) {
         int curObs = words[d][n];
         SHDPTable curTable = z[d][n];
-        
+
         if (removeFromModel) {
             curTable.getContent().getContent().decrement(words[d][n]);
             if (curTable.isEmpty()) {
@@ -1585,273 +1584,6 @@ public class SHDPOld extends AbstractSampler implements Regressor<ResponseTextDa
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + SHDPOld.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar:dist/lib/*' " + SHDP_CRF.class.getName() + " -help";
     }
-
-    public static void main(String[] args) {
-        try {
-            // create the command line parser
-            parser = new BasicParser();
-
-            // create the Options
-            options = new Options();
-
-            // directories
-            addOption("dataset", "Dataset");
-            addOption("data-folder", "Processed data folder");
-            addOption("format-folder", "Folder holding formatted data");
-            addOption("format-file", "Formatted file name");
-            addOption("output", "Output folder");
-
-            // sampling configurations
-            addOption("burnIn", "Burn-in");
-            addOption("maxIter", "Maximum number of iterations");
-            addOption("sampleLag", "Sample lag");
-            addOption("report", "Report interval");
-
-            // model parameters
-            addOption("K", "Number of topics");
-            addOption("numTopwords", "Number of top words per topic");
-
-            // model hyperparameters
-            addOption("alpha-global", "Hyperparameter of global DP");
-            addOption("alpha-local", "Hyperparameter of local DP");
-            addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
-                    + "for word distributions");
-            addOption("mu", "Prior mean of regression parameters");
-            addOption("sigma", "Prior variance of regression parameters");
-            addOption("rho", "Variance of the response variable");
-
-            // running configurations
-            addOption("cv-folder", "Cross validation folder");
-            addOption("num-folds", "Number of folds");
-            addOption("fold", "The cross-validation fold to run");
-            addOption("run-mode", "Running mode");
-
-            options.addOption("paramOpt", false, "Whether hyperparameter "
-                    + "optimization using slice sampling is performed");
-            options.addOption("v", false, "verbose");
-            options.addOption("d", false, "debug");
-            options.addOption("z", false, "standardize (z-score normalization)");
-            options.addOption("help", false, "Help");
-
-            cmd = parser.parse(options, args);
-            if (cmd.hasOption("help")) {
-                CLIUtils.printHelp(getHelpString(), options);
-                return;
-            }
-
-            if (cmd.hasOption("cv-folder")) {
-//                runCrossValidation();
-            } else {
-//                runModel();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
-    }
-
-    /*public static void runCrossValidation() throws Exception {
-     //        String datasetName = cmd.getOptionValue("dataset");
-     //        String datasetFolder = cmd.getOptionValue("data-folder");
-     String resultFolder = cmd.getOptionValue("output");
-     //        String formatFolder = cmd.getOptionValue("format-folder");
-     //        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-     int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-
-     int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-     int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-     int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
-     int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-
-     boolean paramOpt = cmd.hasOption("paramOpt");
-     boolean verbose = cmd.hasOption("v");
-     boolean debug = cmd.hasOption("d");
-     InitialState initState = InitialState.RANDOM;
-
-     String cvFolder = cmd.getOptionValue("cv-folder");
-     int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
-     String runMode = cmd.getOptionValue("run-mode");
-     int foldIndex = -1;
-     if (cmd.hasOption("fold")) {
-     foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-     }
-
-     for (int ii = 0; ii < numFolds; ii++) {
-     if (foldIndex != -1 && ii != foldIndex) {
-     continue;
-     }
-     if (verbose) {
-     System.out.println("\nRunning fold " + foldIndex);
-     }
-
-     Fold fold = new Fold(ii, cvFolder);
-     File foldFolder = new File(resultFolder, fold.getFoldName());
-     ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
-     ResponseTextDataset trainData = foldData[Fold.TRAIN];
-     ResponseTextDataset devData = foldData[Fold.DEV];
-     ResponseTextDataset testData = foldData[Fold.TEST];
-
-     if (cmd.hasOption("z")) {
-     ResponseTextDataset.zNormalize(trainData, devData, testData);
-     }
-            
-     if (verbose) {
-     System.out.println("Fold " + fold.getFoldName());
-     System.out.println("--- training: " + trainData.toString());
-     System.out.println("--- development: " + devData.toString());
-     System.out.println("--- test: " + testData.toString());
-     System.out.println();
-     }
-
-     double meanResponse = StatisticsUtils.mean(trainData.getResponses());
-     double stddevResponse = StatisticsUtils.standardDeviation(trainData.getResponses());
-     double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-     double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-     double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-            
-     SHDP sampler = new SHDP();
-     sampler.setVerbose(verbose);
-     sampler.setDebug(debug);
-     sampler.setLog(true);
-     sampler.setReport(true);
-     sampler.setWordVocab(trainData.getWordVocab());
-
-     sampler.train(trainData);
-     sampler.configure(foldFolder.getAbsolutePath(),
-     trainData.getWordVocab().size(), K,
-     alpha, beta,
-     mu, sigma, rho,
-     initState, paramOpt,
-     burnIn, maxIters, sampleLag, repInterval);
-
-     File samplerFolder = new File(foldFolder, sampler.getSamplerFolder());
-     File iterPredFolder = sampler.getIterationPredictionFolder();
-     IOUtils.createFolder(samplerFolder);
-     }
-        
-        
-        
-     if (resultFolder == null) {
-     throw new RuntimeException("Result folder (--output) is not set.");
-     }
-
-     if (verbose) {
-     System.out.println("\nLoading formatted data ...");
-     }
-
-     ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
-     data.setFormatFilename(formatFile);
-     data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
-     data.prepareTopicCoherence(numTopWords);
-
-
-     // hyperparameters
-     double alpha_global = CLIUtils.getDoubleArgument(cmd, "alpha-global", 0.1);
-     double alpha_local = CLIUtils.getDoubleArgument(cmd, "alpha-local", 0.1);
-     double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-     double[] responses = data.getResponses();
-     if (cmd.hasOption("z")) {
-     ZNormalizer zNorm = new ZNormalizer(responses);
-     for (int i = 0; i < responses.length; i++) {
-     responses[i] = zNorm.normalize(responses[i]);
-     }
-     }
-
-     double meanResponse = StatisticsUtils.mean(responses);
-     double stddevResponse = StatisticsUtils.standardDeviation(responses);
-
-     double mu = CLIUtils.getDoubleArgument(cmd, "mu", meanResponse);
-     double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", stddevResponse);
-     double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-
-     if (verbose) {
-     System.out.println("\nLoading cross validation info from " + cvFolder);
-     }
-     ArrayList<RegressionDocumentInstance> instanceList = new ArrayList<RegressionDocumentInstance>();
-     for (int i = 0; i < data.getDocIds().length; i++) {
-     instanceList.add(new RegressionDocumentInstance(
-     data.getDocIds()[i],
-     data.getWords()[i],
-     data.getResponses()[i]));
-     }
-     String cvName = "";
-     CrossValidation<String, RegressionDocumentInstance> crossValidation =
-     new CrossValidation<String, RegressionDocumentInstance>(
-     cvFolder,
-     cvName,
-     instanceList);
-     crossValidation.inputFolds(numFolds);
-     int foldIndex = -1;
-     if (cmd.hasOption("fold")) {
-     foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
-     }
-
-     for (Fold<String, ? extends Instance<String>> fold : crossValidation.getFolds()) {
-     if (foldIndex != -1 && fold.getIndex() != foldIndex) {
-     continue;
-     }
-     if (verbose) {
-     System.out.println("\nRunning fold " + foldIndex);
-     }
-
-     File foldFolder = new File(resultFolder, fold.getFoldName());
-
-     SHDP sampler = new SHDP();
-     sampler.setVerbose(verbose);
-     sampler.setDebug(debug);
-     sampler.setLog(true);
-     sampler.setReport(true);
-     sampler.setWordVocab(data.getWordVocab());
-
-     // training data
-     ArrayList<Integer> trInstIndices = fold.getTrainingInstances();
-     int[][] trRevWords = data.getDocWords(trInstIndices);
-     double[] trResponses = data.getResponses(trInstIndices);
-
-     // test data
-     ArrayList<Integer> teInstIndices = fold.getTestingInstances();
-     int[][] teRevWords = data.getDocWords(teInstIndices);
-     double[] teResponses = data.getResponses(teInstIndices);
-
-     sampler.configure(foldFolder.getAbsolutePath(), trRevWords, trResponses,
-     data.getWordVocab().size(), alpha_global, alpha_local, beta,
-     mu, sigma, rho,
-     initState, paramOpt,
-     burnIn, maxIters, sampleLag, repInterval);
-
-     String samplerFolder = new File(foldFolder, sampler.getSamplerFolder()).getAbsolutePath();
-     File iterPredFolder = sampler.getIterationPredictionFolder();
-     IOUtils.createFolder(samplerFolder);
-
-     if (runMode.equals("train")) {
-     sampler.initialize();
-     sampler.iterate();
-     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
-     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
-     } else if (runMode.equals("test")) {
-     sampler.regressNewDocuments(teRevWords);
-
-     File teResultFolder = new File(samplerFolder, "te-results");
-     IOUtils.createFolder(teResultFolder);
-     GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
-     } else if (runMode.equals("train-test")) {
-     // train
-     sampler.initialize();
-     sampler.iterate();
-     sampler.outputTopicTopWords(samplerFolder + TopWordFile, numTopWords);
-     sampler.outputTopicCoherence(samplerFolder + TopicCoherenceFile, data.getTopicCoherence());
-
-     // test
-     sampler.regressNewDocuments(teRevWords);
-     File teResultFolder = new File(samplerFolder, "te-results");
-     IOUtils.createFolder(teResultFolder);
-     GibbsRegressorUtils.evaluate(iterPredFolder, teResultFolder, teResponses);
-     } else {
-     throw new RuntimeException("Run mode " + runMode + " not supported");
-     }
-     }
-     }*/
 }

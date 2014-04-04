@@ -2512,11 +2512,6 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         this.inputModel(new File(reportFolder, "iter-" + MAX_ITER + ".zip").getAbsolutePath());
     }
 
-    public void inputFinalState() {
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        this.inputState(new File(reportFolder, "iter-" + MAX_ITER + ".zip"));
-    }
-
     @Override
     public void outputState(String filepath) {
         if (verbose) {
@@ -3485,6 +3480,11 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
             options.addOption("v", false, "verbose");
             options.addOption("d", false, "debug");
             options.addOption("help", false, "Help");
+            
+            options.addOption("train", false, "train");
+            options.addOption("dev", false, "development");
+            options.addOption("test", false, "test");
+            options.addOption("parallel", false, "parallel");
 
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
