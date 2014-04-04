@@ -276,10 +276,7 @@ public class ResponseTextDataset extends TextDataset {
             addCorpusProcessorOptions();
 
             // cross validation
-            addOption("num-folds", "Number of folds. Default 5.");
-            addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
-            addOption("cv-folder", "Folder to store cross validation folds");
-            addOption("num-classes", "Number of classes that the response");
+            addCrossValidationOptions();
 
             addOption("run-mode", "Run mode");
             options.addOption("v", false, "Verbose");
@@ -363,10 +360,13 @@ public class ResponseTextDataset extends TextDataset {
         dataset.setFormatFilename(formatFile);
 
         // load text data
-        if (cmd.hasOption("file")) {
+        File textPath = new File(textInputData);
+        if (textPath.isFile()) {
             dataset.loadTextDataFromFile(textInputData);
-        } else {
+        } else if (textPath.isDirectory()) {
             dataset.loadTextDataFromFolder(textInputData);
+        } else {
+            throw new RuntimeException(textInputData + " is neither a file nor a folder");
         }
         dataset.loadResponses(responseFile); // load response data
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));

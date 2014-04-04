@@ -770,6 +770,7 @@ public class TextDataset extends AbstractTokenizeDataset {
         addOption("tr2dev-ratio", "Training-to-development ratio. Default 0.8.");
         addOption("cv-folder", "Folder to store cross validation folds");
         addOption("fold", "The cross-validation fold to run");
+        addOption("num-classes", "Number of classes that the response");
     }
 
     public static void addDataDirectoryOptions() {
@@ -845,10 +846,13 @@ public class TextDataset extends AbstractTokenizeDataset {
         CorpusProcessor corpProc = createCorpusProcessor();
         TextDataset dataset = new TextDataset(datasetName, datasetFolder, corpProc);
         // load text data
-        if (cmd.hasOption("file")) {
+        File textPath = new File(textInputData);
+        if (textPath.isFile()) {
             dataset.loadTextDataFromFile(textInputData);
-        } else {
+        } else if (textPath.isDirectory()) {
             dataset.loadTextDataFromFolder(textInputData);
+        } else {
+            throw new RuntimeException(textInputData + " is neither a file nor a folder");
         }
         dataset.createCrossValidation(cvFolder, numFolds, trToDevRatio);
     }

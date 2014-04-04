@@ -612,10 +612,13 @@ public class LabelTextDataset extends TextDataset {
         dataset.setFormatFilename(formatFile);
 
         // load text data
-        if (cmd.hasOption("file")) {
+        File textPath = new File(textInputData);
+        if (textPath.isFile()) {
             dataset.loadTextDataFromFile(textInputData);
-        } else {
+        } else if (textPath.isDirectory()) {
             dataset.loadTextDataFromFolder(textInputData);
+        } else {
+            throw new RuntimeException(textInputData + " is neither a file nor a folder");
         }
         dataset.loadLabels(labelFile); // load response data
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
