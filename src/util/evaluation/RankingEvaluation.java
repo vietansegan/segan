@@ -86,8 +86,8 @@ public class RankingEvaluation {
             }
 
             // create a temp folder
+            File tempFolder = new File("temp");
             if (aucListFile == null) {
-                File tempFolder = new File("temp");
                 IOUtils.createFolder(tempFolder);
                 this.aucListFile = new File(tempFolder, "auc-list").getAbsolutePath();
             }
@@ -128,8 +128,7 @@ public class RankingEvaluation {
             in.close();
 
             // delete the temp folder
-            if (aucListFile == null) {
-                File tempFolder = new File("temp");
+            if (tempFolder.exists()) {
                 IOUtils.deleteFolderContent(tempFolder.getAbsolutePath());
                 tempFolder.delete();
             }

@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.slda;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -276,16 +276,6 @@ public class LexicalSLDA extends SLDA {
 
         if (log && isLogging()) {
             closeLogger();
-        }
-
-        try {
-            if (paramOptimized && log) {
-                this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        HyperparameterFile));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception iter = " + iter);
         }
     }
 

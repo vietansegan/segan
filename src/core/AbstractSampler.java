@@ -194,6 +194,10 @@ public abstract class AbstractSampler implements Serializable {
         writer.close();
     }
 
+    public ArrayList<String> getWordVocab() {
+        return this.wordVocab;
+    }
+
     public void setWordVocab(ArrayList<String> vocab) {
         this.wordVocab = vocab;
     }
@@ -254,10 +258,8 @@ public abstract class AbstractSampler implements Serializable {
         }
 
         try {
-            if (logLikelihoods != null) {
-                outputLogLikelihoods(new File(getSamplerFolderPath(), LikelihoodFile));
-            }
             if (paramOptimized && log) {
+                IOUtils.createFolder(getSamplerFolderPath());
                 this.outputSampledHyperparameters(
                         new File(getSamplerFolderPath(), HyperparameterFile));
             }

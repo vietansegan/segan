@@ -149,7 +149,7 @@ public class LDA extends AbstractSampler {
             logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
                 double changeRatio = (double) numTokensChanged / numTokens;
-                String str = "Iter " + iter
+                String str = "Iter " + iter + "/" + MAX_ITER
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
                         + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
@@ -267,7 +267,7 @@ public class LDA extends AbstractSampler {
 
             if (verbose && iter % REP_INTERVAL == 0) {
                 double changeRatio = (double) numTokensChanged / numTokens;
-                String str = "Iter " + iter
+                String str = "Iter " + iter + "/" + MAX_ITER
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
                         + ". change ratio = " + MiscUtils.formatDouble(changeRatio)

@@ -1,6 +1,7 @@
 package sampling.util;
 
 import cc.mallet.types.Dirichlet;
+import cc.mallet.util.Randoms;
 import java.util.Arrays;
 import sampling.likelihood.DirMult;
 
@@ -104,9 +105,8 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
     public void sampleTopic(double beta, double gamma) {
         int V = content.getDimension();
         double[] meanVector = new double[V];
-        if (parent == null) { // root
-            Arrays.fill(meanVector, beta / V);
-        } else {
+        Arrays.fill(meanVector, beta / V);
+        if (!this.isRoot()) { // root
             SparseCount observations = this.content.getSparseCounts();
             for (int obs : observations.getIndices()) {
                 meanVector[obs] += observations.getCount(obs);

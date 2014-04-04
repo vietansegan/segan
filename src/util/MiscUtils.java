@@ -2,6 +2,8 @@ package util;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -12,6 +14,15 @@ import java.util.List;
 public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
+
+    public static ArrayList<RankingItem<Integer>> getRankingList(double[] scores) {
+        ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
+        for (int ii = 0; ii < scores.length; ii++) {
+            rankItems.add(new RankingItem<Integer>(ii, scores[ii]));
+        }
+        Collections.sort(rankItems);
+        return rankItems;
+    }
 
     public static void incrementMap(HashMap<Integer, Integer> map, Integer key) {
         Integer count = map.get(key);

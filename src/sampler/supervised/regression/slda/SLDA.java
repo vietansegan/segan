@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.slda;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
@@ -51,7 +51,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     // internal
     protected int numTokensChanged = 0;
     protected int numTokens = 0;
-    private String optType = "gurobi";
+    private String optType = "lbfgs";
 
     public void setOptimizerType(String ot) {
         this.optType = ot;
@@ -112,10 +112,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.setName();
-
-        if (!debug) {
-            System.err.close();
-        }
 
         this.report = true;
 
@@ -434,16 +430,6 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (log && isLogging()) {
             closeLogger();
         }
-
-        try {
-            if (paramOptimized && log) {
-                this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        HyperparameterFile));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception iter = " + iter);
-        }
     }
 
     /**
@@ -471,18 +457,18 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                     docRegressMeans[d] -= topicParams[z[d][n]] / words[d].length;
                 }
 
-                double[] probs = new double[K];
+                double[] logprobs = new double[K];
                 for (int k = 0; k < K; k++) {
-                    probs[k] = (docTopics[d].getCount(k) + hyperparams.get(ALPHA))
-                            * (topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                            / (topicWords[k].getCountSum() + totalBeta);
+                    logprobs[k] = Math.log(docTopics[d].getCount(k) + hyperparams.get(ALPHA))
+                            + Math.log((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                            / (topicWords[k].getCountSum() + totalBeta));
                     if (observe) {
                         double mean = docRegressMeans[d] + topicParams[k] / words[d].length;
-                        probs[k] *= StatisticsUtils.normalProbability(responses[d], mean, sqrtRho);
+                        logprobs[k] += StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
                     }
                 }
 
-                int sampledZ = SamplerUtils.scaleSample(probs);
+                int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
 
                 if (z[d][n] != sampledZ) {
                     numTokensChanged++; // for debugging
@@ -610,7 +596,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         mlr.setRho(hyperparams.get(RHO));
         mlr.setMean(hyperparams.get(MU));
         mlr.setSigma(hyperparams.get(SIGMA));
-        topicParams = mlr.solve();
+        topicParams = mlr.solveExact();
 
         // update current predictions
         updatePredictionValues();

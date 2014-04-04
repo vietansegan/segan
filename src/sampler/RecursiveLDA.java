@@ -582,21 +582,20 @@ public class RecursiveLDA extends AbstractSampler {
                 stack.add(child);
             }
 
-            if (node.getParent() == null) {
-                continue;
-            }
-
             int level = node.getLevel();
-            double[] parentTopics = node.getParent().getTopics()[node.getIndex()].getDistribution();
-            String[] parentTopWords = getTopWords(parentTopics, numTopWords);
-            for (int l = 0; l < level; l++) {
-                writer.write("\t");
+            if (node.getParent() != null) {
+                double[] parentTopics = node.getParent().getTopics()[node.getIndex()].getDistribution();
+                String[] parentTopWords = getTopWords(parentTopics, numTopWords);
+                for (int l = 0; l < level; l++) {
+                    writer.write("\t");
+                }
+                writer.write("[" + node.getPathString()
+                        + ": " + node.getParent().getTopics()[node.getIndex()].getCountSum() + "]");
+                for (String tw : parentTopWords) {
+                    writer.write(" " + tw);
+                }
+                writer.write("\n");
             }
-            writer.write("[" + node.getPathString() + ": " + node.getParent().getTopics()[node.getIndex()].getCountSum() + "]");
-            for (String tw : parentTopWords) {
-                writer.write(" " + tw);
-            }
-            writer.write("\n");
 
             if (node.getChildren().isEmpty()) {
                 DirMult[] topics = node.getTopics();

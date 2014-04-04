@@ -5,12 +5,15 @@ import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
 import optimization.GurobiMLRL1Norm;
 import optimization.GurobiMLRL2Norm;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import util.CLIUtils;
 import util.IOUtils;
+import util.RankingItem;
 
 /**
  *
@@ -167,6 +170,64 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
 
     public double[] getWeights() {
         return this.weights;
+    }
+
+    public static double[] inputWeights(File inputFile) {
+        double[] ws = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            int dim = Integer.parseInt(reader.readLine());
+            ws = new double[dim];
+            for (int ii = 0; ii < dim; ii++) {
+                ws[ii] = Double.parseDouble(reader.readLine().split("\t")[0]);
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing weights from "
+                    + inputFile);
+        }
+        return ws;
+    }
+
+    public static void outputWeights(File outputFile, double[] weights) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(weights.length + "\n");
+            for (int ii = 0; ii < weights.length; ii++) {
+                writer.write(weights[ii] + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing weights to "
+                    + outputFile);
+        }
+    }
+
+    public static void outputWeights(File outputFile, double[] weights, ArrayList<String> weightNames) {
+        if (weights.length != weightNames.size()) {
+            throw new RuntimeException("Dimensions mismatch");
+        }
+        try {
+            ArrayList<RankingItem<String>> rankFeatures = new ArrayList<RankingItem<String>>();
+            for (int ii = 0; ii < weightNames.size(); ii++) {
+                rankFeatures.add(new RankingItem<String>(weightNames.get(ii), weights[ii]));
+            }
+            Collections.sort(rankFeatures);
+
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(weights.length + "\n");
+            for (int ii = 0; ii < weights.length; ii++) {
+                RankingItem<String> item = rankFeatures.get(ii);
+                writer.write(item.getObject() + "\t" + item.getPrimaryValue() + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing weights to "
+                    + outputFile);
+        }
     }
 
     public static String getHelpString() {

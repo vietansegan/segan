@@ -8,6 +8,8 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import sampler.LDA;
 import sampling.likelihood.DirMult;
 import util.IOUtils;
@@ -18,6 +20,7 @@ import util.SamplerUtils;
 import util.StatisticsUtils;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
+import util.evaluation.RankingEvaluation;
 
 /**
  *
@@ -29,13 +32,12 @@ public class BinarySLDA extends AbstractSampler {
     public static final int NEGATIVE = -1;
     public static final int ALPHA = 0;
     public static final int BETA = 1;
-    public static final int LAMBDA_MEAN = 2;
-    public static final int LAMBDA_VAR = 3;
+    protected double mean;
+    protected double sigma;
     // data statistics
     protected int K;
     protected int V;
     protected int D;
-    protected int numPostives;
     // inputs
     protected int[][] words; // [D] x [N_d]
     protected int[] labels; // [D] binary labels
@@ -49,6 +51,7 @@ public class BinarySLDA extends AbstractSampler {
     private int numTokensChanged = 0;
     private int numTokens = 0;
     private ArrayList<double[]> lambdasOverTime;
+    private Set<Integer> positives;
 
     public void configure(BinarySLDA sampler) {
         this.configure(sampler.folder,
@@ -56,8 +59,8 @@ public class BinarySLDA extends AbstractSampler {
                 sampler.K,
                 sampler.hyperparams.get(ALPHA),
                 sampler.hyperparams.get(BETA),
-                sampler.hyperparams.get(LAMBDA_MEAN),
-                sampler.hyperparams.get(LAMBDA_VAR),
+                sampler.mean,
+                sampler.sigma,
                 sampler.initState,
                 sampler.paramOptimized,
                 sampler.BURN_IN,
@@ -115,8 +118,8 @@ public class BinarySLDA extends AbstractSampler {
             logln("--- num topics:\t" + K);
             logln("--- alpha:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA)));
             logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
-            logln("--- label mean:\t" + MiscUtils.formatDouble(hyperparams.get(LAMBDA_MEAN)));
-            logln("--- label variance:\t" + MiscUtils.formatDouble(hyperparams.get(LAMBDA_VAR)));
+            logln("--- label mean:\t" + MiscUtils.formatDouble(mean));
+            logln("--- label variance:\t" + MiscUtils.formatDouble(sigma));
 
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
@@ -147,7 +150,8 @@ public class BinarySLDA extends AbstractSampler {
                 .append("_K-").append(K)
                 .append("_a-").append(formatter.format(hyperparams.get(ALPHA)))
                 .append("_b-").append(formatter.format(hyperparams.get(BETA)))
-                .append("_ls-").append(formatter.format(hyperparams.get(LAMBDA_VAR)));
+                .append("_m-").append(formatter.format(mean))
+                .append("_s-").append(formatter.format(sigma));
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
     }
@@ -157,10 +161,10 @@ public class BinarySLDA extends AbstractSampler {
         this.labels = ls;
         this.D = this.words.length;
 
-        this.numPostives = 0;
+        this.positives = new HashSet<Integer>();
         for (int d = 0; d < D; d++) {
             if (labels[d] == POSITVE) {
-                numPostives++;
+                this.positives.add(d);
             }
         }
 
@@ -173,12 +177,7 @@ public class BinarySLDA extends AbstractSampler {
             logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
             logln("--- responses:");
-            int posCount = 0;
-            for (int dd = 0; dd < labels.length; dd++) {
-                if (labels[dd] == POSITVE) {
-                    posCount++;
-                }
-            }
+            int posCount = this.positives.size();
             logln("--- --- # postive: " + posCount + " (" + ((double) posCount / D) + ")");
             logln("--- --- # negative: " + (D - posCount));
         }
@@ -205,7 +204,7 @@ public class BinarySLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Done initializing. " + getCurrentState());
             getLogLikelihood();
-            evaluateLabelPrediction();
+            evaluatePerformances();
         }
     }
 
@@ -223,8 +222,7 @@ public class BinarySLDA extends AbstractSampler {
 
         lambdas = new double[K];
         for (int k = 0; k < K; k++) {
-            lambdas[k] = SamplerUtils.getGaussian(hyperparams.get(LAMBDA_MEAN),
-                    hyperparams.get(LAMBDA_VAR));
+            lambdas[k] = SamplerUtils.getGaussian(mean, sigma);
         }
     }
 
@@ -390,7 +388,7 @@ public class BinarySLDA extends AbstractSampler {
 
             if (verbose && iter % REP_INTERVAL == 0) {
                 logln("--- label prediction");
-                evaluateLabelPrediction();
+                evaluatePerformances();
 
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
@@ -488,8 +486,7 @@ public class BinarySLDA extends AbstractSampler {
         if (lambdas == null) {
             this.lambdas = new double[K];
             for (int k = 0; k < K; k++) {
-                this.lambdas[k] = SamplerUtils.getGaussian(hyperparams.get(LAMBDA_MEAN),
-                        Math.sqrt(hyperparams.get(LAMBDA_VAR)));
+                this.lambdas[k] = SamplerUtils.getGaussian(mean, sigma);
             }
         }
 
@@ -499,9 +496,7 @@ public class BinarySLDA extends AbstractSampler {
         }
 
         L2NormLogLinearObjective optimizable = new L2NormLogLinearObjective(
-                lambdas, designMatrix, labels,
-                hyperparams.get(LAMBDA_MEAN),
-                hyperparams.get(LAMBDA_VAR));
+                lambdas, designMatrix, labels, mean, sigma);
 
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
         boolean converged = false;
@@ -550,7 +545,7 @@ public class BinarySLDA extends AbstractSampler {
         return predResponses;
     }
 
-    private void evaluateLabelPrediction() {
+    private void evaluatePerformances() {
         double[] predVals = computePredictionValues();
         ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
         for (int d = 0; d < D; d++) {
@@ -558,15 +553,21 @@ public class BinarySLDA extends AbstractSampler {
         }
         Collections.sort(rankDocs);
         int[] preds = new int[D];
-        for (int ii = 0; ii < numPostives; ii++) {
+        for (int ii = 0; ii < this.positives.size(); ii++) {
             int d = rankDocs.get(ii).getObject();
             preds[d] = POSITVE;
         }
 
         ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
         eval.computePRF1();
-        ArrayList<Measurement> measurements = eval.getMeasurements();
-        for (Measurement measurement : measurements) {
+        for (Measurement measurement : eval.getMeasurements()) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        }
+
+        RankingEvaluation rankEval = new RankingEvaluation(predVals, positives);
+        rankEval.computePRF();
+        rankEval.computeAUCs();
+        for (Measurement measurement : rankEval.getMeasurements()) {
             logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
         }
     }
@@ -596,9 +597,7 @@ public class BinarySLDA extends AbstractSampler {
         double lambdaLlh = 0.0;
         for (int k = 0; k < K; k++) {
             lambdaLlh += StatisticsUtils.logNormalProbability(
-                    lambdas[k],
-                    hyperparams.get(LAMBDA_MEAN),
-                    Math.sqrt(hyperparams.get(LAMBDA_VAR)));
+                    lambdas[k], mean, Math.sqrt(sigma));
         }
 
         if (verbose && iter % REP_INTERVAL == 0) {
