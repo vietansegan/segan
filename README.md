@@ -1,8 +1,28 @@
 # Compile
 
-    cd <SEGAN_PATH>
-    ant jar
-    cp -r lib dist/
+## Dependencies
+Most of `segan`'s dependencies are provided in the `lib` folder. In addition, `segan` also uses `gurobi` for solving optimization problems. To run models that uses `gurobi`, you need to setup `gurobi` on the machine that you will be running. To set up `gurobi`, do the following:
+
+- Go to gurobi.com and create an academic account (it's free).
+- Add the following to your `.bashrc` file
+```    
+    export GUROBI_HOME=<YOUR_GUROBI_PATH>
+    export PATH=$PATH:$GUROBI_HOME/bin
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GUROBI_HOME/lib
+```
+- Log in to `gurobi` on its website, click Download -> Licenses (-> Free Academic) -> Agree and get a license. The website will give you a string like `grbgetkey ####` where `####` is a string of hex number.
+- From shell on the machine that you want to install gurobi, run `grbgetkey ####` and choose the location you want to put the license file. If the license file is not in your home directory, you need to put this into your `.bashrc` or `.bash_profile`.
+```
+    export GRB_LICENSE_FILE=<license_file_directory>
+```
+- Change the `gurobi.dir` in `build.xml` to `<YOUR_GUROBI_PATH>`
+
+## Build & Compile
+1. To compile `ant compile`
+2. To build jar file `ant jar`
+3. To make a clean build `ant clean-build`
+
+Take a look at the `build.xml` for more options.
 
 # Process Data
 
@@ -29,10 +49,7 @@ To process text-only data stored in multiple files in a folder, each file corres
 
 ### Processing single file
 
-To process text-only data stored in a single file, where each line corresponds to a document with the following format `<doc_id>\t<doc_content>\n`, use the foloowing command:
-
-    java -cp 'dist/segan.jar:dist/lib/*' data.TextDataset --dataset <dataset-name> -file --text-data <input-text-file> --data-folder <data-folder> --format-folder <format-folder> --run-mode process
-    
+To process text-only data stored in a single file, where each line corresponds to a document with the following format `<doc_id>\t<doc_content>\n`, use the same command as before but point `--text-data` to where the text data file is.
  - `<input-text-file>`:	The file that contains input text data, in which each line is one document.
 
 ## Text data with continuous response variable
@@ -41,8 +58,10 @@ This is to process a collection of documents, each of which is associated with a
 
     java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> --text-data <input-text-file> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
 
-    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> -file --text-data <input-text-folder> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
+Working cmd to process the amazon data included in the `demo` folder
     
+    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset amazon --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder new-format --run-mode process --response-file demo/amazon-data/raw/response.txt --u 5 --b 10 --bs 5 -s -l --V 1000 -v -d
+
 ## Create cross validation data
 
 Currently only support data with continuous responses
