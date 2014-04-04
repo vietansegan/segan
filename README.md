@@ -59,9 +59,9 @@ This is to process a collection of documents, each of which is associated with a
     java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> --text-data <input-text-file> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
 
 Working cmd to process the amazon data included in the `demo` folder
-    
-    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset amazon --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder new-format --run-mode process --response-file demo/amazon-data/raw/response.txt --u 5 --b 10 --bs 5 -s -l --V 1000 -v -d
-
+```    
+    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset amazon --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder format --run-mode process --response-file demo/amazon-data/raw/response.txt --u 5 --b 10 --bs 5 -s -l --V 1000 -v -d
+```
 ## Create cross validation data
 
 Currently only support data with continuous responses
