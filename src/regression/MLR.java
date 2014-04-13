@@ -20,21 +20,21 @@ import util.RankingItem;
  * @author vietan
  */
 public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
-
+    
     public static enum Regularizer {
-
+        
         L1, L2
     }
     protected Regularizer regularizer;
     protected double[] weights;
     protected double param;
-
+    
     public MLR(String folder, Regularizer reg, double t) {
         super(folder);
         this.regularizer = reg;
         this.param = t;
     }
-
+    
     @Override
     public String getName() {
         if (name == null) {
@@ -42,7 +42,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         }
         return name;
     }
-
+    
     public void train(double[][] designMatrix, double[] responses) {
         if (regularizer == Regularizer.L1) {
             GurobiMLRL1Norm mlr = new GurobiMLRL1Norm(designMatrix, responses, param);
@@ -57,7 +57,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         IOUtils.createFolder(getRegressorFolder());
         output(new File(getRegressorFolder(), MODEL_FILE));
     }
-
+    
     public void train(int[][] trWords, double[] trResponses, int V) {
         int D = trWords.length;
         double[][] designMatrix = new double[D][V];
@@ -71,7 +71,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         }
         train(designMatrix, trResponses);
     }
-
+    
     @Override
     public void train(D trainData) {
         if (verbose) {
@@ -82,7 +82,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         int V = trainData.getWordVocab().size();
         train(trWords, trResponses, V);
     }
-
+    
     public double[] test(double[][] designMatrix) {
         int D = designMatrix.length;
         double[] predictions = new double[D];
@@ -91,15 +91,15 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             for (int v = 0; v < designMatrix[d].length; v++) {
                 predVal += designMatrix[d][v] * this.weights[v];
             }
-
+            
             predictions[d] = predVal;
         }
         return predictions;
     }
-
+    
     public double[] test(int[][] teWords, int V) {
         input(new File(getRegressorFolder(), MODEL_FILE));
-
+        
         int D = teWords.length;
         double[][] designMatrix = new double[D][V];
         for (int d = 0; d < D; d++) {
@@ -112,7 +112,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         }
         return test(designMatrix);
     }
-
+    
     @Override
     public void test(D testData) {
         if (verbose) {
@@ -122,15 +122,15 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         int[][] teWords = testData.getWords();
         double[] teResponses = testData.getResponses();
         int V = testData.getWordVocab().size();
-
+        
         double[] predictions = test(teWords, V);
         File predFile = new File(getRegressorFolder(), PREDICTION_FILE + Fold.TestExt);
         outputPredictions(predFile, teDocIds, teResponses, predictions);
-
+        
         File regFile = new File(getRegressorFolder(), RESULT_FILE + Fold.TestExt);
         outputRegressionResults(regFile, teResponses, predictions);
     }
-
+    
     @Override
     public void output(File file) {
         if (verbose) {
@@ -148,7 +148,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             throw new RuntimeException("Exception while outputing to " + file);
         }
     }
-
+    
     @Override
     public void input(File file) {
         if (verbose) {
@@ -167,11 +167,11 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             throw new RuntimeException("Exception while loading from " + file);
         }
     }
-
+    
     public double[] getWeights() {
         return this.weights;
     }
-
+    
     public static double[] inputWeights(File inputFile) {
         double[] ws = null;
         try {
@@ -189,7 +189,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         }
         return ws;
     }
-
+    
     public static void outputWeights(File outputFile, double[] weights) {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
@@ -204,10 +204,11 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
                     + outputFile);
         }
     }
-
+    
     public static void outputWeights(File outputFile, double[] weights, ArrayList<String> weightNames) {
         if (weights.length != weightNames.size()) {
-            throw new RuntimeException("Dimensions mismatch");
+            throw new RuntimeException("Dimensions mismatch. " + weights.length
+                    + " vs. " + weightNames.size());
         }
         try {
             ArrayList<RankingItem<String>> rankFeatures = new ArrayList<RankingItem<String>>();
@@ -215,7 +216,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
                 rankFeatures.add(new RankingItem<String>(weightNames.get(ii), weights[ii]));
             }
             Collections.sort(rankFeatures);
-
+            
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write(weights.length + "\n");
             for (int ii = 0; ii < weights.length; ii++) {
@@ -229,12 +230,12 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
                     + outputFile);
         }
     }
-
+    
     public static String getHelpString() {
         return "java -cp 'dist/segan.jar:dist/lib/*' "
                 + MLR.class.getName() + " -help";
     }
-
+    
     public static void main(String[] args) {
         try {
             // create the command line parser
@@ -255,59 +256,59 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             addOption("num-folds", "Number of folds");
             addOption("fold", "The cross-validation fold to run");
             addOption("run-mode", "Running mode");
-
+            
             addOption("regularizer", "Regularizer (L1, L2)");
             addOption("param", "Parameter");
-
+            
             options.addOption("v", false, "verbose");
             options.addOption("d", false, "debug");
             options.addOption("z", false, "standardize (z-score normalization)");
             options.addOption("help", false, "Help");
-
+            
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
-
+            
             if (cmd.hasOption("cv-folder")) {
                 runCrossValidation();
             } else {
                 runModel();
             }
-
+            
         } catch (Exception e) {
             e.printStackTrace();
             CLIUtils.printHelp(getHelpString(), options);
             System.exit(1);
         }
     }
-
+    
     private static void runModel() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
         String datasetFolder = cmd.getOptionValue("data-folder");
         String outputFolder = cmd.getOptionValue("output");
         String formatFolder = cmd.getOptionValue("format-folder");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-
+        
         String regularizer = cmd.getOptionValue("regularizer");
         double param = Double.parseDouble(cmd.getOptionValue("param"));
-
+        
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
         ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
         data.setFormatFilename(formatFile);
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-
+        
         if (cmd.hasOption("z")) {
             data.zNormalize();
         }
-
+        
         if (verbose) {
             System.out.println("--- Loaded. " + data.toString());
         }
-
+        
         MLR mlr;
         if (regularizer.equals("L1")) {
             mlr = new MLR(outputFolder, Regularizer.L1, param);
@@ -320,19 +321,19 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
         IOUtils.createFolder(mlrFolder);
         mlr.train(data);
     }
-
+    
     private static void runCrossValidation() throws Exception {
         String cvFolder = cmd.getOptionValue("cv-folder");
         int numFolds = Integer.parseInt(cmd.getOptionValue("num-folds"));
         String resultFolder = cmd.getOptionValue("output");
-
+        
         String regularizer = cmd.getOptionValue("regularizer");
         double param = Double.parseDouble(cmd.getOptionValue("param"));
         int foldIndex = -1;
         if (cmd.hasOption("fold")) {
             foldIndex = Integer.parseInt(cmd.getOptionValue("fold"));
         }
-
+        
         for (int ii = 0; ii < numFolds; ii++) {
             if (foldIndex != -1 && ii != foldIndex) {
                 continue;
@@ -340,18 +341,18 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
             if (verbose) {
                 System.out.println("\nRunning fold " + foldIndex);
             }
-
+            
             Fold fold = new Fold(ii, cvFolder);
             File foldFolder = new File(resultFolder, fold.getFoldName());
             ResponseTextDataset[] foldData = ResponseTextDataset.loadCrossValidationFold(fold);
             ResponseTextDataset trainData = foldData[Fold.TRAIN];
             ResponseTextDataset devData = foldData[Fold.DEV];
             ResponseTextDataset testData = foldData[Fold.TEST];
-
+            
             if (cmd.hasOption("z")) {
                 ResponseTextDataset.zNormalize(trainData, devData, testData);
             }
-
+            
             if (verbose) {
                 System.out.println("Fold " + fold.getFoldName());
                 System.out.println("--- training: " + trainData.toString());
@@ -359,7 +360,7 @@ public class MLR<D extends ResponseTextDataset> extends AbstractRegressor implem
                 System.out.println("--- test: " + testData.toString());
                 System.out.println();
             }
-
+            
             MLR mlr;
             if (regularizer.equals("L1")) {
                 mlr = new MLR(foldFolder.getAbsolutePath(), Regularizer.L1, param);

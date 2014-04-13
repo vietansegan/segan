@@ -21,7 +21,7 @@ public class SamplerUtils {
     }
 
     /**
-     * sample number of components m that a DP(alpha, G0) has after n samples.
+     * Sample number of components m that a DP(alpha, G0) has after n samples.
      * This was first published by Antoniak (1974).
      *
      * @param alpha

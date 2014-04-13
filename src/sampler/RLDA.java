@@ -60,6 +60,10 @@ public class RLDA extends LDA {
     public void addChild(RLDA child) {
         this.children.add(child);
     }
+    
+    public int getNumTokens() {
+        return this.numTokens;
+    }
 
     /**
      * Return the unique path string for each node in the tree

@@ -43,6 +43,15 @@ public class SparseVector implements Serializable {
         this.values.put(index, value);
     }
 
+    public void change(int index, double delta) {
+        if (!this.containsIndex(index)) {
+            this.set(index, delta);
+        } else {
+            double val = this.get(index) + delta;
+            this.set(index, val);
+        }
+    }
+
     public boolean containsIndex(int idx) {
         return this.values.containsKey(idx);
     }

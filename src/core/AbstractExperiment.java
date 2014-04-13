@@ -1,5 +1,6 @@
 package core;
 
+import core.AbstractSampler.InitialState;
 import core.crossvalidation.Fold;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -42,6 +43,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static int burn_in = 100;
     public static int max_iters = 1000;
     public static int sample_lag = 50;
+    public static int report_interval = 5;
+    protected InitialState initState;
     public static String experimentPath;
     protected D data;
 

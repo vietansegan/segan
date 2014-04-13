@@ -138,13 +138,23 @@ public class LDA extends AbstractSampler {
 
         configure(ws);
 
+        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
+        try {
+            if (report) {
+                IOUtils.createFolder(reportFolderPath);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while creating report folder."
+                    + " " + reportFolderPath);
+        }
+
         // sample
+        startTime = System.currentTimeMillis();
         logLikelihoods = new ArrayList<Double>();
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
-
             sampleZ(!REMOVE, !ADD);
-
             double loglikelihood = this.getLogLikelihood();
             logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
@@ -159,6 +169,19 @@ public class LDA extends AbstractSampler {
                     logln("--- Sampling. " + str);
                 }
             }
+
+            if (report && iter > BURN_IN && iter % LAG == 0) {
+                outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+            }
+        }
+        if (report) { // output the final model
+            outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+        }
+        float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
+        logln("Total runtime iterating: " + ellapsedSeconds + " seconds");
+
+        if (log && isLogging()) {
+            closeLogger();
         }
     }
 
@@ -397,7 +420,7 @@ public class LDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -406,17 +429,58 @@ public class LDA extends AbstractSampler {
             System.out.println("Outputing topics to file " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            String[] topWords = getTopWords(topic_words[k].getDistribution(), numTopWords);
-            // output top words
-            writer.write("[Topic " + k + ": " + topic_words[k].getCountSum() + "]");
-            for (String tw : topWords) {
-                writer.write(" " + tw);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int k = 0; k < K; k++) {
+                String[] topWords = getTopWords(topic_words[k].getDistribution(), numTopWords);
+                // output top words
+                writer.write("[Topic " + k + ": " + topic_words[k].getCountSum() + "]");
+                for (String tw : topWords) {
+                    writer.write(" " + tw);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing top words to "
+                    + file);
         }
-        writer.close();
+    }
+
+    public void outputTopicTopWordsFormatted(File file, int numTopWords) {
+        if (this.wordVocab == null) {
+            throw new RuntimeException("The word vocab has not been assigned yet");
+        }
+
+        if (verbose) {
+            System.out.println("Outputing topics to file " + file);
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            // headers
+            for (int k = 0; k < K; k++) {
+                writer.write("Topic_" + k + "\n");
+            }
+
+            // content
+            String[][] topWords = new String[K][numTopWords];
+            for (int k = 0; k < K; k++) {
+                topWords[k] = getTopWords(topic_words[k].getDistribution(), numTopWords);
+            }
+            for (int ii = 0; ii < numTopWords; ii++) {
+                for (int k = 0; k < K; k++) {
+                    writer.write(topWords[ii][k] + "\t");
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing top words to "
+                    + file);
+        }
     }
 
     public void outputTopicTopWordsCummProbs(String filepath, int numTopWords) throws Exception {
