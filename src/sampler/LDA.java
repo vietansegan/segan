@@ -169,7 +169,6 @@ public class LDA extends AbstractSampler {
                     logln("--- Sampling. " + str);
                 }
             }
-
             if (report && iter > BURN_IN && iter % LAG == 0) {
                 outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
             }
@@ -274,6 +273,18 @@ public class LDA extends AbstractSampler {
         }
         logLikelihoods = new ArrayList<Double>();
 
+        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
+        try {
+            if (report) {
+                IOUtils.createFolder(reportFolderPath);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while creating report folder."
+                    + " " + reportFolderPath);
+        }
+
+        startTime = System.currentTimeMillis();
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
@@ -301,6 +312,18 @@ public class LDA extends AbstractSampler {
                     logln("--- Sampling. " + str);
                 }
             }
+            if (report && iter > BURN_IN && iter % LAG == 0) {
+                outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+            }
+        }
+        if (report) { // output the final model
+            outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+        }
+        float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
+        logln("Total runtime iterating: " + ellapsedSeconds + " seconds");
+
+        if (log && isLogging()) {
+            closeLogger();
         }
     }
 
@@ -460,9 +483,10 @@ public class LDA extends AbstractSampler {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
             // headers
-            for (int k = 0; k < K; k++) {
-                writer.write("Topic_" + k + "\n");
+            for (int k = 0; k < K - 1; k++) {
+                writer.write("Topic_" + k + "\t");
             }
+            writer.write("Topic_" + (K - 1) + "\n");
 
             // content
             String[][] topWords = new String[K][numTopWords];
@@ -470,10 +494,10 @@ public class LDA extends AbstractSampler {
                 topWords[k] = getTopWords(topic_words[k].getDistribution(), numTopWords);
             }
             for (int ii = 0; ii < numTopWords; ii++) {
-                for (int k = 0; k < K; k++) {
-                    writer.write(topWords[ii][k] + "\t");
+                for (int k = 0; k < K - 1; k++) {
+                    writer.write(topWords[k][ii] + "\t");
                 }
-                writer.write("\n");
+                writer.write(topWords[K - 1][ii] + "\n");
             }
             writer.close();
         } catch (Exception e) {
