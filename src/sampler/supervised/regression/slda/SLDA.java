@@ -46,8 +46,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     protected DirMult[] topicWords;
     // optimization
     protected double[] docRegressMeans;
+    protected double[][] designMatrix;
     // topical regression
-    protected double[] topicParams;
+    protected double[] regParams;
     // internal
     protected int numTokensChanged = 0;
     protected int numTokens = 0;
@@ -238,9 +239,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
 
-        topicParams = new double[K];
+        regParams = new double[K];
         for (int k = 0; k < K; k++) {
-            topicParams[k] = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
+            regParams[k] = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
         }
     }
 
@@ -454,7 +455,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 }
                 if (removeFromData) {
                     docTopics[d].decrement(z[d][n]);
-                    docRegressMeans[d] -= topicParams[z[d][n]] / words[d].length;
+                    docRegressMeans[d] -= regParams[z[d][n]] / words[d].length;
                 }
 
                 double[] logprobs = new double[K];
@@ -463,7 +464,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                             + Math.log((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
                             / (topicWords[k].getCountSum() + totalBeta));
                     if (observe) {
-                        double mean = docRegressMeans[d] + topicParams[k] / words[d].length;
+                        double mean = docRegressMeans[d] + regParams[k] / words[d].length;
                         logprobs[k] += StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
                     }
                 }
@@ -481,7 +482,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 }
                 if (addToData) {
                     docTopics[d].increment(z[d][n]);
-                    docRegressMeans[d] += topicParams[z[d][n]] / words[d].length;
+                    docRegressMeans[d] += regParams[z[d][n]] / words[d].length;
                 }
             }
         }
@@ -507,7 +508,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
         if (removeFromData) {
             docTopics[d].decrement(z[d][n]);
-            docRegressMeans[d] -= topicParams[z[d][n]] / words[d].length;
+            docRegressMeans[d] -= regParams[z[d][n]] / words[d].length;
         }
 
         double[] logprobs = new double[K];
@@ -515,7 +516,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             logprobs[k] = docTopics[d].getLogLikelihood(k)
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
-                double mean = docRegressMeans[d] + topicParams[k] / (words[d].length);
+                double mean = docRegressMeans[d] + regParams[k] / (words[d].length);
                 logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
             }
@@ -533,7 +534,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
         if (addToData) {
             docTopics[d].increment(z[d][n]);
-            docRegressMeans[d] += topicParams[z[d][n]] / words[d].length;
+            docRegressMeans[d] += regParams[z[d][n]] / words[d].length;
         }
     }
 
@@ -548,13 +549,13 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     }
 
     private void optimizeTopicRegressionParametersLBFGS() {
-        double[][] designMatrix = new double[D][K];
+        designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
         }
 
         GaussianIndLinearRegObjective optimizable = new GaussianIndLinearRegObjective(
-                topicParams, designMatrix, responses,
+                regParams, designMatrix, responses,
                 hyperparams.get(RHO),
                 hyperparams.get(MU),
                 hyperparams.get(SIGMA));
@@ -579,7 +580,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         // update regression parameters
         for (int kk = 0; kk < K; kk++) {
-            topicParams[kk] = optimizable.getParameter(kk);
+            regParams[kk] = optimizable.getParameter(kk);
         }
 
         // update current predictions
@@ -587,7 +588,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     }
 
     private void optimizeTopicRegressionParametersGurobi() {
-        double[][] designMatrix = new double[D][K];
+        designMatrix = new double[D][K];
         for (int d = 0; d < D; d++) {
             designMatrix[d] = docTopics[d].getEmpiricalDistribution();
         }
@@ -596,7 +597,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         mlr.setRho(hyperparams.get(RHO));
         mlr.setMean(hyperparams.get(MU));
         mlr.setSigma(hyperparams.get(SIGMA));
-        topicParams = mlr.solveExact();
+        regParams = mlr.solveExact();
 
         // update current predictions
         updatePredictionValues();
@@ -609,7 +610,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.docRegressMeans = new double[D];
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            this.docRegressMeans[d] = StatisticsUtils.dotProduct(topicParams, empDist);
+            this.docRegressMeans[d] = StatisticsUtils.dotProduct(regParams, empDist);
         }
     }
 
@@ -628,7 +629,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(topicParams, empDist);
+            double mean = StatisticsUtils.dotProduct(regParams, empDist);
             responseLlh += StatisticsUtils.logNormalProbability(
                     responses[d],
                     mean,
@@ -638,7 +639,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double regParamLlh = 0.0;
         for (int k = 0; k < K; k++) {
             regParamLlh += StatisticsUtils.logNormalProbability(
-                    topicParams[k],
+                    regParams[k],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
         }
@@ -672,7 +673,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(topicParams, empDist);
+            double mean = StatisticsUtils.dotProduct(regParams, empDist);
             responseLlh += StatisticsUtils.logNormalProbability(
                     responses[d],
                     mean,
@@ -682,7 +683,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double regParamLlh = 0.0;
         for (int k = 0; k < K; k++) {
             regParamLlh += StatisticsUtils.logNormalProbability(
-                    topicParams[k],
+                    regParams[k],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
         }
@@ -736,7 +737,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             StringBuilder modelStr = new StringBuilder();
             for (int k = 0; k < K; k++) {
                 modelStr.append(k).append("\n");
-                modelStr.append(topicParams[k]).append("\n");
+                modelStr.append(regParams[k]).append("\n");
                 modelStr.append(DirMult.output(topicWords[k])).append("\n");
             }
 
@@ -794,7 +795,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                 if (topicIdx != k) {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
-                topicParams[k] = Double.parseDouble(reader.readLine());
+                regParams[k] = Double.parseDouble(reader.readLine());
                 topicWords[k] = DirMult.input(reader.readLine());
             }
             reader.close();
@@ -847,7 +848,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         ArrayList<RankingItem<Integer>> sortedTopics = new ArrayList<RankingItem<Integer>>();
         for (int k = 0; k < K; k++) {
-            sortedTopics.add(new RankingItem<Integer>(k, topicParams[k]));
+            sortedTopics.add(new RankingItem<Integer>(k, regParams[k]));
         }
         Collections.sort(sortedTopics);
 
@@ -858,7 +859,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             String[] topWords = getTopWords(distrs, numTopWords);
             writer.write("[" + k
                     + ", " + topicWords[k].getCountSum()
-                    + ", " + MiscUtils.formatDouble(topicParams[k])
+                    + ", " + MiscUtils.formatDouble(regParams[k])
                     + "]");
             for (String topWord : topWords) {
                 writer.write("\t" + topWord);
@@ -1054,7 +1055,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
         if (K < 10) { // only print out when number of topics is small
-            str.append(MiscUtils.arrayToString(topicParams)).append("\n");
+            str.append(MiscUtils.arrayToString(regParams)).append("\n");
             for (int k = 0; k < K; k++) {
                 str.append(topicWords[k].getCountSum()).append(", ");
             }

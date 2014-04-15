@@ -309,25 +309,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         if (log && isLogging()) {
             closeLogger();
         }
-
-        try {
-            if (log) {
-                BufferedWriter writer = IOUtils.getBufferedWriter(
-                        new File(getSamplerFolderPath(), LikelihoodFile));
-                for (int i = 0; i < logLikelihoods.size(); i++) {
-                    writer.write(i + "\t" + logLikelihoods.get(i) + "\n");
-                }
-                writer.close();
-
-                if (paramOptimized) {
-                    outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                            HyperparameterFile));
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Iteration " + iter);
-        }
     }
 
     /**

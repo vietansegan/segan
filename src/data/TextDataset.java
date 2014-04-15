@@ -232,7 +232,12 @@ public class TextDataset extends AbstractTokenizeDataset {
             }
             count++;
 
-            docIdList.add(filename.replaceAll(".txt", ""));
+            // use filename as document id, remove extension .txt if necessary
+            String docId = filename;
+            if (filename.endsWith(".txt")) {
+                docId = filename.substring(0, filename.length() - 4);
+            }
+            docIdList.add(docId);
             reader = IOUtils.getBufferedReader(new File(fd, filename));
             docText = new StringBuilder();
             while ((line = reader.readLine()) != null) {
@@ -798,15 +803,15 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     public static CorpusProcessor createCorpusProcessor() {
-        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 5);
-        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 10);
+        int unigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "u", 1);
+        int bigramCountCutoff = CLIUtils.getIntegerArgument(cmd, "b", 1);
         double bigramScoreCutoff = CLIUtils.getDoubleArgument(cmd, "bs", 5.0);
         int maxVocabSize = CLIUtils.getIntegerArgument(cmd, "V", Integer.MAX_VALUE);
-        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 5);
+        int vocTermFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-tf", 1);
         int vocTermFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-tf", Integer.MAX_VALUE);
-        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 5);
+        int vocDocFreqMinCutoff = CLIUtils.getIntegerArgument(cmd, "min-df", 1);
         int vocDocFreqMaxCutoff = CLIUtils.getIntegerArgument(cmd, "max-df", Integer.MAX_VALUE);
-        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 10);
+        int docTypeCountCutoff = CLIUtils.getIntegerArgument(cmd, "min-doc-length", 1);
 
         boolean stopwordFilter = cmd.hasOption("s");
         boolean lemmatization = cmd.hasOption("l");

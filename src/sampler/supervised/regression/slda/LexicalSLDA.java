@@ -19,11 +19,6 @@ import util.StatisticsUtils;
  */
 public class LexicalSLDA extends SLDA {
 
-    public static final int TAU_MEAN = 5;   // mean of lexical regression params
-    public static final int TAU_SIGMA = 6;  // variance of lexical regression params
-    protected double[] lexicalParams;
-    protected double[][] lexDesignMatrix;
-
     public void configure(LexicalSLDA sampler) {
         this.configure(sampler.folder,
                 sampler.V,
@@ -33,81 +28,12 @@ public class LexicalSLDA extends SLDA {
                 sampler.hyperparams.get(RHO),
                 sampler.hyperparams.get(MU),
                 sampler.hyperparams.get(SIGMA),
-                sampler.hyperparams.get(TAU_MEAN),
-                sampler.hyperparams.get(TAU_SIGMA),
                 sampler.initState,
                 sampler.paramOptimized,
                 sampler.BURN_IN,
                 sampler.MAX_ITER,
                 sampler.LAG,
                 sampler.REP_INTERVAL);
-    }
-
-    public void configure(
-            String folder,
-            int V, int K,
-            double alpha,
-            double beta,
-            double rho, // standard deviation of Gaussian for document observations
-            double mu, // mean of Gaussian for regression parameters
-            double sigma, // stadard deviation of Gaussian for regression parameters
-            double tau_mean,
-            double tau_sigma,
-            InitialState initState,
-            boolean paramOpt,
-            int burnin, int maxiter, int samplelag, int repInt) {
-        if (verbose) {
-            logln("Configuring ...");
-        }
-
-        this.folder = folder;
-        this.K = K;
-        this.V = V;
-
-        this.hyperparams = new ArrayList<Double>();
-        this.hyperparams.add(alpha);
-        this.hyperparams.add(beta);
-        this.hyperparams.add(rho);
-        this.hyperparams.add(mu);
-        this.hyperparams.add(sigma);
-        this.hyperparams.add(tau_mean);
-        this.hyperparams.add(tau_sigma);
-
-        this.sampledParams = new ArrayList<ArrayList<Double>>();
-        this.sampledParams.add(cloneHyperparameters());
-
-        this.BURN_IN = burnin;
-        this.MAX_ITER = maxiter;
-        this.LAG = samplelag;
-        this.REP_INTERVAL = repInt;
-
-        this.initState = initState;
-        this.paramOptimized = paramOpt;
-        this.prefix += initState.toString();
-        this.setName();
-
-        if (!debug) {
-            System.err.close();
-        }
-
-        this.report = true;
-
-        if (verbose) {
-            logln("--- folder\t" + folder);
-            logln("--- num topics:\t" + K);
-            logln("--- alpha:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA)));
-            logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
-            logln("--- response rho:\t" + MiscUtils.formatDouble(hyperparams.get(RHO)));
-            logln("--- topic mu:\t" + MiscUtils.formatDouble(hyperparams.get(MU)));
-            logln("--- topic sigma:\t" + MiscUtils.formatDouble(hyperparams.get(SIGMA)));
-            logln("--- lexical mean:\t" + MiscUtils.formatDouble(hyperparams.get(TAU_MEAN)));
-            logln("--- lexical sigma:\t" + MiscUtils.formatDouble(hyperparams.get(TAU_SIGMA)));
-            logln("--- burn-in:\t" + BURN_IN);
-            logln("--- max iter:\t" + MAX_ITER);
-            logln("--- sample lag:\t" + LAG);
-            logln("--- paramopt:\t" + paramOptimized);
-            logln("--- initialize:\t" + initState);
-        }
     }
 
     @Override
@@ -123,9 +49,7 @@ public class LexicalSLDA extends SLDA {
                 .append("_b-").append(formatter.format(hyperparams.get(BETA)))
                 .append("_r-").append(formatter.format(hyperparams.get(RHO)))
                 .append("_m-").append(formatter.format(hyperparams.get(MU)))
-                .append("_s-").append(formatter.format(hyperparams.get(SIGMA)))
-                .append("_tm-").append(formatter.format(hyperparams.get(TAU_MEAN)))
-                .append("_ts-").append(formatter.format(hyperparams.get(TAU_SIGMA)));
+                .append("_s-").append(formatter.format(hyperparams.get(SIGMA)));
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
     }
@@ -136,38 +60,17 @@ public class LexicalSLDA extends SLDA {
         for (int k = 0; k < K; k++) {
             topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
-
-        topicParams = new double[K];
-        for (int k = 0; k < K; k++) {
-            topicParams[k] = SamplerUtils.getGaussian(hyperparams.get(MU), hyperparams.get(SIGMA));
-        }
-
-        lexicalParams = new double[V];
-        for (int v = 0; v < V; v++) {
-            lexicalParams[v] = SamplerUtils.getGaussian(hyperparams.get(TAU_MEAN),
-                    hyperparams.get(TAU_SIGMA));
-        }
+        regParams = new double[K + V];
     }
 
     @Override
     protected void initializeDataStructure() {
-        z = new int[D][];
-        for (int d = 0; d < D; d++) {
-            z[d] = new int[words[d].length];
-        }
-
-        docTopics = new DirMult[D];
-        for (int d = 0; d < D; d++) {
-            docTopics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
-        }
-
-        docRegressMeans = new double[D];
-
-        lexDesignMatrix = new double[D][V];
+        super.initializeDataStructure();
+        designMatrix = new double[D][K + V];
         for (int d = 0; d < D; d++) {
             double denom = 1.0 / words[d].length;
             for (int n = 0; n < words[d].length; n++) {
-                lexDesignMatrix[d][words[d][n]] += denom;
+                designMatrix[d][K + words[d][n]] += denom;
             }
         }
     }
@@ -250,15 +153,11 @@ public class LexicalSLDA extends SLDA {
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
                         + ". change ratio: " + (double) numTokensChanged / numTokens
-                        + "\n");
+                        + "\n\n");
             }
 
             if (debug) {
                 validate("iter " + iter);
-            }
-
-            if (verbose && iter % REP_INTERVAL == 0) {
-                System.out.println();
             }
 
             // store model
@@ -280,33 +179,66 @@ public class LexicalSLDA extends SLDA {
     }
 
     @Override
+    protected void sampleZ(int d, int n,
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData,
+            boolean observe) {
+        if (removeFromModel) {
+            topicWords[z[d][n]].decrement(words[d][n]);
+        }
+        if (removeFromData) {
+            docTopics[d].decrement(z[d][n]);
+            docRegressMeans[d] -= regParams[z[d][n]] * K / (words[d].length * V);
+        }
+
+        double[] logprobs = new double[K];
+        for (int k = 0; k < K; k++) {
+            logprobs[k] = docTopics[d].getLogLikelihood(k)
+                    + topicWords[k].getLogLikelihood(words[d][n]);
+            if (observe) {
+                double mean = docRegressMeans[d] + regParams[k] * K / (words[d].length * V);
+                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
+                        mean, Math.sqrt(hyperparams.get(RHO)));
+            }
+        }
+        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+
+        if (z[d][n] != sampledZ) {
+            numTokensChanged++; // for debugging
+        }
+        // update
+        z[d][n] = sampledZ;
+
+        if (addToModel) {
+            topicWords[z[d][n]].increment(words[d][n]);
+        }
+        if (addToData) {
+            docTopics[d].increment(z[d][n]);
+            docRegressMeans[d] += regParams[z[d][n]] * K / (words[d].length * V);
+        }
+    }
+
+    @Override
     protected void updateTopicRegressionParameters() {
-        double[][] designMatrix = new double[D][V + K];
         for (int d = 0; d < D; d++) {
-            System.arraycopy(lexDesignMatrix[d], 0, designMatrix[d], 0, V);
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            System.arraycopy(empDist, 0, designMatrix[d], V, K);
+            for (int k = 0; k < K; k++) {
+                designMatrix[d][k] = empDist[k] * K / V;
+            }
         }
 
         GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responses);
         mlr.setRho(hyperparams.get(RHO));
         double[] means = new double[V + K];
         double[] sigmas = new double[V + K];
-        for (int v = 0; v < V; v++) {
+        for (int v = 0; v < V + K; v++) {
             means[v] = hyperparams.get(MU);
             sigmas[v] = hyperparams.get(SIGMA);
-        }
-        for (int k = 0; k < K; k++) {
-            means[V + k] = hyperparams.get(TAU_MEAN);
-            sigmas[V + k] = hyperparams.get(TAU_SIGMA);
         }
         mlr.setMeans(means);
         mlr.setSigmas(sigmas);
         double[] params = mlr.solve();
-        System.arraycopy(params, 0, lexicalParams, 0, V);
-        for (int k = 0; k < K; k++) {
-            topicParams[k] = params[V + k];
-        }
+        System.arraycopy(params, 0, regParams, 0, V + K);
 
         // update current predictions
         updatePredictionValues();
@@ -316,9 +248,9 @@ public class LexicalSLDA extends SLDA {
     protected void updatePredictionValues() {
         this.docRegressMeans = new double[D];
         for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            this.docRegressMeans[d] = StatisticsUtils.dotProduct(topicParams, empDist)
-                    + StatisticsUtils.dotProduct(lexicalParams, lexDesignMatrix[d]);
+            for (int ii = 0; ii < K + V; ii++) {
+                docRegressMeans[d] += regParams[ii] * designMatrix[d][ii];
+            }
         }
     }
 
@@ -336,42 +268,31 @@ public class LexicalSLDA extends SLDA {
 
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(topicParams, empDist);
             responseLlh += StatisticsUtils.logNormalProbability(
                     responses[d],
-                    mean,
+                    docRegressMeans[d],
                     Math.sqrt(hyperparams.get(RHO)));
         }
 
         double regParamLlh = 0.0;
-        for (int k = 0; k < K; k++) {
+        for (int ii = 0; ii < K + V; ii++) {
             regParamLlh += StatisticsUtils.logNormalProbability(
-                    topicParams[k],
+                    regParams[ii],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
-        }
-
-        double lexRegParamLlh = 0.0;
-        for (int v = 0; v < V; v++) {
-            lexRegParamLlh += StatisticsUtils.logNormalProbability(lexicalParams[v],
-                    hyperparams.get(TAU_MEAN),
-                    Math.sqrt(hyperparams.get(TAU_SIGMA)));
         }
 
         if (verbose && iter % REP_INTERVAL == 0) {
             logln("*** word: " + MiscUtils.formatDouble(wordLlh)
                     + ". topic: " + MiscUtils.formatDouble(topicLlh)
                     + ". response: " + MiscUtils.formatDouble(responseLlh)
-                    + ". regParam: " + MiscUtils.formatDouble(regParamLlh)
-                    + ". lexRegParam: " + MiscUtils.formatDouble(lexRegParamLlh));
+                    + ". regParam: " + MiscUtils.formatDouble(regParamLlh));
         }
 
         double llh = wordLlh
                 + topicLlh
                 + responseLlh
-                + regParamLlh
-                + lexRegParamLlh;
+                + regParamLlh;
         return llh;
     }
 
@@ -389,34 +310,24 @@ public class LexicalSLDA extends SLDA {
 
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(topicParams, empDist);
             responseLlh += StatisticsUtils.logNormalProbability(
                     responses[d],
-                    mean,
+                    docRegressMeans[d],
                     Math.sqrt(hyperparams.get(RHO)));
         }
 
         double regParamLlh = 0.0;
-        for (int k = 0; k < K; k++) {
+        for (int ii = 0; ii < K + V; ii++) {
             regParamLlh += StatisticsUtils.logNormalProbability(
-                    topicParams[k],
+                    regParams[ii],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
-        }
-
-        double lexRegParamLlh = 0.0;
-        for (int v = 0; v < V; v++) {
-            lexRegParamLlh += StatisticsUtils.logNormalProbability(lexicalParams[v],
-                    hyperparams.get(TAU_MEAN),
-                    Math.sqrt(hyperparams.get(TAU_SIGMA)));
         }
 
         double llh = wordLlh
                 + topicLlh
                 + responseLlh
-                + regParamLlh
-                + lexRegParamLlh;
+                + regParamLlh;
         return llh;
     }
 
@@ -431,12 +342,11 @@ public class LexicalSLDA extends SLDA {
             StringBuilder modelStr = new StringBuilder();
             for (int k = 0; k < K; k++) {
                 modelStr.append(k).append("\n");
-                modelStr.append(topicParams[k]).append("\n");
                 modelStr.append(DirMult.output(topicWords[k])).append("\n");
             }
-            for (int v = 0; v < V; v++) {
-                modelStr.append(v).append("\n");
-                modelStr.append(lexicalParams[v]).append("\n");
+            for (int ii = 0; ii < V + K; ii++) {
+                modelStr.append(ii).append("\n");
+                modelStr.append(regParams[ii]).append("\n");
             }
 
             // assignments
@@ -467,10 +377,7 @@ public class LexicalSLDA extends SLDA {
 
         try {
             // initialize
-            // initialize
-            topicWords = new DirMult[K];
-            topicParams = new double[K];
-            lexicalParams = new double[V];
+            initializeModelStructure();
 
             String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
@@ -479,15 +386,14 @@ public class LexicalSLDA extends SLDA {
                 if (topicIdx != k) {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
-                topicParams[k] = Double.parseDouble(reader.readLine());
                 topicWords[k] = DirMult.input(reader.readLine());
             }
-            for (int v = 0; v < V; v++) {
+            for (int ii = 0; ii < V + K; ii++) {
                 int lexIdx = Integer.parseInt(reader.readLine());
-                if (lexIdx != v) {
+                if (lexIdx != ii) {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
-                lexicalParams[v] = Double.parseDouble(reader.readLine());
+                regParams[ii] = Double.parseDouble(reader.readLine());
             }
             reader.close();
         } catch (Exception e) {
@@ -508,7 +414,7 @@ public class LexicalSLDA extends SLDA {
 
         ArrayList<RankingItem<Integer>> sortedWeights = new ArrayList<RankingItem<Integer>>();
         for (int v = 0; v < V; v++) {
-            sortedWeights.add(new RankingItem<Integer>(v, lexicalParams[v]));
+            sortedWeights.add(new RankingItem<Integer>(v, regParams[K + v]));
         }
         Collections.sort(sortedWeights);
 
@@ -519,7 +425,7 @@ public class LexicalSLDA extends SLDA {
                 int lexIdx = rankItem.getObject();
                 writer.write(lexIdx
                         + "\t" + this.wordVocab.get(lexIdx)
-                        + "\t" + this.lexicalParams[lexIdx]
+                        + "\t" + this.regParams[K + lexIdx]
                         + "\n");
             }
             writer.close();
@@ -530,8 +436,10 @@ public class LexicalSLDA extends SLDA {
         }
     }
 
-    public static void parallelTest(int[][] newWords, int[] newAuthors, int numAuthors,
-            File iterPredFolder, LexicalSLDA sampler) {
+    public static void parallelTest(int[][] newWords, File iterPredFolder, LexicalSLDA sampler) {
+        // debug
+        System.out.println("Parallel test in LexicalSLDA");
+
         File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
         if (!reportFolder.exists()) {
             throw new RuntimeException("Report folder not found. " + reportFolder);
@@ -584,7 +492,7 @@ class LexicalSLDATestRunner implements Runnable {
 
     @Override
     public void run() {
-        SLDA testSampler = new SLDA();
+        LexicalSLDA testSampler = new LexicalSLDA();
         testSampler.setVerbose(true);
         testSampler.setDebug(false);
         testSampler.setLog(false);

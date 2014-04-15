@@ -84,6 +84,13 @@ public class ResponseTextDataset extends TextDataset {
             String docId = sline[0];
             double docResponse = Double.parseDouble(sline[1]);
             int index = this.docIdList.indexOf(docId);
+
+            // debug
+            if (index == -1) {
+                System.out.println(line);
+                System.out.println(docId);
+            }
+
             this.responses[index] = docResponse;
         }
         reader.close();

@@ -613,33 +613,68 @@ public class PredictionUtils {
             File outputFolder,
             String[] docIds,
             double[] trueResponses) {
-        double[] finalPred = null;
+        double[] predResponses = null;
         try {
             String[] filenames = iterPredFolder.list();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            ArrayList<RankingItem<String>> rankFilenames = new ArrayList<RankingItem<String>>();
+            for (String filename : filenames) {
+                int iter = Integer.parseInt(filename.replaceAll("iter-", "")
+                        .replaceAll(".txt", ""));
+                rankFilenames.add(new RankingItem<String>(filename, iter));
+            }
+            Collections.sort(rankFilenames);
+            Collections.reverse(rankFilenames);
+
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(outputFolder, SINGLE_FINAL));
+            for (int ii = 0; ii < rankFilenames.size(); ii++) {
+                RankingItem<String> item = rankFilenames.get(ii);
+                String filename = item.getObject();
+
+                // compute filenal
                 double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueResponses.length);
 
                 // get the predictions at the final iterations during test time
-                finalPred = new double[predictions.length];
-                for (int d = 0; d < finalPred.length; d++) {
-                    finalPred[d] = predictions[d][predictions[0].length - 1];
+                predResponses = new double[predictions.length];
+                for (int d = 0; d < predResponses.length; d++) {
+                    predResponses[d] = predictions[d][predictions[0].length - 1];
                 }
 
                 outputRegressionPredictions(
                         new File(outputFolder, SINGLE_FINAL + "-" + filename + ".pred"),
-                        docIds, trueResponses, finalPred);
+                        docIds, trueResponses, predResponses);
                 outputRegressionResults(
                         new File(outputFolder, SINGLE_FINAL + "-" + filename + ".result"),
-                        trueResponses, finalPred);
+                        trueResponses, predResponses);
+
+                RegressionEvaluation eval = new RegressionEvaluation(trueResponses, predResponses);
+                eval.computeCorrelationCoefficient();
+                eval.computeMeanSquareError();
+                eval.computeMeanAbsoluteError();
+                eval.computeRSquared();
+                eval.computePredictiveRSquared();
+                ArrayList<Measurement> measurements = eval.getMeasurements();
+                if (ii == 0) { // write header
+                    writer.write("Iteration");
+                    for (Measurement m : measurements) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+                }
+
+                writer.write(Integer.toString((int) item.getPrimaryValue()));
+                for (Measurement m : measurements) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
             }
+            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-final");
         }
-        return finalPred;
+        return predResponses;
     }
 
     /**
@@ -659,8 +694,19 @@ public class PredictionUtils {
         double[] avgPred = null;
         try {
             String[] filenames = iterPredFolder.list();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            ArrayList<RankingItem<String>> rankFilenames = new ArrayList<RankingItem<String>>();
+            for (String filename : filenames) {
+                int iter = Integer.parseInt(filename.replaceAll("iter-", "")
+                        .replaceAll(".txt", ""));
+                rankFilenames.add(new RankingItem<String>(filename, iter));
+            }
+            Collections.sort(rankFilenames);
+            Collections.reverse(rankFilenames);
+
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(outputFolder, SINGLE_AVG));
+            for (int ii = 0; ii < rankFilenames.size(); ii++) {
+                RankingItem<String> item = rankFilenames.get(ii);
+                String filename = item.getObject();
 
                 // load predicted values
                 double[][] predictions = inputSingleModelRegressions(
@@ -679,7 +725,30 @@ public class PredictionUtils {
                 outputRegressionResults(
                         new File(outputFolder, SINGLE_AVG + "-" + filename + ".result"),
                         trueResponses, avgPred);
+
+
+                RegressionEvaluation eval = new RegressionEvaluation(trueResponses, avgPred);
+                eval.computeCorrelationCoefficient();
+                eval.computeMeanSquareError();
+                eval.computeMeanAbsoluteError();
+                eval.computeRSquared();
+                eval.computePredictiveRSquared();
+                ArrayList<Measurement> measurements = eval.getMeasurements();
+                if (ii == 0) { // write header
+                    writer.write("Iteration");
+                    for (Measurement m : measurements) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+                }
+
+                writer.write(Integer.toString((int) item.getPrimaryValue()));
+                for (Measurement m : measurements) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
             }
+            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating single-avg.");
@@ -704,11 +773,23 @@ public class PredictionUtils {
         double[] predResponses = null;
         try {
             String[] filenames = iterPredFolder.list();
-            predResponses = new double[trueResponses.length];
-            int numModels = filenames.length;
+            ArrayList<RankingItem<String>> rankFilenames = new ArrayList<RankingItem<String>>();
+            for (String filename : filenames) {
+                int iter = Integer.parseInt(filename.replaceAll("iter-", "")
+                        .replaceAll(".txt", ""));
+                rankFilenames.add(new RankingItem<String>(filename, iter));
+            }
+            Collections.sort(rankFilenames);
+            Collections.reverse(rankFilenames);
 
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            predResponses = new double[trueResponses.length];
+            int numModels = 0;
+
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(outputFolder, MULTIPLE_FINAL));
+            for (int ii = 0; ii < rankFilenames.size(); ii++) {
+                numModels++;
+                RankingItem<String> item = rankFilenames.get(ii);
+                String filename = item.getObject();
 
                 double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
@@ -717,6 +798,32 @@ public class PredictionUtils {
                 for (int d = 0; d < trueResponses.length; d++) {
                     predResponses[d] += predictions[d][predictions[0].length - 1];
                 }
+
+                double[] tempPredResponses = new double[trueResponses.length];
+                for (int d = 0; d < trueResponses.length; d++) {
+                    tempPredResponses[d] = predResponses[d] / numModels;
+                }
+
+                RegressionEvaluation eval = new RegressionEvaluation(trueResponses, tempPredResponses);
+                eval.computeCorrelationCoefficient();
+                eval.computeMeanSquareError();
+                eval.computeMeanAbsoluteError();
+                eval.computeRSquared();
+                eval.computePredictiveRSquared();
+                ArrayList<Measurement> measurements = eval.getMeasurements();
+                if (ii == 0) { // write header
+                    writer.write("Iteration");
+                    for (Measurement m : measurements) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+                }
+
+                writer.write(Integer.toString((int) item.getPrimaryValue()));
+                for (Measurement m : measurements) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
             }
 
             for (int d = 0; d < predResponses.length; d++) {
@@ -727,6 +834,7 @@ public class PredictionUtils {
                     docIds, trueResponses, predResponses);
             outputRegressionResults(new File(outputFolder, MULTIPLE_FINAL + ".result"),
                     trueResponses, predResponses);
+            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-final.");
@@ -750,12 +858,23 @@ public class PredictionUtils {
         double[] predResponses = null;
         try {
             String[] filenames = iterPredFolder.list();
+            ArrayList<RankingItem<String>> rankFilenames = new ArrayList<RankingItem<String>>();
+            for (String filename : filenames) {
+                int iter = Integer.parseInt(filename.replaceAll("iter-", "")
+                        .replaceAll(".txt", ""));
+                rankFilenames.add(new RankingItem<String>(filename, iter));
+            }
+            Collections.sort(rankFilenames);
+            Collections.reverse(rankFilenames);
 
             predResponses = new double[trueResponses.length];
-            int numModels = filenames.length;
+            int numModels = 0;
 
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            BufferedWriter writer = IOUtils.getBufferedWriter(new File(outputFolder, MULTIPLE_AVG));
+            for (int ii = 0; ii < rankFilenames.size(); ii++) {
+                numModels++;
+                RankingItem<String> item = rankFilenames.get(ii);
+                String filename = item.getObject();
 
                 double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
@@ -764,6 +883,32 @@ public class PredictionUtils {
                 for (int d = 0; d < trueResponses.length; d++) {
                     predResponses[d] += StatisticsUtils.mean(predictions[d]);
                 }
+
+                double[] tempPredResponses = new double[trueResponses.length];
+                for (int d = 0; d < trueResponses.length; d++) {
+                    tempPredResponses[d] = predResponses[d] / numModels;
+                }
+
+                RegressionEvaluation eval = new RegressionEvaluation(trueResponses, tempPredResponses);
+                eval.computeCorrelationCoefficient();
+                eval.computeMeanSquareError();
+                eval.computeMeanAbsoluteError();
+                eval.computeRSquared();
+                eval.computePredictiveRSquared();
+                ArrayList<Measurement> measurements = eval.getMeasurements();
+                if (ii == 0) { // write header
+                    writer.write("Iteration");
+                    for (Measurement m : measurements) {
+                        writer.write("\t" + m.getName());
+                    }
+                    writer.write("\n");
+                }
+
+                writer.write(Integer.toString((int) item.getPrimaryValue()));
+                for (Measurement m : measurements) {
+                    writer.write("\t" + m.getValue());
+                }
+                writer.write("\n");
             }
 
             for (int d = 0; d < predResponses.length; d++) {
@@ -774,6 +919,7 @@ public class PredictionUtils {
                     docIds, trueResponses, predResponses);
             outputRegressionResults(new File(outputFolder, MULTIPLE_AVG + ".result"),
                     trueResponses, predResponses);
+            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while evaluating multiple-avg.");
