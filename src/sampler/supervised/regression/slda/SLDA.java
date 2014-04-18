@@ -9,10 +9,13 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import optimization.GurobiMLRL2Norm;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import regression.Regressor;
 import sampler.LDA;
 import sampler.supervised.objective.GaussianIndLinearRegObjective;
 import sampling.likelihood.DirMult;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
@@ -837,7 +840,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -852,21 +855,27 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < K; ii++) {
-            int k = sortedTopics.get(ii).getObject();
-            double[] distrs = topicWords[k].getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + topicWords[k].getCountSum()
-                    + ", " + MiscUtils.formatDouble(regParams[k])
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int ii = 0; ii < K; ii++) {
+                int k = sortedTopics.get(ii).getObject();
+                double[] distrs = topicWords[k].getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + topicWords[k].getCountSum()
+                        + ", " + MiscUtils.formatDouble(regParams[k])
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing top words to "
+                    + file);
         }
-        writer.close();
     }
 
     /**
@@ -1104,6 +1113,122 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during parallel test.");
         }
+    }
+
+    public static void main(String[] args) {
+        run(args);
+    }
+
+    public static String getHelpString() {
+        return "java -cp dist/segan.jar " + SLDA.class.getName() + " -help";
+    }
+
+    private static void addOptions() {
+        // directories
+        addOption("output", "Output folder");
+        addOption("dataset", "Dataset");
+        addOption("data-folder", "Processed data folder");
+        addOption("format-folder", "Folder holding formatted data");
+        addOption("format-file", "Format file");
+
+        addSamplingOptions();
+        
+        addOption("alpha", "alpha");
+        addOption("beta", "beta");
+        addOption("rho", "rho");
+        addOption("mu", "mu");
+        addOption("sigma", "sigma");
+        
+        addOption("K", "Number of topics");
+        
+        options.addOption("paramOpt", false, "Whether hyperparameter "
+                + "optimization using slice sampling is performed");
+        options.addOption("z", false, "whether standardize (z-score normalization)");
+    }
+
+    public static void run(String[] args) {
+        try {
+            parser = new BasicParser(); // create the command line parser
+            options = new Options(); // create the Options
+            addOptions();
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp(getHelpString(), options);
+                return;
+            }
+            runModel();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Use option -help for all options.");
+        }
+    }
+
+    protected static void runModel() {
+        // sampling configurations
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 5);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 10);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        boolean verbose = cmd.hasOption("v");
+        boolean debug = cmd.hasOption("d");
+
+        int K = CLIUtils.getIntegerArgument(cmd, "K", 50);
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 2.5);
+        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
+        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 10);
+        String optType = CLIUtils.getStringArgument(cmd, "opt-type", "gurobi");
+
+        // directories
+        String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "amazon-data");
+        String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "demo");
+        String resultFolder = CLIUtils.getStringArgument(cmd, "output",
+                "demo/amazon-data/format-response/models");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+
+        if (verbose) {
+            System.out.println("\nLoading formatted data ...");
+        }
+        ResponseTextDataset data = new ResponseTextDataset(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
+        if (cmd.hasOption("topic-coherence")) {
+            data.prepareTopicCoherence(numTopWords);
+        }
+
+        String init = CLIUtils.getStringArgument(cmd, "init", "random");
+        InitialState initState;
+        if (init.equals("random")) {
+            initState = InitialState.RANDOM;
+        } else if (init.equals("preset")) {
+            initState = InitialState.PRESET;
+        } else {
+            throw new RuntimeException("Initialization " + init + " not supported");
+        }
+
+        SLDA sampler = new SLDA();
+        sampler.setVerbose(verbose);
+        sampler.setDebug(debug);
+        sampler.setLog(true);
+        sampler.setReport(true);
+        sampler.setWordVocab(data.getWordVocab());
+        sampler.setOptimizerType(optType);
+
+        sampler.configure(resultFolder,
+                data.getWordVocab().size(), K,
+                alpha, beta, rho, mu, sigma, initState, paramOpt,
+                burnIn, maxIters, sampleLag, repInterval);
+
+        File samplerFolder = new File(sampler.getSamplerFolderPath());
+        IOUtils.createFolder(samplerFolder);
+        sampler.train(data.getWords(), data.getResponses());
+        sampler.initialize();
+        sampler.iterate();
+        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
     }
 }
 

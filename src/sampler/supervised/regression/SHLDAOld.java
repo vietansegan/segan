@@ -44,7 +44,7 @@ import util.evaluation.RegressionEvaluation;
  *
  * @author vietan
  */
-public class SHLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
+public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextDataset> {
 
     public static final Double WEIGHT_THRESHOLD = 10e-2;
     public static final int PSEUDO_TABLE_INDEX = -1;
@@ -1448,7 +1448,9 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
         if (sampledIndex == logProbs.size()) {
             for (int ii = 0; ii < pathList.size(); ii++) {
-                System.out.println(ii
+                System.out.println("iter = " + iter
+                        + ". d = " + d
+                        + ". " + ii
                         + "\t" + pathList.get(ii).toString()
                         + "\t" + MiscUtils.formatDouble(logProbs.get(ii)));
             }
@@ -3148,7 +3150,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         }
 
         void validate(String msg) {
-            int maxChildIndex = SHLDA.PSEUDO_NODE_INDEX;
+            int maxChildIndex = SHLDAOld.PSEUDO_NODE_INDEX;
             for (SNode child : this.getChildren()) {
                 if (maxChildIndex < child.getIndex()) {
                     maxChildIndex = child.getIndex();
@@ -3262,7 +3264,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
     }
 
     public static String getHelpString() {
-        return "java -cp dist/segan.jar " + SHLDA.class.getName() + " -help";
+        return "java -cp dist/segan.jar " + SHLDAOld.class.getName() + " -help";
     }
 
     private static void addOptions() {
@@ -3427,7 +3429,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
 
         // initialize sampler
-        SHLDA sampler = new SHLDA();
+        SHLDAOld sampler = new SHLDAOld();
         sampler.setVerbose(verbose);
         sampler.setDebug(debug);
         sampler.setLog(true);
@@ -3578,7 +3580,7 @@ public class SHLDA extends AbstractSampler implements Regressor<ResponseTextData
 
             Regularizer reg = Regularizer.L1;
 
-            SHLDA sampler = new SHLDA();
+            SHLDAOld sampler = new SHLDAOld();
             sampler.setVerbose(verbose);
             sampler.setDebug(debug);
             sampler.setLog(true);

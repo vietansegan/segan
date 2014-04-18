@@ -107,17 +107,17 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
         double[] meanVector = new double[V];
         Arrays.fill(meanVector, beta / V);
         if (!this.isRoot()) { // root
-            SparseCount observations = this.content.getSparseCounts();
-            for (int obs : observations.getIndices()) {
-                meanVector[obs] += observations.getCount(obs);
-            }
-            for (int obs : this.pseudoCounts.getIndices()) {
-                meanVector[obs] += this.pseudoCounts.getCount(obs);
-            }
             double[] parentTopic = ((C) parent.getContent()).getSamplingDistribution();
             for (int v = 0; v < V; v++) {
                 meanVector[v] += parentTopic[v] * gamma;
             }
+        }
+        SparseCount observations = this.content.getSparseCounts();
+        for (int obs : observations.getIndices()) {
+            meanVector[obs] += observations.getCount(obs);
+        }
+        for (int obs : this.pseudoCounts.getIndices()) {
+            meanVector[obs] += this.pseudoCounts.getCount(obs);
         }
         Dirichlet dir = new Dirichlet(meanVector);
         double[] topic = dir.nextDistribution();
