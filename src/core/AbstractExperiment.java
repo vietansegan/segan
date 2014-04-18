@@ -34,6 +34,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static final String RESULT_FOLDER = "result";
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";
+    public static final String PERPLEXITY_FILE = "perplexity.txt";
     public static final int UNOBSERVED = -1;
 
     public static enum RunType {

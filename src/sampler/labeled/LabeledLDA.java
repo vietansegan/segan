@@ -15,6 +15,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
 import util.SamplerUtils;
+import util.StatisticsUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -447,7 +448,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 docTopic.increment(newZ[n]);
             }
         }
-
         return docTopic.getDistribution();
     }
 
@@ -690,6 +690,78 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         writer.close();
     }
 
+    public double[][] computeAvgTopicCoherence(File file,
+            MimnoTopicCoherence topicCoherence) {
+        if (this.wordVocab == null) {
+            throw new RuntimeException("The word vocab has not been assigned yet");
+        }
+
+        if (verbose) {
+            logln("Outputing averaged topic coherence to file " + file);
+
+        }
+
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        double[][] avgTopics = new double[L][V];
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            writer.write("Iteration");
+            for (int k = 0; k < L; k++) {
+                writer.write("\tTopic_" + k);
+            }
+            writer.write("\n");
+
+            // partial score
+            ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                inputModel(new File(reportFolder, filename).getAbsolutePath());
+                double[][] pointTopics = new double[L][V];
+
+                writer.write(filename);
+                for (int k = 0; k < L; k++) {
+                    pointTopics[k] = label_words[k].getDistribution();
+                    int[] topic = SamplerUtils.getSortedTopic(pointTopics[k]);
+                    double score = topicCoherence.getCoherenceScore(topic);
+
+                    writer.write("\t" + score);
+                }
+                writer.write("\n");
+                aggTopics.add(pointTopics);
+            }
+
+            // averaging
+            writer.write("Average");
+            for (int k = 0; k < L; k++) {
+                double[] avgTopic = new double[V];
+                for (int v = 0; v < V; v++) {
+                    for (int ii = 0; ii < aggTopics.size(); ii++) {
+                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
+                    }
+                }
+                int[] topic = SamplerUtils.getSortedTopic(avgTopic);
+                double score = topicCoherence.getCoherenceScore(topic);
+                writer.write("\t" + score);
+
+                avgTopics[k] = avgTopic;
+            }
+            writer.write("\n");
+
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+        return avgTopics;
+    }
+
     public void test(int[][] newWords, File iterPredFolder) {
         if (verbose) {
             logln("Test sampling ...");
@@ -720,6 +792,115 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during test time.");
         }
+    }
+
+    public void computePerplexities(int[][] newWords, int[][] newLabels, File outputFile) {
+        if (verbose) {
+            logln("Computing perplexities & outputing to " + outputFile);
+        }
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write("Iteration\tPerplexity\n");
+            ArrayList<Double> pps = new ArrayList<Double>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                double pp = computePerplexity(new File(reportFolder, filename).getAbsolutePath(),
+                        newWords, newLabels);
+                pps.add(pp);
+                writer.write(filename + "\t" + pp + "\n");
+            }
+            writer.write("Average\t" + StatisticsUtils.mean(pps) + "\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+    }
+
+    public double computePerplexity(String stateFile,
+            int[][] newWords, int[][] newLabels) {
+        if (verbose) {
+            System.out.println();
+            logln("Computing perplexity using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        words = newWords;
+        labels = newLabels;
+        D = words.length;
+        numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            numTokens += words[d].length;
+        }
+
+        // initialize structure
+        initializeDataStructure();
+
+        ArrayList<Double> perplexities = new ArrayList<Double>();
+        if (verbose) {
+            logln("--- Sampling on test data ...");
+        }
+        for (iter = 0; iter < testMaxIter; iter++) {
+            if (iter % testSampleLag == 0) {
+                logln("--- --- iter " + iter + "/" + testMaxIter
+                        + " @ thread " + Thread.currentThread().getId());
+            }
+
+            if (iter == 0) {
+                sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
+            } else {
+                sampleZs(!REMOVE, !ADD, REMOVE, ADD);
+            }
+
+            // compute perplexity
+            double totalLogprob = 0.0;
+            double totalBeta = hyperparams.get(BETA) * V;
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                for (int d = 0; d < D; d++) {
+                    for (int n = 0; n < words[d].length; n++) {
+                        double val = 0.0;
+                        if (labels[d].length > 0) {
+                            for (int ii = 0; ii < labels[d].length; ii++) {
+                                int k = labels[d][ii];
+                                double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
+                                        / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * labels[d].length);
+                                double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                        / (label_words[k].getCountSum() + totalBeta);
+                                val += theta * phi;
+                            }
+                        } else { // for documents without labels and for test documents
+                            for (int k = 0; k < L; k++) {
+                                double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
+                                        / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * L);
+                                double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                        / (label_words[k].getCountSum() + totalBeta);
+                                val += theta * phi;
+                            }
+                        }
+                        totalLogprob += Math.log(val);
+                    }
+                }
+                double perplexity = Math.exp(-totalLogprob / numTokens);
+                perplexities.add(perplexity);
+            }
+        }
+        double avgPerplexity = StatisticsUtils.mean(perplexities);
+        return avgPerplexity;
     }
 
     public void sampleNewDocuments(String stateFile,
@@ -807,6 +988,44 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
         PredictionUtils.outputSingleModelClassifications(
                 new File(outputResultFile), predictedScores);
+    }
+
+    public static void parallelPerplexity(int[][] newWords,
+            int[][] newLabels,
+            File iterPerplexityFolder,
+            LabeledLDA sampler) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPerplexityFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPerplexityFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                LabeledLDAPerplexityRunner runner = new LabeledLDAPerplexityRunner(sampler,
+                        newWords, newLabels,
+                        stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath());
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+
+            // run MAX_NUM_PARALLEL_THREADS threads at a time
+            runThreads(threads);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while computing perplexity parallel test.");
+        }
     }
 
     public static void parallelTest(int[][] newWords, File iterPredFolder, LabeledLDA sampler) {
@@ -956,6 +1175,49 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         sampler.outputTopicCoherence(
                 new File(lldaFolder, TopicCoherenceFile),
                 data.getTopicCoherence());
+    }
+}
+
+class LabeledLDAPerplexityRunner implements Runnable {
+
+    LabeledLDA sampler;
+    int[][] newWords;
+    int[][] newLabels;
+    String stateFile;
+    String outputFile;
+
+    public LabeledLDAPerplexityRunner(LabeledLDA sampler,
+            int[][] newWords,
+            int[][] newLabels,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.newLabels = newLabels;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+    }
+
+    @Override
+    public void run() {
+        LabeledLDA testSampler = new LabeledLDA();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
+
+        try {
+            double perplexity = testSampler.computePerplexity(stateFile, newWords, newLabels);
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(perplexity + "\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
     }
 }
 

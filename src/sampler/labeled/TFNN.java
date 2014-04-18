@@ -5,8 +5,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
@@ -19,53 +17,34 @@ import util.SparseVector;
  *
  * @author vietan
  */
-public class TFIDF {
-
+public class TFNN {
     protected int[][] words;
     protected int[][] labels;
     protected int L;
     protected int V;
     protected int D;
-    protected double[] idfs; // V-dim vector
     protected SparseVector[] labelVectors; // L x V;
-    protected int minWordTypeCount = 5;
+    protected int minWordTypeCount = 0;
     protected double[] labelL2Norms;
-
-    public TFIDF() {
-    }
-
-    public TFIDF(
+    
+    public TFNN(
             int[][] docWords,
             int[][] labels,
             int L,
-            int V) {
+            int V,
+            int minWordTypeCount) {
         this.words = docWords;
         this.labels = labels;
         this.L = L;
         this.V = V;
         this.D = this.words.length;
+        this.minWordTypeCount = minWordTypeCount;
     }
-
-    public TFIDF(
-            ArrayList<int[]> docWords,
-            ArrayList<int[]> docLabels,
-            int L,
-            int V) {
-        this.L = L;
-        this.V = V;
-        this.D = docWords.size();
-        this.words = new int[docWords.size()][];
-        this.labels = new int[docLabels.size()][];
-        for (int d = 0; d < D; d++) {
-            this.words[d] = docWords.get(d);
-            this.labels[d] = docLabels.get(d);
-        }
-    }
-
+    
     public String getName() {
-        return "tf-idf";
+        return "tf-nn-" + minWordTypeCount;
     }
-
+    
     public SparseVector[] getLabelVectors() {
         return this.labelVectors;
     }
@@ -73,30 +52,8 @@ public class TFIDF {
     public void setMinWordTypeCount(int minTypeCount) {
         this.minWordTypeCount = minTypeCount;
     }
-
-    public double[] getIdfs() {
-        return this.idfs;
-    }
-
+    
     public void learn() {
-        // estimate doc-frequencies of each word type
-        System.out.println("Estimating DFs ...");
-        int[] dfs = new int[V];
-        for (int d = 0; d < D; d++) {
-            Set<Integer> uniqueWords = new HashSet<Integer>();
-            for (int n = 0; n < words[d].length; n++) {
-                uniqueWords.add(words[d][n]);
-            }
-            for (int uw : uniqueWords) {
-                dfs[uw]++;
-            }
-        }
-
-        idfs = new double[V];
-        for (int v = 0; v < V; v++) {
-            idfs[v] = Math.log(this.D) - Math.log(dfs[v] + 1);
-        }
-
         this.labelVectors = new SparseVector[L];
         for (int ll = 0; ll < L; ll++) {
             this.labelVectors[ll] = new SparseVector();
@@ -104,9 +61,6 @@ public class TFIDF {
         int[] labelDocCounts = new int[L];
         System.out.println("Aggregate label vectors ...");
         for (int d = 0; d < D; d++) {
-            if (d % 100000 == 0) {
-                System.out.println("--- d = " + d);
-            }
             int[] docTopics = this.labels[d];
             // skip unlabeled document or very short (after filtered) documents
             if (docTopics == null
@@ -120,21 +74,10 @@ public class TFIDF {
                 typeCount.increment(words[d][n]);
             }
 
-            // max tf
-            int maxTf = -1;
-            for (int idx : typeCount.getIndices()) {
-                int tf = typeCount.getCount(idx);
-                if (maxTf < tf) {
-                    maxTf = tf;
-                }
-            }
-
             SparseVector docVector = new SparseVector();
             for (int idx : typeCount.getIndices()) {
-                double tf = 0.5 + 0.5 * typeCount.getCount(idx) / maxTf;
-                double idf = idfs[idx];
-                double tfidf = tf * idf;
-                docVector.set(idx, tfidf);
+                double score = (double)typeCount.getCount(idx) / words[d].length;
+                docVector.set(idx, score);
             }
 
             for (int ll : docTopics) {
@@ -154,22 +97,14 @@ public class TFIDF {
 
         computeLabelL2Norms();
     }
-
+    
     protected void computeLabelL2Norms() {
         labelL2Norms = new double[L];
         for (int ll = 0; ll < L; ll++) {
             labelL2Norms[ll] = labelVectors[ll].getL2Norm();
         }
     }
-
-    /**
-     * Predict topics for a given document
-     *
-     * @param newWords The token vector of the test document
-     * @return A vector of length L (i.e., number of labels) specifying the
-     * score of each label predicted for the given document. The scores are in
-     * [0, 1].
-     */
+    
     public double[] predict(int[] newWords) {
         double[] scores = new double[L];
         if (newWords.length == 0) {
@@ -183,12 +118,12 @@ public class TFIDF {
 
         SparseVector docVector = new SparseVector();
         for (int idx : typeCount.getIndices()) {
-            double tfidf = typeCount.getCount(idx) * idfs[idx];
-            docVector.set(idx, tfidf);
+//            double tfidf = typeCount.getCount(idx) * idfs[idx];
+            double val = (double) typeCount.getCount(idx) / newWords.length;
+            docVector.set(idx, val);
         }
-
         double newDocL2Norm = docVector.getL2Norm();
-
+        
         for (int l = 0; l < L; l++) {
             if (labelVectors[l].size() > 0) { // skip topics that didn't have enough training data for
                 scores[l] = labelVectors[l].dotProduct(docVector)
@@ -197,7 +132,7 @@ public class TFIDF {
         }
         return scores;
     }
-
+    
     public ArrayList<Integer> predictLabel(int[] newWords, int topK) {
         double[] scores = predict(newWords);
         ArrayList<RankingItem<Integer>> rank = new ArrayList<RankingItem<Integer>>();
@@ -217,52 +152,7 @@ public class TFIDF {
         }
         return rankLabels;
     }
-
-    public void outputPredictorTextFile(File predFile) {
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(predFile);
-            writer.write("num-labels\t" + L + "\n");
-            writer.write("num-dimension\t" + V + "\n");
-            for (int l = 0; l < this.labelVectors.length; l++) {
-                writer.write(labelVectors[l].toString() + "\n");
-            }
-            for (int v = 0; v < V; v++) {
-                writer.write(this.idfs[v] + "\n");
-            }
-            writer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while outputing model to "
-                    + predFile);
-        }
-    }
-
-    public void inputPredictorTextFile(File predFile) {
-        try {
-            BufferedReader reader = IOUtils.getBufferedReader(predFile);
-            L = Integer.parseInt(reader.readLine().split("\t")[1]);
-            V = Integer.parseInt(reader.readLine().split("\t")[1]);
-            this.labelVectors = new SparseVector[L];
-            for (int l = 0; l < L; l++) {
-                labelVectors[l] = SparseVector.parseString(reader.readLine());
-            }
-            this.idfs = new double[V];
-            for (int v = 0; v < V; v++) {
-                this.idfs[v] = Double.parseDouble(reader.readLine());
-            }
-            reader.close();
-
-            labelL2Norms = new double[L];
-            for (int ll = 0; ll < L; ll++) {
-                labelL2Norms[ll] = labelVectors[ll].getL2Norm();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while inputing model from "
-                    + predFile);
-        }
-    }
-
+    
     public void outputPredictor(File predictorFile) {
         System.out.println("Outputing learned model to " + predictorFile);
         try {
@@ -271,12 +161,6 @@ public class TFIDF {
             labelVecStr.append("num-dimensions\t").append(V).append("\n");
             for (int l = 0; l < this.labelVectors.length; l++) {
                 labelVecStr.append(this.labelVectors[l].toString()).append("\n");
-            }
-
-            StringBuilder docFreqStr = new StringBuilder();
-            docFreqStr.append("V\t").append(V).append("\n");
-            for (int v = 0; v < V; v++) {
-                docFreqStr.append(this.idfs[v]).append("\n");
             }
 
             // output to a compressed file
@@ -289,12 +173,6 @@ public class TFIDF {
             writer.write(data, 0, data.length);
             writer.closeEntry();
 
-            ZipEntry assignEntry = new ZipEntry(filename + ".docfreq");
-            writer.putNextEntry(assignEntry);
-            data = docFreqStr.toString().getBytes();
-            writer.write(data, 0, data.length);
-            writer.closeEntry();
-
             writer.close();
         } catch (Exception e) {
             e.printStackTrace();
@@ -302,7 +180,7 @@ public class TFIDF {
                     + predictorFile);
         }
     }
-
+    
     public void inputPredictor(File predictorFile) {
         System.out.println("Inputing learned model from " + predictorFile);
         try {
@@ -319,24 +197,48 @@ public class TFIDF {
             }
             reader.close();
 
-            reader = IOUtils.getBufferedReader(zipFile,
-                    zipFile.getEntry(filename + ".docfreq"));
-            if (V != Integer.parseInt(reader.readLine().split("\t")[1])) {
-                throw new RuntimeException("Mismatch");
-            }
-            this.idfs = new double[V];
-            for (int v = 0; v < V; v++) {
-                this.idfs[v] = Double.parseDouble(reader.readLine());
-            }
-            reader.close();
-
             labelL2Norms = new double[L];
             for (int ll = 0; ll < L; ll++) {
                 labelL2Norms[ll] = labelVectors[ll].getL2Norm();
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while inputing predictor from "
+                    + predictorFile);
+        }
+    }
+    
+    public void outputTopWords(File outputFile,
+            ArrayList<String> labelVocab,
+            ArrayList<String> wordVocab,
+            int numTopWords) {
+        System.out.println("Outputing top words to " + outputFile);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            for (int ll = 0; ll < L; ll++) {
+                ArrayList<RankingItem<Integer>> rankWords = new ArrayList<RankingItem<Integer>>();
+                for (int v : labelVectors[ll].getIndices()) {
+                    rankWords.add(new RankingItem<Integer>(v, labelVectors[ll].get(v)));
+                }
+                Collections.sort(rankWords);
+
+                String topicStr = "Label-" + ll;
+                if (labelVocab != null) {
+                    topicStr = labelVocab.get(ll);
+                }
+                writer.write(topicStr);
+
+                for (int ii = 0; ii < numTopWords; ii++) {
+                    RankingItem<Integer> item = rankWords.get(ii);
+                    writer.write("\t" + wordVocab.get(item.getObject()));
+                }
+                writer.write("\n\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing top words to "
+                    + outputFile);
         }
     }
 }
