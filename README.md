@@ -101,7 +101,7 @@ Under construction.
 ## Train
 
 ```
-java -cp 'dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -train 
+java -cp "dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -train 
 ```
 
  - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
@@ -119,13 +119,13 @@ java -cp 'dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervi
 Working example:
 
 <code>
- java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset amazon-data --data-folder demo --format-folder 20140512format --output demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --rho 1 --sigma 10 --init random -train  -z -v -d
+ java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.SHLDA --dataset amazon-data --data-folder demo --format-folder 20140512format --output demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --rho 1 --sigma 10 --init random -train  -z -v -d
 </code>
 
 ## Test
 
 ```
-java -cp 'dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -test 
+java -cp "dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -test 
 ```
     
 ## Cross validation
@@ -137,7 +137,7 @@ Under construction
 ## Train
 
 ```
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -train
+java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -train
 ```
 
  - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
@@ -151,13 +151,13 @@ java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar
 Working example:
 
 <code>
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
+java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
 </code>
 
 ## Test
 
 ```
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -test --prediction-folder <prediction-folder> --evaluation-folder <evaluation-folder>
+java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -test --prediction-folder <prediction-folder> --evaluation-folder <evaluation-folder>
 ```
 
  - `<prediction-folder>`: Folder to store predicted values made by each learned model
