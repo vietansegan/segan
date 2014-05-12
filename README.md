@@ -100,7 +100,9 @@ Under construction.
 
 ## Train
 
-    java  -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --run-mode train 
+```
+java -cp 'dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -train 
+```
 
  - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
  - `<format-file>`: Name of input data files without extension.
@@ -114,26 +116,28 @@ Under construction.
  - For other arguments, use `-help`: `java -cp 'dist/segan.jar' sampler.supervised.regression.SHLDA -help`
  - Use `-Xmx` and `-Xms` to specify Java heap size. For example `-Xmx4096M -Xms4096M`.
     
+Working example:
+
+<code>
+ java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset amazon-data --data-folder demo --format-folder 20140512format --output demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --rho 1 --sigma 10 --init random -train  -z -v -d
+</code>
+
 ## Test
 
-    java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --run-mode test
+```
+java -cp 'dist/segan.jar:dist/lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> -test 
+```
     
 ## Cross validation
 
-    java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SHLDA --dataset <dataset-name> --output <result-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --fold <fold-number> --run-mode <running-mode>
-    
- - `<cv-folder>`: The cross-validation folder (see above).
- - `<num-folds>`: Number of folds
- - `<fold-number>`(optional): The fold number to run. If this argument is not set, all folds will be run.
- - `<run-mode>`(optional): The running mode which can be either `train` (run on training data only), `test` (evaluate on test data only) or `train-test` (train on training data and evaluate on test data). Default: `train-test`.
-
+Under construction
 
 # Run SLDA
 
 ## Train
 
 ```
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -train
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -train
 ```
 
  - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
@@ -144,16 +148,16 @@ java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.
  - `<sample-lag>`: Number of iterations between each model outputed. Default: 50.
  - `<number-of-topics>`: Number of topics. Default: 50
 
-Working example (node: replace <GUROBI_JAR_PATH> with the actual direction to `gurobi.jar` on your machine).
+Working example:
 
 <code>
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_PATH>' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
 </code>
 
 ## Test
 
 ```
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -test --prediction-folder <prediction-folder> --evaluation-folder <evaluation-folder>
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -test --prediction-folder <prediction-folder> --evaluation-folder <evaluation-folder>
 ```
 
  - `<prediction-folder>`: Folder to store predicted values made by each learned model
