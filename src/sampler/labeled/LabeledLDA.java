@@ -827,6 +827,16 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
+    /**
+     * Sampling to compute perplexity using a learned model stored in a state
+     * file.
+     *
+     * TODO: this could be merged with sampleNewDocuments.
+     *
+     * @param stateFile The state file storing the learned model
+     * @param newWords Words of test documents
+     * @param newLabels Labels of test documents
+     */
     public double computePerplexity(String stateFile,
             int[][] newWords, int[][] newLabels) {
         if (verbose) {
@@ -868,39 +878,43 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             }
 
             // compute perplexity
-            double totalLogprob = 0.0;
-            double totalBeta = hyperparams.get(BETA) * V;
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
-                for (int d = 0; d < D; d++) {
-                    for (int n = 0; n < words[d].length; n++) {
-                        double val = 0.0;
-                        if (labels[d].length > 0) {
-                            for (int ii = 0; ii < labels[d].length; ii++) {
-                                int k = labels[d][ii];
-                                double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
-                                        / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * labels[d].length);
-                                double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                        / (label_words[k].getCountSum() + totalBeta);
-                                val += theta * phi;
-                            }
-                        } else { // for documents without labels and for test documents
-                            for (int k = 0; k < L; k++) {
-                                double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
-                                        / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * L);
-                                double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                        / (label_words[k].getCountSum() + totalBeta);
-                                val += theta * phi;
-                            }
-                        }
-                        totalLogprob += Math.log(val);
-                    }
-                }
-                double perplexity = Math.exp(-totalLogprob / numTokens);
-                perplexities.add(perplexity);
+                perplexities.add(computePerplexity());
             }
         }
         double avgPerplexity = StatisticsUtils.mean(perplexities);
         return avgPerplexity;
+    }
+
+    private double computePerplexity() {
+        double totalBeta = hyperparams.get(BETA) * V;
+        double totalLogprob = 0.0;
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                double val = 0.0;
+                if (labels[d].length > 0) {
+                    for (int ii = 0; ii < labels[d].length; ii++) {
+                        int k = labels[d][ii];
+                        double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
+                                / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * labels[d].length);
+                        double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (label_words[k].getCountSum() + totalBeta);
+                        val += theta * phi;
+                    }
+                } else { // for documents without labels and for test documents
+                    for (int k = 0; k < L; k++) {
+                        double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
+                                / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * L);
+                        double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (label_words[k].getCountSum() + totalBeta);
+                        val += theta * phi;
+                    }
+                }
+                totalLogprob += Math.log(val);
+            }
+        }
+        double perplexity = Math.exp(-totalLogprob / numTokens);
+        return perplexity;
     }
 
     public void sampleNewDocuments(String stateFile,
@@ -943,25 +957,15 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         // initialize assignments
         sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
 
-        if (verbose) {
-            logln("After initialization");
-            int docTopicCount = 0;
-            for (int d = 0; d < D; d++) {
-                docTopicCount += doc_labels[d].getCountSum();
-            }
-            int topicWordCount = 0;
-            for (int k = 0; k < label_words.length; k++) {
-                topicWordCount += label_words[k].getCountSum();
-            }
-            logln("--- docTopics: " + doc_labels.length + ". " + docTopicCount);
-            logln("--- topicWords: " + label_words.length + ". " + topicWordCount);
-        }
-
         // sample an store predictions
         double[][] predictedScores = new double[D][L];
         int count = 0;
         for (iter = 0; iter < testMaxIter; iter++) {
-            sampleZs(!REMOVE, !ADD, REMOVE, ADD);
+            if (iter == 0) {
+                sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
+            } else {
+                sampleZs(!REMOVE, !ADD, REMOVE, ADD);
+            }
 
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 if (verbose) {
@@ -993,6 +997,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     public static void parallelPerplexity(int[][] newWords,
             int[][] newLabels,
             File iterPerplexityFolder,
+            File resultFolder,
             LabeledLDA sampler) {
         File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
         if (!reportFolder.exists()) {
@@ -1022,6 +1027,23 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             // run MAX_NUM_PARALLEL_THREADS threads at a time
             runThreads(threads);
 
+            // summarize multiple perplexities
+            String[] ppxFiles = iterPerplexityFolder.list();
+            ArrayList<Double> ppxs = new ArrayList<Double>();
+            for (String ppxFile : ppxFiles) {
+                double ppx = IOUtils.inputPerplexity(new File(iterPerplexityFolder, ppxFile));
+                ppxs.add(ppx);
+            }
+
+            // averaging
+            File ppxResultFile = new File(resultFolder, PerplexityFile);
+            BufferedWriter writer = IOUtils.getBufferedWriter(ppxResultFile);
+            writer.write(StatisticsUtils.mean(ppxs) + "\n");
+            for (int ii = 0; ii < ppxFiles.length; ii++) {
+                writer.write(ppxFiles[ii] + "\t" + ppxs.get(ii) + "\n");
+            }
+            writer.close();
+            
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while computing perplexity parallel test.");
@@ -1211,9 +1233,7 @@ class LabeledLDAPerplexityRunner implements Runnable {
 
         try {
             double perplexity = testSampler.computePerplexity(stateFile, newWords, newLabels);
-            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            writer.write(perplexity + "\n");
-            writer.close();
+            IOUtils.outputPerplexity(outputFile, perplexity);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException();

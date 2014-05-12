@@ -1,6 +1,7 @@
 package sampler.supervised.regression.slda;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
+import core.AbstractExperiment;
 import core.AbstractSampler;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
@@ -1132,18 +1133,26 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         addOption("format-file", "Format file");
 
         addSamplingOptions();
-        
+
         addOption("alpha", "alpha");
         addOption("beta", "beta");
         addOption("rho", "rho");
         addOption("mu", "mu");
         addOption("sigma", "sigma");
-        
+
+        addOption("init", "Initialization");
         addOption("K", "Number of topics");
-        
+
+        addOption("prediction-folder", "Prediction folder");
+        addOption("evaluation-folder", "Evaluation folder");
+
         options.addOption("paramOpt", false, "Whether hyperparameter "
                 + "optimization using slice sampling is performed");
         options.addOption("z", false, "whether standardize (z-score normalization)");
+
+        options.addOption("z", false, "z-normalization");
+        options.addOption("train", false, "train");
+        options.addOption("test", false, "test");
     }
 
     public static void run(String[] args) {
@@ -1199,6 +1208,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         if (cmd.hasOption("topic-coherence")) {
             data.prepareTopicCoherence(numTopWords);
         }
+        if (cmd.hasOption("z")) {
+            data.zNormalize();
+        }
 
         String init = CLIUtils.getStringArgument(cmd, "init", "random");
         InitialState initState;
@@ -1225,10 +1237,39 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
-        sampler.train(data.getWords(), data.getResponses());
-        sampler.initialize();
-        sampler.iterate();
-        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+
+        if (cmd.hasOption("train")) {
+            sampler.train(data.getWords(), data.getResponses());
+            sampler.initialize();
+            sampler.iterate();
+            sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        }
+
+        if (cmd.hasOption("test")) {
+            File predictionFolder = new File(sampler.getSamplerFolderPath(), 
+                    CLIUtils.getStringArgument(cmd, "prediction-folder", "predictions"));
+            IOUtils.createFolder(predictionFolder);
+
+            File evaluationFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "evaluation-folder", "evaluations"));
+            IOUtils.createFolder(evaluationFolder);
+
+            // test in parallel
+            SLDA.parallelTest(data.getWords(), predictionFolder, sampler);
+
+            double[] predictions = PredictionUtils.evaluateRegression(
+                    predictionFolder, evaluationFolder, data.getDocIds(),
+                    data.getResponses());
+
+            PredictionUtils.outputRegressionPredictions(
+                    new File(predictionFolder,
+                    AbstractExperiment.PREDICTION_FILE),
+                    data.getDocIds(), data.getResponses(), predictions);
+            PredictionUtils.outputRegressionResults(
+                    new File(evaluationFolder,
+                    AbstractExperiment.RESULT_FILE), data.getResponses(),
+                    predictions);
+        }
     }
 }
 

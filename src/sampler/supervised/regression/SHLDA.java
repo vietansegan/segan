@@ -1,6 +1,5 @@
 package sampler.supervised.regression;
 
-import cc.mallet.types.Dirichlet;
 import cc.mallet.util.Randoms;
 import core.AbstractSampler;
 import data.ResponseTextDataset;
@@ -3825,6 +3824,10 @@ public class SHLDA extends AbstractSampler
             sampler.initialize();
             sampler.iterate();
             sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        }
+
+        if (cmd.hasOption("test")) {
+            throw new RuntimeException("To be implemented");
         }
     }
 }

@@ -28,6 +28,8 @@ public abstract class AbstractSampler implements Serializable {
     public static final String IterPredictionFolder = "iter-predictions/";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
+    public static final String IterPerplexityFolder = "iter-perplexities";
+    public static final String PerplexityFile = "perplexity.txt";
     public static final String ModelFile = "model.zip";
     public static final String ReportFolder = "report/";
     public static final String AssignmentFileExt = ".assignment";
@@ -154,6 +156,10 @@ public abstract class AbstractSampler implements Serializable {
         return str.toString();
     }
 
+    public File getFinalStateFile() {
+        return new File(getReportFolderPath(), "iter-" + MAX_ITER + ".zip");
+    }
+
     public void inputFinalState() {
         this.inputState(new File(getReportFolderPath(), "iter-" + MAX_ITER + ".zip"));
     }
@@ -179,17 +185,21 @@ public abstract class AbstractSampler implements Serializable {
         String filename = IOUtils.removeExtension(IOUtils.getFilename(filepath));
         ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
 
-        ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
-        writer.putNextEntry(modelEntry);
-        byte[] data = modelStr.getBytes();
-        writer.write(data, 0, data.length);
-        writer.closeEntry();
+        if (modelStr != null) {
+            ZipEntry modelEntry = new ZipEntry(filename + ModelFileExt);
+            writer.putNextEntry(modelEntry);
+            byte[] data = modelStr.getBytes();
+            writer.write(data, 0, data.length);
+            writer.closeEntry();
+        }
 
-        ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
-        writer.putNextEntry(assignEntry);
-        data = assignStr.getBytes();
-        writer.write(data, 0, data.length);
-        writer.closeEntry();
+        if (assignStr != null) {
+            ZipEntry assignEntry = new ZipEntry(filename + AssignmentFileExt);
+            writer.putNextEntry(assignEntry);
+            byte[] data = assignStr.getBytes();
+            writer.write(data, 0, data.length);
+            writer.closeEntry();
+        }
 
         writer.close();
     }

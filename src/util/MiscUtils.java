@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import sampling.util.SparseCount;
 
 /**
  *
@@ -14,6 +15,24 @@ import java.util.List;
 public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
+
+    public static ArrayList<RankingItem<Integer>> getRankingList(SparseVector vector) {
+        ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
+        for (int idx : vector.getIndices()) {
+            rankItems.add(new RankingItem<Integer>(idx, vector.get(idx)));
+        }
+        Collections.sort(rankItems);
+        return rankItems;
+    }
+
+    public static ArrayList<RankingItem<Integer>> getRankingList(SparseCount counts) {
+        ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
+        for (int idx : counts.getIndices()) {
+            rankItems.add(new RankingItem<Integer>(idx, counts.getCount(idx)));
+        }
+        Collections.sort(rankItems);
+        return rankItems;
+    }
 
     public static ArrayList<RankingItem<Integer>> getRankingList(double[] scores) {
         ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
@@ -70,6 +89,19 @@ public class MiscUtils {
         str.append("[").append(formatDouble(list.get(0)));
         for (int i = 1; i < list.size(); i++) {
             str.append(", ").append(formatDouble(list.get(i)));
+        }
+        str.append("]");
+        return str.toString();
+    }
+
+    public static String arrayToString(String[] array) {
+        if (array.length == 0) {
+            return "[]";
+        }
+        StringBuilder str = new StringBuilder();
+        str.append("[").append(array[0]);
+        for (int i = 1; i < array.length; i++) {
+            str.append(" ").append(array[i]);
         }
         str.append("]");
         return str.toString();

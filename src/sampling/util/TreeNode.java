@@ -41,6 +41,10 @@ public class TreeNode<N extends TreeNode, C>
         this.index = idx;
     }
 
+    public void setLevel(int level) {
+        this.level = level;
+    }
+
     /**
      * Fill in the inactive indices (after all children nodes are loaded)
      */

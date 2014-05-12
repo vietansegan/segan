@@ -31,6 +31,10 @@ public class TFIDFNN {
     protected int minWordTypeCount = 0;
     protected double[] labelL2Norms;
 
+    public TFIDFNN(int minWordTypeCount) {
+        this.minWordTypeCount = minWordTypeCount;
+    }
+
     public TFIDFNN(
             int[][] docWords,
             int[][] labels,
@@ -322,6 +326,53 @@ public class TFIDFNN {
             throw new RuntimeException("Exception while inputing predictor from "
                     + predictorFile);
         }
+        System.out.println("--- Model loaded");
+    }
+
+    public void outputPredictions(File outputFile, double[][] predictions) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(predictions.length + "\n");
+            for (int dd = 0; dd < predictions.length; dd++) {
+                writer.write(Integer.toString(dd));
+                for (int ii = 0; ii < predictions[dd].length; ii++) {
+                    writer.write("\t" + predictions[dd][ii]);
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing predictions to "
+                    + outputFile);
+        }
+    }
+
+    public double[][] inputPredictions(File inputFile) {
+        double[][] predictions = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            int len = Integer.parseInt(reader.readLine());
+            predictions = new double[len][];
+
+            int count = 0;
+            for (int dd = 0; dd < count; dd++) {
+                String[] sline = reader.readLine().split("\t");
+                if (dd != Integer.parseInt(sline[0])) {
+                    throw new RuntimeException("Indices mismatch.");
+                }
+                predictions[dd] = new double[sline.length - 1];
+                for (int ii = 1; ii < sline.length; ii++) {
+                    predictions[dd][ii - 1] = Double.parseDouble(sline[ii]);
+                }
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing predictions from "
+                    + inputFile);
+        }
+        return predictions;
     }
 
     public void outputTopWords(File outputFile,

@@ -19,6 +19,38 @@ public class IOUtils {
         return new File(folder, filename).getAbsolutePath();
     }
 
+    public static double inputPerplexity(File inputFile) {
+        return inputPerplexity(inputFile.getAbsolutePath());
+    }
+
+    public static double inputPerplexity(String inputFile) {
+        double ppx = 0;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            ppx = Double.parseDouble(reader.readLine());
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing " + inputFile);
+        }
+        return ppx;
+    }
+
+    public static void outputPerplexity(File outputFile, double perplexity) {
+        outputPerplexity(outputFile.getAbsolutePath(), perplexity);
+    }
+
+    public static void outputPerplexity(String outputFile, double perplexity) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(perplexity + "\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing " + outputFile);
+        }
+    }
+
     public static ArrayList<String> loadVocab(String filepath) throws Exception {
         ArrayList<String> voc = new ArrayList<String>();
         BufferedReader reader = IOUtils.getBufferedReader(filepath);

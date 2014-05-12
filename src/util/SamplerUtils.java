@@ -3,6 +3,7 @@ package util;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+import sampling.util.SparseCount;
 
 /**
  *
@@ -199,6 +200,18 @@ public class SamplerUtils {
         return val;
     }
 
+    public static double computeLogLhood(SparseCount obs, double[] prior_mean, double concentration) {
+        double val = 0.0;
+        val += logGammaStirling(concentration);
+        val -= logGammaStirling(obs.getCountSum() + concentration);
+        for (int i = 0; i < prior_mean.length; i++) {
+            double pseudoCount = concentration * prior_mean[i];
+            val -= logGammaStirling(pseudoCount);
+            val += logGammaStirling(pseudoCount + obs.getCount(i));
+        }
+        return val;
+    }
+
     /**
      * Compute log likelihood for an asymmetric multinomial when the prior is
      * expressed using a mean vector and a concentration parameter
@@ -250,6 +263,18 @@ public class SamplerUtils {
         return val;
     }
 
+    public static double computeLogLhood(double[] mult, double[] prior_mean,
+            double concentration) {
+        double val = 0.0;
+        val += logGammaStirling(concentration);
+        for (int ii = 0; ii < mult.length; ii++) {
+            double pseudoCount = concentration * prior_mean[ii];
+            val -= logGammaStirling(pseudoCount);
+            val += (pseudoCount - 1) * Math.log(mult[ii]);
+        }
+        return val;
+    }
+
     /**
      * Compute log likelihood for an asymmetric multinomial when the prior is
      * expressed using a vector
@@ -277,6 +302,27 @@ public class SamplerUtils {
 
         val -= SamplerUtils.logGammaStirling(sum + prior_sum);
 
+        return val;
+    }
+
+    /**
+     * Compute the log probability that a given multinomial distribution were
+     * drawn from a given Dirichlet distribution.
+     *
+     * @param mult The multinomial distribution
+     * @param prior_vals The parameter vector of the Dirichlet distribution
+     */
+    public static double computeLogLhood(double[] mult, double[] prior_vals) {
+        double val = 0.0;
+
+        double prior_sum = StatisticsUtils.sum(prior_vals);
+        val += logGammaStirling(prior_sum);
+        for (double p : prior_vals) {
+            val -= logGammaStirling(p);
+        }
+        for (int ii = 0; ii < mult.length; ii++) {
+            val += (prior_vals[ii] - 1) * Math.log(mult[ii]);
+        }
         return val;
     }
 
