@@ -56,17 +56,21 @@ To process text-only data stored in a single file, where each line corresponds t
 
 This is to process a collection of documents, each of which is associated with a single continuous response variable. This is done similarly as above, but using `data.ResponseTextDataset` with an additional argument `<response-file>` which contains the value of the response variable. The `<response-file>` has the following format: `<docid>\t<response_value>\n`.
 
-    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> --text-data <input-text-file> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
+```
+java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> --text-data <input-text-file> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
+```
 
 Working cmd to process the amazon data included in the `demo` folder
 ```    
-    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset amazon --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder format --run-mode process --response-file demo/amazon-data/raw/response.txt --u 5 --b 10 --bs 5 -s -l --V 1000 -v -d
+java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset amazon --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder format --run-mode process --response-file demo/amazon-data/raw/response.txt --u 5 --b 10 --bs 5 -s -l --V 1000 -v -d
 ```
 ## Create cross validation data
 
 Currently only support data with continuous responses
 
-    java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset--dataset <dataset-name> --text-data <input-text-folder> --response-file <response_value> --data-folder <data-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development-ratio> --num-classes <number-of-discretized-classes> --run-mode cross-validation
+```
+java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset--dataset <dataset-name> --text-data <input-text-folder> --response-file <response_value> --data-folder <data-folder> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --tr2dev-ratio <training-to-development-ratio> --num-classes <number-of-discretized-classes> --run-mode cross-validation
+```
 
  - `<cv-folder>`: Directory of the folder to contain the processed cross-validation data.
  - `<num-folds>`: The number of folds
@@ -88,32 +92,9 @@ To process the test data with the processed word vocabulary, use `--word-vocab-f
 
 Under construction.
 
-# Run SLDA (to be revised)
+# Input Data Format
 
-Run SLDA Gibbs sampler with the default setting:
-    
-    java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --output <result-folder> --K <number-of-topics> -z
-   
-   E.g.,
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset amazon-data --data-folder demo --format-folder format-response --output demo/amazon-data/format-response-model --K 50 --burnIn 10 --maxIter 20 --sampleLag 5 -v -d -z
-
-2. Run SLDA Gibbs sampler for cross validation
-   a) To train on training data
-   
-   java -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset <dataset-name> --cv-folder <cross-validation-folder> --num-folds <number-of-folds> --output <result-folder> --K <number-of-topics> --run-mode train-test -v -d -z
-
-   b) To test, use "--run-mode test" instead of "--run-mode train"
-
-   c) To do both training and test, use "--run-mode train-test" instead
-   
-   E.g.,
-   java -Xmx4096M -Xms4096M -cp 'dist/segan.jar:dist/lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.SLDA --dataset amazon-data --cv-folder demo/amazon-data/format-cv-5-0.8 --num-folds 5 --output demo/amazon-data/format-cv-5-0.8-model --K 50 --burnIn 10 --maxIter 20 --sampleLag 5 --fold 0 --run-mode train-test -v -d -z
-
-   *** Notes:
-   + --fold: to specify a single fold that you want to run on
-   + -z: to perform z-normalization on the response variable
-   + -v: verbose
-   + -d: debug
+Under construction.
 
 # Run SHLDA
 
@@ -145,3 +126,40 @@ Run SLDA Gibbs sampler with the default setting:
  - `<num-folds>`: Number of folds
  - `<fold-number>`(optional): The fold number to run. If this argument is not set, all folds will be run.
  - `<run-mode>`(optional): The running mode which can be either `train` (run on training data only), `test` (evaluate on test data only) or `train-test` (train on training data and evaluate on test data). Default: `train-test`.
+
+
+# Run SLDA
+
+## Train
+
+```
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -train
+```
+
+ - `<dataset>`, `<data-folder>`, `<format-folder>`: See above
+ - `<format-file>`: Name of input data files without extension. Default: same as <dataset>. Specify this if when run on different sets of data during cross validation.
+ - `<output>`: Directory of the output folder
+ - `<burn-in>`: Number of burn-in iterations. Default: 500.
+ - `<number-of-iterations>`: Total number of iterations. Default: 1000.
+ - `<sample-lag>`: Number of iterations between each model outputed. Default: 50.
+ - `<number-of-topics>`: Number of topics. Default: 50
+
+E.g.,
+
+```
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
+
+```
+
+## Test
+
+```
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.supervised.regression.slda.SLDA --dataset <dataset-name> --data-folder <data-folder> --format-folder <format-folder> --format-file <format-file> --output <result-folder> --burnIn <burn-in> --maxIter <number-of-iterations> --sampleLag <sampler-lag> --K <number-of-topics> -test --prediction-folder <prediction-folder> --evaluation-folder <evaluation-folder>
+```
+
+ - `<prediction-folder>`: Folder to store predicted values made by each learned model
+ - `<evaluation-folder>`: Folder to store evaluation results. Evaluation metrics include Pearson correlation coefficient, mean square error (MSE), mean absolute error (MAE), R-squared, predictive R-squared.
+
+## Run cross-validation
+
+Under construction
