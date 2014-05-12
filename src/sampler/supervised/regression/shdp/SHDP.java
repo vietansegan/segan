@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.shdp;
 
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;

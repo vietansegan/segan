@@ -1,6 +1,7 @@
 package sampler.supervised.regression;
 
 import cc.mallet.util.Randoms;
+import core.AbstractExperiment;
 import core.AbstractSampler;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
@@ -3694,7 +3695,10 @@ public class SHLDA extends AbstractSampler
         options.addOption("train", false, "train");
         options.addOption("dev", false, "development");
         options.addOption("test", false, "test");
-        options.addOption("parallel", false, "parallel");
+        options.addOption("z", false, "z-normalization");
+        
+        addOption("prediction-folder", "Prediction folder");
+        addOption("evaluation-folder", "Evaluation folder");
     }
 
     public static void run(String[] args) {
@@ -3707,7 +3711,11 @@ public class SHLDA extends AbstractSampler
                 CLIUtils.printHelp(getHelpString(), options);
                 return;
             }
-            runModel();
+            if (cmd.hasOption("cv-folder")) {
+                runCrossValidation();
+            } else {
+                runModel();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Use option -help for all options.");
@@ -3742,6 +3750,11 @@ public class SHLDA extends AbstractSampler
         data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder));
         if (cmd.hasOption("topic-coherence")) {
             data.prepareTopicCoherence(numTopWords);
+        }
+        if (cmd.hasOption("z")) {
+            data.zNormalize();
+        } else {
+            System.out.println("[WARNING] Running with unnormalized responses.");
         }
 
         // parameters
@@ -3827,7 +3840,33 @@ public class SHLDA extends AbstractSampler
         }
 
         if (cmd.hasOption("test")) {
-            throw new RuntimeException("To be implemented");
+            File predictionFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "prediction-folder", "predictions"));
+            IOUtils.createFolder(predictionFolder);
+
+            File evaluationFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "evaluation-folder", "evaluations"));
+            IOUtils.createFolder(evaluationFolder);
+
+            // test in parallel
+            sampler.test(data);
+
+            double[] predictions = PredictionUtils.evaluateRegression(
+                    predictionFolder, evaluationFolder, data.getDocIds(),
+                    data.getResponses());
+
+            PredictionUtils.outputRegressionPredictions(
+                    new File(predictionFolder,
+                    AbstractExperiment.PREDICTION_FILE),
+                    data.getDocIds(), data.getResponses(), predictions);
+            PredictionUtils.outputRegressionResults(
+                    new File(evaluationFolder,
+                    AbstractExperiment.RESULT_FILE), data.getResponses(),
+                    predictions);
         }
+    }
+    
+    private static void runCrossValidation() throws Exception {
+        
     }
 }

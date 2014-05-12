@@ -1175,9 +1175,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
     protected static void runModel() {
         // sampling configurations
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 5);
-        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 10);
-        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 500);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 1000);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
         int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
         boolean paramOpt = cmd.hasOption("paramOpt");
         boolean verbose = cmd.hasOption("v");
@@ -1210,6 +1210,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
         if (cmd.hasOption("z")) {
             data.zNormalize();
+        } else {
+            System.out.println("[WARNING] Running with unnormalized responses.");
         }
 
         String init = CLIUtils.getStringArgument(cmd, "init", "random");
@@ -1246,7 +1248,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         }
 
         if (cmd.hasOption("test")) {
-            File predictionFolder = new File(sampler.getSamplerFolderPath(), 
+            File predictionFolder = new File(sampler.getSamplerFolderPath(),
                     CLIUtils.getStringArgument(cmd, "prediction-folder", "predictions"));
             IOUtils.createFolder(predictionFolder);
 

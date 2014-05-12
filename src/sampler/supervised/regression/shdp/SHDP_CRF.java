@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.supervised.regression.shdp;
 
 import core.AbstractSampler;
 import core.AbstractSampler.InitialState;
@@ -981,7 +981,8 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(hyperparams.get(RHO)));
+            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], 
+                    Math.sqrt(hyperparams.get(RHO)));
         }
 
         if (verbose && iter % REP_INTERVAL == 0) {
@@ -1015,7 +1016,8 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(newParams.get(RHO)));
+            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], 
+                    Math.sqrt(newParams.get(RHO)));
         }
 
         return obsLlh + assignLp + dishRegLlh + resLlh;
