@@ -163,6 +163,13 @@ java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar
  - `<prediction-folder>`: Folder to store predicted values made by each learned model
  - `<evaluation-folder>`: Folder to store evaluation results. Evaluation metrics include Pearson correlation coefficient, mean square error (MSE), mean absolute error (MAE), R-squared, predictive R-squared.
 
+Working example:
+
+<code>
+java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*:$GUROBI_HOME/lib/gurobi.jar" sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -test --prediction-folder predictions --evaluation-folder evaluations -z -v -d
+</code>
+
+
 ## Run cross-validation
 
 Under construction
