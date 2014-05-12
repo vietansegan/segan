@@ -144,12 +144,11 @@ java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_FILE>' sampler.
  - `<sample-lag>`: Number of iterations between each model outputed. Default: 50.
  - `<number-of-topics>`: Number of topics. Default: 50
 
-E.g.,
+Working example (node: replace <GUROBI_JAR_PATH> with the actual direction to `gurobi.jar` on your machine).
 
-```
-java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:/fs/clip-ml/gurobi502/linux64/lib/gurobi.jar' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
-
-```
+<code>
+java -Xmx10000M -Xms10000M -cp 'dist/segan.jar:lib/*:<GUROBI_JAR_PATH>' sampler.supervised.regression.slda.SLDA --dataset amazon-data --data-folder demo --format-folder format --output demo/amazon-data/format-models --burnIn 25 --maxIter 50 --sampleLag 5 --K 25 --alpha 0.1 --beta 0.1 --rho 1 --sigma 10 --init random -train  -z -v -d
+</code>
 
 ## Test
 
