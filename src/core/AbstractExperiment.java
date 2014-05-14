@@ -46,6 +46,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static int sample_lag = 50;
     public static int report_interval = 5;
     protected InitialState initState;
+    protected boolean paramOpt;
     public static String experimentPath;
     protected D data;
 
