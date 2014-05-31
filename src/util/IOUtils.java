@@ -15,6 +15,74 @@ import java.util.zip.ZipOutputStream;
  */
 public class IOUtils {
 
+    public static void outputLibSVM(File outputFile, SparseVector[] features, int[][] labels) {
+        System.out.println("Outputing LIBSVM-formatted data to " + outputFile);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            for (int ii = 0; ii < features.length; ii++) {
+                if (labels[ii].length == 0) {
+                    continue;
+                }
+                // labels
+                for (int jj = 0; jj < labels[ii].length - 1; jj++) {
+                    writer.write(labels[ii][jj] + ",");
+                }
+                writer.write(Integer.toString(labels[ii][labels[ii].length - 1]) + " ");
+
+                // features
+                for (int idx : features[ii].getSortedIndices()) {
+                    double featureVal = features[ii].get(idx);
+                    if (Math.abs(featureVal) < 10E-6) {
+                        continue;
+                    }
+                    writer.write(" " + idx + ":" + features[ii].get(idx));
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing "
+                    + "LIBSVM-formatted data to " + outputFile);
+        }
+    }
+
+    public static void outputPerplexities(File outputFile, ArrayList<Double> perplexities) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write("Average-Perplexity\t" + StatisticsUtils.mean(perplexities) + "\n");
+            writer.write("Min-Perplexity\t" + StatisticsUtils.min(perplexities) + "\n");
+            writer.write("Max-Perplexity\t" + StatisticsUtils.max(perplexities) + "\n");
+            writer.write("Median-Perplexity\t" + StatisticsUtils.median(perplexities) + "\n");
+            for (int ii = 0; ii < perplexities.size(); ii++) {
+                writer.write(perplexities.get(ii) + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing perplexity"
+                    + " results to " + outputFile);
+        }
+    }
+
+    public static void outputTopicCoherences(File outputFile, ArrayList<Double> topicCoherences) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write("Average-Coherence\t" + StatisticsUtils.mean(topicCoherences) + "\n");
+            writer.write("Min-Coherence\t" + StatisticsUtils.min(topicCoherences) + "\n");
+            writer.write("Max-Coherence\t" + StatisticsUtils.max(topicCoherences) + "\n");
+            writer.write("Median-Coherence\t" + StatisticsUtils.median(topicCoherences) + "\n");
+            for (int ii = 0; ii < topicCoherences.size(); ii++) {
+                writer.write(topicCoherences.get(ii) + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing perplexity"
+                    + " results to " + outputFile);
+        }
+    }
+
     public static String getAbsolutePath(File folder, String filename) {
         return new File(folder, filename).getAbsolutePath();
     }

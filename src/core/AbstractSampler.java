@@ -25,7 +25,7 @@ public abstract class AbstractSampler implements Serializable {
 
     private static final long serialVersionUID = 1123581321L;
     public static final int MAX_NUM_PARALLEL_THREADS = 5;
-    public static final String IterPredictionFolder = "iter-predictions/";
+    public static final String IterPredictionFolder = "iter-predictions";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
     public static final String IterPerplexityFolder = "iter-perplexities";

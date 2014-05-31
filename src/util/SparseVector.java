@@ -23,6 +23,14 @@ public class SparseVector implements Serializable {
         return this.values.size();
     }
 
+    public void normalize() {
+        double sum = this.sum();
+        for (int idx : getIndices()) {
+            double normVal = this.get(idx) / sum;
+            this.values.put(idx, normVal);
+        }
+    }
+
     public double sum() {
         double sum = 0.0;
         for (double val : values.values()) {

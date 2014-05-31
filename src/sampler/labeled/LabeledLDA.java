@@ -10,11 +10,13 @@ import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.likelihood.DirMult;
+import sampling.util.SparseCount;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
 import util.SamplerUtils;
+import util.SparseVector;
 import util.StatisticsUtils;
 import util.evaluation.MimnoTopicCoherence;
 
@@ -69,7 +71,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             int V, int L,
             double alpha,
             double beta,
-            InitialState initState, boolean paramOpt,
+            InitialState initState,
+            boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInterval) {
         if (verbose) {
             logln("Configuring ...");
@@ -151,6 +154,22 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
+    public void test(int[][] ws) {
+        this.words = ws;
+        this.labels = null;
+        this.D = this.words.length;
+
+        this.numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+        }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+        }
+    }
+
     @Override
     public void initialize() {
         if (verbose) {
@@ -215,6 +234,11 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             }
         }
     }
+    
+    @Override
+    public String getCurrentState() {
+        return this.getSamplerFolderPath();
+    }
 
     @Override
     public void iterate() {
@@ -253,13 +277,12 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 validate("iter " + iter);
             }
 
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
+                double loglikelihood = this.getLogLikelihood();
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
                         + "\t tokens changed: " + ((double) numTokensChange / numTokens)
-                        + "\t" + getCurrentState();
+                        + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str + "\n");
                 } else {
@@ -690,6 +713,88 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         writer.close();
     }
 
+    /**
+     * Return the feature vector extracted from training data.
+     *
+     * Indices start at 1.
+     */
+    public SparseVector[] getTrainingFeatureVectors() {
+        SparseVector[] featVecs = new SparseVector[D];
+        for (int d = 0; d < D; d++) {
+            featVecs[d] = new SparseVector();
+        }
+        double[][] sumDists = new double[D][L];
+
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            int numModels = 0;
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+                for (int d = 0; d < D; d++) {
+                    double[] docDist = doc_labels[d].getDistribution();
+                    for (int ll = 0; ll < L; ll++) {
+                        sumDists[d][ll] += docDist[ll];
+                    }
+                }
+                numModels++;
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int ll = 0; ll < L; ll++) {
+                    double val = sumDists[d][ll] / numModels;
+                    featVecs[d].set(ll + 1, val); // index start at 1
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting training feature vectors.");
+        }
+        return featVecs;
+    }
+
+    public SparseVector[] getTestFeatureVectors(File iterPredFolder) {
+        SparseVector[] featVecs = new SparseVector[D];
+        for (int d = 0; d < D; d++) {
+            featVecs[d] = new SparseVector();
+        }
+        double[][] sumDists = new double[D][L];
+
+        String[] filenames = iterPredFolder.list();
+        try {
+            for (String filename : filenames) {
+                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(new File(iterPredFolder, filename));
+                for (int d = 0; d < D; d++) {
+                    for (int ll = 0; ll < L; ll++) {
+                        sumDists[d][ll] += singlePreds[d][ll];
+                    }
+                }
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int ll = 0; ll < L; ll++) {
+                    double val = sumDists[d][ll] / filenames.length;
+                    featVecs[d].set(ll + 1, val);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting test feature vectors.");
+        }
+
+        return featVecs;
+    }
+
     public double[][] computeAvgTopicCoherence(File file,
             MimnoTopicCoherence topicCoherence) {
         if (this.wordVocab == null) {
@@ -708,7 +813,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         String[] filenames = reportFolder.list();
         double[][] avgTopics = new double[L][V];
         try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            BufferedWriter writer = IOUtils.getBufferedWriter(file.getAbsolutePath() + ".iter");
             writer.write("Iteration");
             for (int k = 0; k < L; k++) {
                 writer.write("\tTopic_" + k);
@@ -739,6 +844,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // averaging
             writer.write("Average");
+            ArrayList<Double> scores = new ArrayList<Double>();
             for (int k = 0; k < L; k++) {
                 double[] avgTopic = new double[V];
                 for (int v = 0; v < V; v++) {
@@ -749,17 +855,87 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 int[] topic = SamplerUtils.getSortedTopic(avgTopic);
                 double score = topicCoherence.getCoherenceScore(topic);
                 writer.write("\t" + score);
-
+                scores.add(score);
                 avgTopics[k] = avgTopic;
             }
             writer.write("\n");
-
             writer.close();
+
+            // output aggregated topic coherence scores
+            IOUtils.outputTopicCoherences(file, scores);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during test time.");
         }
         return avgTopics;
+    }
+
+    public double[][] hack(int[][] newWords) {
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        test(newWords);
+        double[][] finalPredictions = new double[D][L];
+        int count = 0;
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                inputModel(new File(reportFolder, filename).getAbsolutePath());
+                SparseVector[] topics = new SparseVector[L];
+                for (int ll = 0; ll < L; ll++) {
+                    topics[ll] = new SparseVector();
+                    for (int v : label_words[ll].getSparseCounts().getIndices()) {
+                        double val = (double) label_words[ll].getCount(v) / label_words[ll].getCountSum();
+                        topics[ll].set(v, val);
+                    }
+                }
+
+                int ss = MiscUtils.getRoundStepSize(D, 10);
+                for (int d = 0; d < D; d++) {
+                    if (d % ss == 0) {
+                        logln("--- Predicting d = " + d + " / " + D);
+                    }
+                    SparseCount docTokenCount = new SparseCount();
+                    for (int n = 0; n < words[d].length; n++) {
+                        docTokenCount.increment(words[d][n]);
+                    }
+
+                    SparseVector doc = new SparseVector();
+                    for (int v : docTokenCount.getIndices()) {
+                        double val = (double) docTokenCount.getCount(v) / words[d].length;
+                        doc.set(v, val);
+                    }
+
+                    double[] docScores = new double[L];
+                    for (int ll = 0; ll < L; ll++) {
+                        docScores[ll] = doc.cosineSimilarity(topics[ll]);
+                    }
+
+                    for (int ll = 0; ll < L; ll++) {
+                        finalPredictions[d][ll] += docScores[ll];
+                    }
+                }
+
+                count++;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+
+        for (int d = 0; d < D; d++) {
+            for (int ll = 0; ll < L; ll++) {
+                finalPredictions[d][ll] /= count;
+            }
+        }
+        return finalPredictions;
     }
 
     public void test(int[][] newWords, File iterPredFolder) {
@@ -868,7 +1044,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         for (iter = 0; iter < testMaxIter; iter++) {
             if (iter % testSampleLag == 0) {
                 logln("--- --- iter " + iter + "/" + testMaxIter
-                        + " @ thread " + Thread.currentThread().getId());
+                        + " @ thread " + Thread.currentThread().getId()
+                        + " " + getSamplerFolderPath());
             }
 
             if (iter == 0) {
@@ -931,9 +1108,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         // input model
         inputModel(stateFile);
 
-        words = newWords;
-        labels = null; // for evaluation
-        D = words.length;
+        // test data
+        test(newWords);
 
         // initialize structure
         initializeDataStructure();
@@ -941,7 +1117,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         if (verbose) {
             logln("test data");
             logln("--- V = " + V);
-            logln("--- D = " + D);
             int docTopicCount = 0;
             for (int d = 0; d < D; d++) {
                 docTopicCount += doc_labels[d].getCountSum();
@@ -1037,13 +1212,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // averaging
             File ppxResultFile = new File(resultFolder, PerplexityFile);
-            BufferedWriter writer = IOUtils.getBufferedWriter(ppxResultFile);
-            writer.write(StatisticsUtils.mean(ppxs) + "\n");
-            for (int ii = 0; ii < ppxFiles.length; ii++) {
-                writer.write(ppxFiles[ii] + "\t" + ppxs.get(ii) + "\n");
-            }
-            writer.close();
-            
+            IOUtils.outputPerplexities(ppxResultFile, ppxs);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while computing perplexity parallel test.");

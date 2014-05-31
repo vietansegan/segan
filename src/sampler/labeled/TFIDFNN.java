@@ -12,6 +12,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampling.util.SparseCount;
 import util.IOUtils;
+import util.MiscUtils;
 import util.RankingItem;
 import util.SparseVector;
 
@@ -65,6 +66,23 @@ public class TFIDFNN {
         return this.idfs;
     }
 
+    public SparseVector getFeatureVector(int[] newWords) {
+        SparseCount typeCount = new SparseCount();
+        for (int n = 0; n < newWords.length; n++) {
+            typeCount.increment(newWords[n]);
+        }
+
+        SparseVector docVector = new SparseVector();
+        for (int idx : typeCount.getIndices()) {
+            double tf = Math.log(typeCount.getCount(idx) + 1);
+            double idf = idfs[idx];
+            double tfidf = tf * idf;
+            docVector.set(idx + 1, tfidf); // index starts with 1
+        }
+
+        return docVector;
+    }
+
     public void learn() {
         // estimate doc-frequencies of each word type
         System.out.println("Estimating DFs ...");
@@ -90,9 +108,10 @@ public class TFIDFNN {
         }
         int[] labelDocCounts = new int[L];
         System.out.println("Aggregate label vectors ...");
+        int stepSize = MiscUtils.getRoundStepSize(D, 10);
         for (int d = 0; d < D; d++) {
-            if (d % 100000 == 0) {
-                System.out.println("--- d = " + d);
+            if (d % stepSize == 0) {
+                System.out.println("--- Processing doc = " + d);
             }
             int[] docTopics = this.labels[d];
             // skip unlabeled document or very short (after filtered) documents
@@ -102,27 +121,30 @@ public class TFIDFNN {
                 continue;
             }
 
-            SparseCount typeCount = new SparseCount();
-            for (int n = 0; n < words[d].length; n++) {
-                typeCount.increment(words[d][n]);
-            }
+//            SparseCount typeCount = new SparseCount();
+//            for (int n = 0; n < words[d].length; n++) {
+//                typeCount.increment(words[d][n]);
+//            }
 
             // max tf
-            int maxTf = -1;
-            for (int idx : typeCount.getIndices()) {
-                int tf = typeCount.getCount(idx);
-                if (maxTf < tf) {
-                    maxTf = tf;
-                }
-            }
+//            int maxTf = -1;
+//            for (int idx : typeCount.getIndices()) {
+//                int tf = typeCount.getCount(idx);
+//                if (maxTf < tf) {
+//                    maxTf = tf;
+//                }
+//            }
 
-            SparseVector docVector = new SparseVector();
-            for (int idx : typeCount.getIndices()) {
-                double tf = 0.5 + 0.5 * typeCount.getCount(idx) / maxTf;
-                double idf = idfs[idx];
-                double tfidf = tf * idf;
-                docVector.set(idx, tfidf);
-            }
+//            SparseVector docVector = new SparseVector();
+//            for (int idx : typeCount.getIndices()) {
+////                double tf = 0.5 + 0.5 * typeCount.getCount(idx) / maxTf;
+//                double tf = typeCount.getCount(idx);
+//                double idf = idfs[idx];
+//                double tfidf = tf * idf;
+//                docVector.set(idx, tfidf);
+//            }
+
+            SparseVector docVector = getFeatureVector(words[d]);
 
             for (int ll : docTopics) {
                 labelDocCounts[ll]++;
@@ -149,6 +171,18 @@ public class TFIDFNN {
         }
     }
 
+    public double[][] predict(int[][] newWords) {
+        double[][] predictions = new double[newWords.length][];
+        int stepSize = MiscUtils.getRoundStepSize(newWords.length, 10);
+        for (int dd = 0; dd < predictions.length; dd++) {
+            if (dd % stepSize == 0) {
+                System.out.println("--- Predicting doc = " + dd + " / " + newWords.length);
+            }
+            predictions[dd] = this.predict(newWords[dd]);
+        }
+        return predictions;
+    }
+
     /**
      * Predict topics for a given document
      *
@@ -162,20 +196,8 @@ public class TFIDFNN {
         if (newWords.length == 0) {
             return scores;
         }
-
-        SparseCount typeCount = new SparseCount();
-        for (int n = 0; n < newWords.length; n++) {
-            typeCount.increment(newWords[n]);
-        }
-
-        SparseVector docVector = new SparseVector();
-        for (int idx : typeCount.getIndices()) {
-            double tfidf = typeCount.getCount(idx) * idfs[idx];
-            docVector.set(idx, tfidf);
-        }
-
+        SparseVector docVector = getFeatureVector(newWords);
         double newDocL2Norm = docVector.getL2Norm();
-
         for (int l = 0; l < L; l++) {
             if (labelVectors[l].size() > 0) { // skip topics that didn't have enough training data for
                 scores[l] = labelVectors[l].dotProduct(docVector)
@@ -355,8 +377,7 @@ public class TFIDFNN {
             int len = Integer.parseInt(reader.readLine());
             predictions = new double[len][];
 
-            int count = 0;
-            for (int dd = 0; dd < count; dd++) {
+            for (int dd = 0; dd < len; dd++) {
                 String[] sline = reader.readLine().split("\t");
                 if (dd != Integer.parseInt(sline[0])) {
                     throw new RuntimeException("Indices mismatch.");

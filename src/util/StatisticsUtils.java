@@ -311,6 +311,14 @@ public class StatisticsUtils {
         return sum;
     }
 
+    public static double median(ArrayList<Double> values) {
+        double[] arr = new double[values.size()];
+        for (int ii = 0; ii < arr.length; ii++) {
+            arr[ii] = values.get(ii);
+        }
+        return median(arr);
+    }
+
     public static double median(double[] values) {
         double[] copy = new double[values.length];
         System.arraycopy(values, 0, copy, 0, values.length);

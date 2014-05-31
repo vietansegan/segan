@@ -5,6 +5,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import util.evaluation.ClassificationEvaluation;
@@ -26,6 +27,24 @@ public class PredictionUtils {
     public static final String SINGLE_AVG = "single-avg.txt";
     public static final String MULTIPLE_FINAL = "multiple-final.txt";
     public static final String MULTIPLE_AVG = "multiple-avg.txt";
+
+    public static HashMap<String, Measurement> inputMeasurements(File inputFile) {
+        HashMap<String, Measurement> measurements = new HashMap<String, Measurement>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(inputFile);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] sline = line.split("\t");
+                measurements.put(sline[0], new Measurement(sline[0], Double.parseDouble(sline[1])));
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading measurements from "
+                    + inputFile);
+        }
+        return measurements;
+    }
 
     /**
      * Input predictions.

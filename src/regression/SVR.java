@@ -9,6 +9,7 @@ import org.apache.commons.cli.Options;
 import svm.SVMLight;
 import svm.SVMUtils;
 import util.CLIUtils;
+import util.MiscUtils;
 
 /**
  *
@@ -16,17 +17,32 @@ import util.CLIUtils;
  */
 public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implements Regressor<D> {
 
+    public static final double DEFAULT_C = -1; // use default value from SVMLight
     protected SVMLight svm;
+    // option C in SVM Light: trade-off between training error and margin
+    // (default: [avg. x*x]^{-1})
+    private double c;
 
     public SVR(String folder) {
         super(folder);
-        svm = new SVMLight();
+        this.svm = new SVMLight();
+        this.c = DEFAULT_C;
+    }
+
+    public SVR(String folder, double c) {
+        super(folder);
+        this.svm = new SVMLight();
+        this.c = c;
     }
 
     @Override
     public String getName() {
         if (name == null) {
-            return "SVR";
+            if (this.c == DEFAULT_C) {
+                return "SVR";
+            } else {
+                return "SVR-" + MiscUtils.formatDouble(this.c);
+            }
         }
         return name;
     }
@@ -64,6 +80,11 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
         SVMUtils.outputSVMLightFormat(trainFile, designMatrix, trResponses);
 
         String[] opts = {"-z r"};
+        if (this.c != DEFAULT_C) {
+            opts = new String[2];
+            opts[0] = "-z r";
+            opts[1] = "-c " + this.c;
+        }
         try {
             svm.learn(opts, trainFile, modelFile);
         } catch (Exception e) {
@@ -93,6 +114,11 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
         SVMUtils.outputSVMLightFormat(trainFile, allFeatures, trResponses);
 
         String[] opts = {"-z r"};
+        if (this.c != DEFAULT_C) {
+            opts = new String[2];
+            opts[0] = "-z r";
+            opts[1] = "-c " + this.c;
+        }
         try {
             svm.learn(opts, trainFile, modelFile);
         } catch (Exception e) {

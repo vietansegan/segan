@@ -186,14 +186,15 @@ public class LDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
             sampleZ(!REMOVE, !ADD, REMOVE, ADD);
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
             if (verbose && iter % REP_INTERVAL == 0) {
+                double loglikelihood = this.getLogLikelihood();
+                logLikelihoods.add(loglikelihood);
                 double changeRatio = (double) numTokensChanged / numTokens;
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
-                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
+                        + ". change ratio = " + MiscUtils.formatDouble(changeRatio)
+                        + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
                 } else {
@@ -436,8 +437,7 @@ public class LDA extends AbstractSampler {
 
     @Override
     public String getCurrentState() {
-        StringBuilder str = new StringBuilder();
-        return str.toString();
+        return this.getSamplerFolderPath();
     }
 
     @Override
@@ -1066,8 +1066,8 @@ public class LDA extends AbstractSampler {
     }
 
     public static void parallelPerplexity(int[][] newWords,
-            int[][] newLabels,
             File iterPerplexityFolder,
+            File resultFolder,
             LDA sampler) {
         File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
         if (!reportFolder.exists()) {
@@ -1087,7 +1087,7 @@ public class LDA extends AbstractSampler {
                 File partialResultFile = new File(iterPerplexityFolder,
                         IOUtils.removeExtension(filename) + ".txt");
                 LDAPerplexityRunner runner = new LDAPerplexityRunner(sampler,
-                        newWords, newLabels,
+                        newWords,
                         stateFile.getAbsolutePath(),
                         partialResultFile.getAbsolutePath());
                 Thread thread = new Thread(runner);
@@ -1097,10 +1097,96 @@ public class LDA extends AbstractSampler {
             // run MAX_NUM_PARALLEL_THREADS threads at a time
             runThreads(threads);
 
+            // summarize multiple perplexities
+            String[] ppxFiles = iterPerplexityFolder.list();
+            ArrayList<Double> ppxs = new ArrayList<Double>();
+            for (String ppxFile : ppxFiles) {
+                double ppx = IOUtils.inputPerplexity(new File(iterPerplexityFolder, ppxFile));
+                ppxs.add(ppx);
+            }
+
+            // averaging
+            File ppxResultFile = new File(resultFolder, PerplexityFile);
+            IOUtils.outputPerplexities(ppxResultFile, ppxs);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while computing perplexity parallel test.");
         }
+    }
+
+    public double[][] computeAvgTopicCoherence(File file,
+            MimnoTopicCoherence topicCoherence) {
+        if (this.wordVocab == null) {
+            throw new RuntimeException("The word vocab has not been assigned yet");
+        }
+
+        if (verbose) {
+            logln("Outputing averaged topic coherence to file " + file);
+
+        }
+
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        double[][] avgTopics = new double[K][V];
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file.getAbsolutePath() + ".iter");
+            writer.write("Iteration");
+            for (int k = 0; k < K; k++) {
+                writer.write("\tTopic_" + k);
+            }
+            writer.write("\n");
+
+            // partial score
+            ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                inputModel(new File(reportFolder, filename).getAbsolutePath());
+                double[][] pointTopics = new double[K][V];
+
+                writer.write(filename);
+                for (int k = 0; k < K; k++) {
+                    pointTopics[k] = topic_words[k].getDistribution();
+                    int[] topic = SamplerUtils.getSortedTopic(pointTopics[k]);
+                    double score = topicCoherence.getCoherenceScore(topic);
+
+                    writer.write("\t" + score);
+                }
+                writer.write("\n");
+                aggTopics.add(pointTopics);
+            }
+
+            // averaging
+            writer.write("Average");
+            ArrayList<Double> scores = new ArrayList<Double>();
+            for (int k = 0; k < K; k++) {
+                double[] avgTopic = new double[V];
+                for (int v = 0; v < V; v++) {
+                    for (int ii = 0; ii < aggTopics.size(); ii++) {
+                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
+                    }
+                }
+                int[] topic = SamplerUtils.getSortedTopic(avgTopic);
+                double score = topicCoherence.getCoherenceScore(topic);
+                writer.write("\t" + score);
+                scores.add(score);
+                avgTopics[k] = avgTopic;
+            }
+            writer.write("\n");
+            writer.close();
+
+            // output aggregated topic coherence scores
+            IOUtils.outputTopicCoherences(file, scores);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
+        }
+        return avgTopics;
     }
 }
 
@@ -1108,18 +1194,15 @@ class LDAPerplexityRunner implements Runnable {
 
     LDA sampler;
     int[][] newWords;
-    int[][] newLabels;
     String stateFile;
     String outputFile;
 
     public LDAPerplexityRunner(LDA sampler,
             int[][] newWords,
-            int[][] newLabels,
             String stateFile,
             String outputFile) {
         this.sampler = sampler;
         this.newWords = newWords;
-        this.newLabels = newLabels;
         this.stateFile = stateFile;
         this.outputFile = outputFile;
     }

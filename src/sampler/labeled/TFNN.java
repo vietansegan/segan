@@ -10,6 +10,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import sampling.util.SparseCount;
 import util.IOUtils;
+import util.MiscUtils;
 import util.RankingItem;
 import util.SparseVector;
 
@@ -18,6 +19,7 @@ import util.SparseVector;
  * @author vietan
  */
 public class TFNN {
+
     protected int[][] words;
     protected int[][] labels;
     protected int L;
@@ -26,7 +28,7 @@ public class TFNN {
     protected SparseVector[] labelVectors; // L x V;
     protected int minWordTypeCount = 0;
     protected double[] labelL2Norms;
-    
+
     public TFNN(
             int[][] docWords,
             int[][] labels,
@@ -40,11 +42,11 @@ public class TFNN {
         this.D = this.words.length;
         this.minWordTypeCount = minWordTypeCount;
     }
-    
+
     public String getName() {
         return "tf-nn-" + minWordTypeCount;
     }
-    
+
     public SparseVector[] getLabelVectors() {
         return this.labelVectors;
     }
@@ -53,6 +55,46 @@ public class TFNN {
         this.minWordTypeCount = minTypeCount;
     }
     
+    public void outputVWFormat(File outputFile, int[][] words, int[][] labels,
+            ArrayList<String> vocab) throws Exception {
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int d = 0; d < words.length; d++) {
+            if (labels[d].length > 0) {
+                for (int ll : labels[d]) {
+                    writer.write(ll + ":1 ");
+                }
+                writer.write("|w");
+
+                SparseCount count = new SparseCount();
+                for (int n = 0; n < words[d].length; n++) {
+                    count.increment(words[d][n]);
+                }
+
+                for (int idx : count.getSortedIndices()) {
+                    String word = vocab.get(idx);
+                    writer.write(" " + word + ":" + count.getCount(idx));
+                }
+                writer.write("\n");
+            }
+        }
+        writer.close();
+    }
+
+    public SparseVector getFeatureVector(int[] newWords) {
+        SparseCount typeCount = new SparseCount();
+        for (int n = 0; n < newWords.length; n++) {
+            typeCount.increment(newWords[n]);
+        }
+
+        SparseVector docVector = new SparseVector();
+        for (int idx : typeCount.getIndices()) {
+            double score = (double) typeCount.getCount(idx) / newWords.length;
+            docVector.set(idx + 1, score);
+        }
+
+        return docVector;
+    }
+
     public void learn() {
         this.labelVectors = new SparseVector[L];
         for (int ll = 0; ll < L; ll++) {
@@ -68,18 +110,7 @@ public class TFNN {
                     || words[d].length < minWordTypeCount) {
                 continue;
             }
-
-            SparseCount typeCount = new SparseCount();
-            for (int n = 0; n < words[d].length; n++) {
-                typeCount.increment(words[d][n]);
-            }
-
-            SparseVector docVector = new SparseVector();
-            for (int idx : typeCount.getIndices()) {
-                double score = (double)typeCount.getCount(idx) / words[d].length;
-                docVector.set(idx, score);
-            }
-
+            SparseVector docVector = getFeatureVector(words[d]);
             for (int ll : docTopics) {
                 labelDocCounts[ll]++;
                 this.labelVectors[ll].add(docVector);
@@ -97,33 +128,33 @@ public class TFNN {
 
         computeLabelL2Norms();
     }
-    
+
     protected void computeLabelL2Norms() {
         labelL2Norms = new double[L];
         for (int ll = 0; ll < L; ll++) {
             labelL2Norms[ll] = labelVectors[ll].getL2Norm();
         }
     }
-    
+
+    public double[][] predict(int[][] newWords) {
+        double[][] predictions = new double[newWords.length][];
+        int stepSize = MiscUtils.getRoundStepSize(newWords.length, 10);
+        for (int dd = 0; dd < predictions.length; dd++) {
+            if (dd % stepSize == 0) {
+                System.out.println("--- Predicting doc = " + dd + " / " + newWords.length);
+            }
+            predictions[dd] = this.predict(newWords[dd]);
+        }
+        return predictions;
+    }
+
     public double[] predict(int[] newWords) {
         double[] scores = new double[L];
         if (newWords.length == 0) {
             return scores;
         }
-
-        SparseCount typeCount = new SparseCount();
-        for (int n = 0; n < newWords.length; n++) {
-            typeCount.increment(newWords[n]);
-        }
-
-        SparseVector docVector = new SparseVector();
-        for (int idx : typeCount.getIndices()) {
-//            double tfidf = typeCount.getCount(idx) * idfs[idx];
-            double val = (double) typeCount.getCount(idx) / newWords.length;
-            docVector.set(idx, val);
-        }
+        SparseVector docVector = getFeatureVector(newWords);
         double newDocL2Norm = docVector.getL2Norm();
-        
         for (int l = 0; l < L; l++) {
             if (labelVectors[l].size() > 0) { // skip topics that didn't have enough training data for
                 scores[l] = labelVectors[l].dotProduct(docVector)
@@ -132,7 +163,7 @@ public class TFNN {
         }
         return scores;
     }
-    
+
     public ArrayList<Integer> predictLabel(int[] newWords, int topK) {
         double[] scores = predict(newWords);
         ArrayList<RankingItem<Integer>> rank = new ArrayList<RankingItem<Integer>>();
@@ -152,7 +183,7 @@ public class TFNN {
         }
         return rankLabels;
     }
-    
+
     public void outputPredictor(File predictorFile) {
         System.out.println("Outputing learned model to " + predictorFile);
         try {
@@ -180,7 +211,7 @@ public class TFNN {
                     + predictorFile);
         }
     }
-    
+
     public void inputPredictor(File predictorFile) {
         System.out.println("Inputing learned model from " + predictorFile);
         try {
@@ -207,7 +238,7 @@ public class TFNN {
                     + predictorFile);
         }
     }
-    
+
     public void outputTopWords(File outputFile,
             ArrayList<String> labelVocab,
             ArrayList<String> wordVocab,
