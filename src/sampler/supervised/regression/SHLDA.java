@@ -100,6 +100,7 @@ public class SHLDA extends AbstractSampler
     protected int[] initBranchFactor = new int[]{16, 3};
     private int numAccepts;
     private int numProposes;
+    private String seededAssignmentFile;
 
     public void setInitialBranchingFactor(int[] bf) {
         this.initBranchFactor = bf;
@@ -585,11 +586,52 @@ public class SHLDA extends AbstractSampler
     protected void initializeAssignments() {
         switch (initState) {
             case PRESET:
-                initializeRecursiveLDAAssignmentsSeeded(null);
+                initializeRecursiveLDAAssignments();
+                break;
+            case SEEDED:
+                if (this.seededAssignmentFile == null) {
+                    throw new RuntimeException("Seeded assignment file is not "
+                            + "initialized.");
+                }
+                initializeRecursiveLDAAssignmentsSeeded(seededAssignmentFile);
                 break;
             default:
                 throw new RuntimeException("Initialization not supported");
         }
+    }
+
+    public void setSeededAssignmentFile(String f) {
+        this.seededAssignmentFile = f;
+    }
+
+    protected void initializeRecursiveLDAAssignments() {
+        int[][] seededAssignments = null;
+        initializeRecursiveLDAAssignmentsSeeded(seededAssignments);
+    }
+
+    protected void initializeRecursiveLDAAssignmentsSeeded(String seededFile) {
+        int[][] seededAssignments = null;
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(seededFile);
+            int numDocs = Integer.parseInt(reader.readLine());
+            if (numDocs != D) {
+                throw new RuntimeException("Number of documents is incorrect. "
+                        + numDocs + " vs. " + D);
+            }
+            seededAssignments = new int[D][];
+            for (int d = 0; d < D; d++) {
+                String[] sline = reader.readLine().split(" ");
+                seededAssignments[d] = new int[sline.length];
+                for (int n = 0; n < sline.length; n++) {
+                    seededAssignments[d][n] = Integer.parseInt(sline[n]);
+                }
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            logln(">>> Seeded assignments cannot be loaded from " + seededFile);
+        }
+        initializeRecursiveLDAAssignmentsSeeded(seededAssignments);
     }
 
     private void initializeRecursiveLDAAssignmentsSeeded(int[][] seededAssignments) {
@@ -3696,7 +3738,7 @@ public class SHLDA extends AbstractSampler
         options.addOption("dev", false, "development");
         options.addOption("test", false, "test");
         options.addOption("z", false, "z-normalization");
-        
+
         addOption("prediction-folder", "Prediction folder");
         addOption("evaluation-folder", "Evaluation folder");
     }
@@ -3814,6 +3856,10 @@ public class SHLDA extends AbstractSampler
         sampler.setReport(true);
         sampler.setWordVocab(data.getWordVocab());
 
+        String seededAsgnFile = cmd.getOptionValue("seeded-asgn-file");
+        sampler.setSeededAssignmentFile(seededAsgnFile);
+        initState = InitialState.SEEDED;
+
         sampler.configure(resultFolder,
                 data.getWordVocab().size(), L,
                 alpha,
@@ -3865,8 +3911,7 @@ public class SHLDA extends AbstractSampler
                     predictions);
         }
     }
-    
+
     private static void runCrossValidation() throws Exception {
-        
     }
 }
