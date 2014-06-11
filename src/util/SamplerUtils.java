@@ -212,6 +212,18 @@ public class SamplerUtils {
         return val;
     }
 
+    public static double computeLogLhood(SparseCount obs, double[] priorVals) {
+        double val = 0.0;
+        double priorValSum = StatisticsUtils.sum(priorVals);
+        val += logGammaStirling(priorValSum);
+        val -= logGammaStirling(obs.getCountSum() + priorValSum);
+        for (int i = 0; i < priorVals.length; i++) {
+            val -= logGammaStirling(priorVals[i]);
+            val += logGammaStirling(priorVals[i] + obs.getCount(i));
+        }
+        return val;
+    }
+
     /**
      * Compute log likelihood for an asymmetric multinomial when the prior is
      * expressed using a mean vector and a concentration parameter

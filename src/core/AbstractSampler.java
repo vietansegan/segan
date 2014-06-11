@@ -30,6 +30,7 @@ public abstract class AbstractSampler implements Serializable {
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
     public static final String IterPerplexityFolder = "iter-perplexities";
     public static final String PerplexityFile = "perplexity.txt";
+    public static final String AveragingPerplexityFile = "avg-perplexity.txt";
     public static final String ModelFile = "model.zip";
     public static final String ReportFolder = "report/";
     public static final String AssignmentFileExt = ".assignment";

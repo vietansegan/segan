@@ -109,6 +109,7 @@ public class IOUtils {
     }
 
     public static void outputPerplexity(String outputFile, double perplexity) {
+        System.out.println("Outputing perplexity to " + outputFile);
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write(perplexity + "\n");

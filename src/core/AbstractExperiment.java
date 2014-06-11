@@ -155,6 +155,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("sigma", "sigma");
         addOption("rho", "rho");
         addOption("epsilon", "epsilon");
+        addOption("eta", "eta");
     }
 
     /**

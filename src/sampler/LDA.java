@@ -185,7 +185,7 @@ public class LDA extends AbstractSampler {
         logLikelihoods = new ArrayList<Double>();
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
-            sampleZ(!REMOVE, !ADD, REMOVE, ADD);
+            sampleZs(!REMOVE, !ADD, REMOVE, ADD);
             if (verbose && iter % REP_INTERVAL == 0) {
                 double loglikelihood = this.getLogLikelihood();
                 logLikelihoods.add(loglikelihood);
@@ -320,28 +320,26 @@ public class LDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
-            long sTime = System.currentTimeMillis();
-            sampleZ(REMOVE, ADD, REMOVE, ADD);
-            long eTime = System.currentTimeMillis() - sTime;
+            long eTime = sampleZs(REMOVE, ADD, REMOVE, ADD);
 
             if (debug) {
                 validate("Iter " + iter);
             }
 
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
-
             if (verbose && iter % REP_INTERVAL == 0) {
+                double loglikelihood = this.getLogLikelihood();
+                logLikelihoods.add(loglikelihood);
                 double changeRatio = (double) numTokensChanged / numTokens;
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + ". llh = " + MiscUtils.formatDouble(loglikelihood)
                         + ". numTokensChanged = " + numTokensChanged
                         + ". change ratio = " + MiscUtils.formatDouble(changeRatio)
-                        + ". time = " + eTime;
+                        + ". time = " + eTime
+                        + "\n" + getSamplerFolderPath();
                 if (iter < BURN_IN) {
-                    logln("--- Burning in. " + str);
+                    logln("--- Burning in. " + str + "\n");
                 } else {
-                    logln("--- Sampling. " + str);
+                    logln("--- Sampling. " + str + "\n");
                 }
             }
             if (report && iter > BURN_IN && iter % LAG == 0) {
@@ -362,13 +360,14 @@ public class LDA extends AbstractSampler {
     /**
      * Sample the topic assignments for all tokens
      *
-     * @param removeFromModel Whether the current assignments should be removed
-     * from the current assigned topic
-     * @param addToModel Whether the new assignments should be added to the
-     * sampled topic
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
      */
-    protected void sampleZ(boolean removeFromModel, boolean addToModel,
+    protected long sampleZs(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
+        long sTime = System.currentTimeMillis();
         double totalBeta = V * hyperparams.get(BETA);
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
@@ -399,6 +398,7 @@ public class LDA extends AbstractSampler {
                 }
             }
         }
+        return System.currentTimeMillis() - sTime;
     }
 
     /**
@@ -615,7 +615,7 @@ public class LDA extends AbstractSampler {
             this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while outputing state to " + filepath);
         }
     }
 
@@ -880,6 +880,67 @@ public class LDA extends AbstractSampler {
         writer.close();
     }
 
+    public ArrayList<double[][]> computeAveragingPerplexities(String stateFile, int[][] newWords) {
+        if (verbose) {
+            System.out.println();
+            logln("Computing perplexity using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        words = newWords;
+        D = words.length;
+        numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            numTokens += words[d].length;
+        }
+
+        // initialize structure
+        configure(newWords);
+
+        if (verbose) {
+            logln("--- Sampling on test data ...");
+        }
+
+        double totalBeta = hyperparams.get(BETA) * V;
+        ArrayList<double[][]> tokenProbsList = new ArrayList<double[][]>();
+        for (iter = 0; iter < testMaxIter; iter++) {
+            if (iter % testSampleLag == 0) {
+                logln("--- --- iter " + iter + "/" + testMaxIter
+                        + " @ thread " + Thread.currentThread().getId());
+            }
+
+            if (iter == 0) {
+                sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
+            } else {
+                sampleZs(!REMOVE, !ADD, REMOVE, ADD);
+            }
+
+            // compute perplexity
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                double[][] tokenProbs = new double[D][];
+                for (int d = 0; d < D; d++) {
+                    tokenProbs[d] = new double[words[d].length];
+                    for (int n = 0; n < words[d].length; n++) {
+                        for (int k = 0; k < K; k++) {
+                            double theta = (doc_topics[d].getCount(k) + hyperparams.get(ALPHA))
+                                    / (doc_topics[d].getCountSum() + hyperparams.get(ALPHA) * K);
+                            double phi = (topic_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                    / (topic_words[k].getCountSum() + totalBeta);
+                            tokenProbs[d][n] += theta * phi;
+                        }
+                    }
+                }
+                tokenProbsList.add(tokenProbs);
+            }
+        }
+        return tokenProbsList;
+    }
+
     public double computePerplexity(String stateFile, int[][] newWords) {
         if (verbose) {
             System.out.println();
@@ -913,9 +974,9 @@ public class LDA extends AbstractSampler {
             }
 
             if (iter == 0) {
-                sampleZ(!REMOVE, !ADD, !REMOVE, ADD);
+                sampleZs(!REMOVE, !ADD, !REMOVE, ADD);
             } else {
-                sampleZ(!REMOVE, !ADD, REMOVE, ADD);
+                sampleZs(!REMOVE, !ADD, REMOVE, ADD);
             }
 
             // compute perplexity
@@ -1114,6 +1175,132 @@ public class LDA extends AbstractSampler {
         }
     }
 
+    public static void parallelAveragingPerplexity(int[][] newWords,
+            File iterPerplexityFolder,
+            File resultFolder,
+            LDA sampler) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPerplexityFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPerplexityFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                LDAAveragingPerplexityRunner runner = new LDAAveragingPerplexityRunner(sampler,
+                        newWords,
+                        stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath());
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+
+            // run MAX_NUM_PARALLEL_THREADS threads at a time
+            runThreads(threads);
+
+            // summarize multiple perplexities
+            String[] ppxFiles = iterPerplexityFolder.list();
+            ArrayList<ArrayList<double[][]>> allTokenProbs = new ArrayList<ArrayList<double[][]>>();
+            for (String ppxFile : ppxFiles) {
+                ArrayList<double[][]> tokenProbsList = LDA.inputTokenProbabilities(
+                        new File(iterPerplexityFolder, ppxFile), newWords);
+                allTokenProbs.add(tokenProbsList);
+            }
+
+            int I = allTokenProbs.size();
+            int J = allTokenProbs.get(0).size();
+
+            // single final
+            double[][] singleFinalProbs = new double[newWords.length][];
+            for (int dd = 0; dd < newWords.length; dd++) {
+                singleFinalProbs[dd] = new double[newWords[dd].length];
+                System.arraycopy(allTokenProbs.get(I - 1).get(J - 1)[dd], 0, singleFinalProbs[dd], 0, newWords[dd].length);
+            }
+            double singleFinal = LDA.computePerplexity(singleFinalProbs);
+            System.out.println("Single final = " + singleFinal);
+
+            // single average
+            double[][] singleAvgProbs = new double[newWords.length][];
+            for (int dd = 0; dd < newWords.length; dd++) {
+                singleAvgProbs[dd] = new double[newWords[dd].length];
+                for (int nn = 0; nn < newWords[dd].length; nn++) {
+                    double sum = 0.0;
+                    for (int jj = 0; jj < J; jj++) {
+                        sum += allTokenProbs.get(I - 1).get(jj)[dd][nn];
+                    }
+                    singleAvgProbs[dd][nn] = sum / J;
+                }
+            }
+            double singleAvg = LDA.computePerplexity(singleAvgProbs);
+            System.out.println("Single avg = " + singleAvg);
+
+            // multiple final©
+            double[][] multipleFinalProbs = new double[newWords.length][];
+            for (int dd = 0; dd < newWords.length; dd++) {
+                multipleFinalProbs[dd] = new double[newWords[dd].length];
+                for (int nn = 0; nn < newWords[dd].length; nn++) {
+                    double sum = 0.0;
+                    for (int ii = 0; ii < I; ii++) {
+                        sum += allTokenProbs.get(ii).get(J - 1)[dd][nn];
+                    }
+                    multipleFinalProbs[dd][nn] = sum / I;
+                }
+            }
+            double multipleFinal = LDA.computePerplexity(multipleFinalProbs);
+            System.out.println("Multiple final = " + multipleFinal);
+
+            // multiple average
+            double[][] multipleAvgProbs = new double[newWords.length][];
+            for (int dd = 0; dd < newWords.length; dd++) {
+                multipleAvgProbs[dd] = new double[newWords[dd].length];
+                for (int nn = 0; nn < newWords[dd].length; nn++) {
+                    double sum = 0.0;
+                    for (int ii = 0; ii < I; ii++) {
+                        for (int jj = 0; jj < J; jj++) {
+                            sum += allTokenProbs.get(ii).get(jj)[dd][nn];
+                        }
+                    }
+                    multipleAvgProbs[dd][nn] = sum / (I * J);
+                }
+            }
+            double multipleAvg = LDA.computePerplexity(multipleAvgProbs);
+            System.out.println("Mutiple avg = " + multipleAvg);
+
+            // averaging
+            File ppxResultFile = new File(resultFolder, AveragingPerplexityFile);
+            BufferedWriter writer = IOUtils.getBufferedWriter(ppxResultFile);
+            writer.write("SingleFinal\t" + singleFinal + "\n");
+            writer.write("SingleAvg\t" + singleAvg + "\n");
+            writer.write("MultipleFinal\t" + multipleFinal + "\n");
+            writer.write("MultipleAvg\t" + multipleAvg + "\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while computing perplexity parallel test.");
+        }
+    }
+
+    public static double computePerplexity(double[][] tokenProbs) {
+        double val = 0.0;
+        int num = 0;
+        for (int dd = 0; dd < tokenProbs.length; dd++) {
+            num += tokenProbs[dd].length;
+            for (int nn = 0; nn < tokenProbs[dd].length; nn++) {
+                val += Math.log(tokenProbs[dd][nn]);
+            }
+        }
+        return Math.exp(-val / num);
+    }
+
     public double[][] computeAvgTopicCoherence(File file,
             MimnoTopicCoherence topicCoherence) {
         if (this.wordVocab == null) {
@@ -1188,6 +1375,63 @@ public class LDA extends AbstractSampler {
         }
         return avgTopics;
     }
+
+    public static void outputTokenProbabilities(File outputFile,
+            ArrayList<double[][]> tokenProbsList,
+            int[][] oriWords) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(tokenProbsList.size() + "\n");
+            for (int ii = 0; ii < tokenProbsList.size(); ii++) {
+                for (int dd = 0; dd < oriWords.length; dd++) {
+                    writer.write(Integer.toString(dd));
+                    for (int nn = 0; nn < oriWords[dd].length; nn++) {
+                        writer.write(" " + tokenProbsList.get(ii)[dd][nn]);
+                    }
+                    writer.write("\n");
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + outputFile);
+        }
+    }
+
+    public static ArrayList<double[][]> inputTokenProbabilities(File intputFile,
+            int[][] oriWords) {
+        ArrayList<double[][]> tokenProbsList = new ArrayList<double[][]>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(intputFile);
+            String[] sline;
+            int num = Integer.parseInt(reader.readLine());
+            for (int ii = 0; ii < num; ii++) {
+                double[][] tokenProbs = new double[oriWords.length][];
+                for (int dd = 0; dd < oriWords.length; dd++) {
+                    sline = reader.readLine().split(" ");
+                    if (Integer.parseInt(sline[0]) != dd) {
+                        throw new RuntimeException("Mismatch");
+                    }
+                    if (oriWords[dd].length != sline.length - 1) {
+                        throw new RuntimeException("Mismatch");
+                    }
+
+                    tokenProbs[dd] = new double[oriWords[dd].length];
+                    for (int nn = 0; nn < oriWords[dd].length; nn++) {
+                        tokenProbs[dd][nn] = Double.parseDouble(sline[nn + 1]);
+                    }
+                }
+                tokenProbsList.add(tokenProbs);
+                reader.readLine();
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing from " + intputFile);
+        }
+        return tokenProbsList;
+    }
 }
 
 class LDAPerplexityRunner implements Runnable {
@@ -1223,6 +1467,44 @@ class LDAPerplexityRunner implements Runnable {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write(perplexity + "\n");
             writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
+    }
+}
+
+class LDAAveragingPerplexityRunner implements Runnable {
+
+    LDA sampler;
+    int[][] newWords;
+    String stateFile;
+    String outputFile;
+
+    public LDAAveragingPerplexityRunner(LDA sampler,
+            int[][] newWords,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+    }
+
+    @Override
+    public void run() {
+        LDA testSampler = new LDA();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
+
+        try {
+            ArrayList<double[][]> tokenProbsList = testSampler.computeAveragingPerplexities(stateFile, newWords);
+            LDA.outputTokenProbabilities(new File(outputFile), tokenProbsList, newWords);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException();
