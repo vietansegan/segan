@@ -17,7 +17,7 @@ import util.MiscUtils;
 import util.PredictionUtils;
 import util.SamplerUtils;
 import util.SparseVector;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -995,7 +995,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 pps.add(pp);
                 writer.write(filename + "\t" + pp + "\n");
             }
-            writer.write("Average\t" + StatisticsUtils.mean(pps) + "\n");
+            writer.write("Average\t" + StatUtils.mean(pps) + "\n");
             writer.close();
         } catch (Exception e) {
             e.printStackTrace();
@@ -1059,7 +1059,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 perplexities.add(computePerplexity());
             }
         }
-        double avgPerplexity = StatisticsUtils.mean(perplexities);
+        double avgPerplexity = StatUtils.mean(perplexities);
         return avgPerplexity;
     }
 

@@ -14,7 +14,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -733,7 +733,7 @@ public class HLDA extends AbstractSampler {
                     .append(", ").append(obsCountPerLevel[l])
                     .append(")\t");
         }
-        str.append("total obs: ").append(StatisticsUtils.sum(obsCountPerLevel));
+        str.append("total obs: ").append(StatUtils.sum(obsCountPerLevel));
         return str.toString();
     }
 

@@ -9,7 +9,7 @@ import sampling.likelihood.DirMult;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -536,7 +536,7 @@ public class PriorLDA extends AbstractSampler {
                 perplexities.add(perplexity);
             }
         }
-        double avgPerplexity = StatisticsUtils.mean(perplexities);
+        double avgPerplexity = StatUtils.mean(perplexities);
         return avgPerplexity;
     }
     

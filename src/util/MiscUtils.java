@@ -5,7 +5,9 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import sampling.util.SparseCount;
 
 /**
@@ -15,6 +17,26 @@ import sampling.util.SparseCount;
 public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
+
+    public static double[] getIDFs(int[][] words, int V) {
+        int D = words.length;
+        int[] dfs = new int[V];
+        for (int d = 0; d < D; d++) {
+            Set<Integer> uniqueWords = new HashSet<Integer>();
+            for (int n = 0; n < words[d].length; n++) {
+                uniqueWords.add(words[d][n]);
+            }
+            for (int uw : uniqueWords) {
+                dfs[uw]++;
+            }
+        }
+
+        double[] idfs = new double[V];
+        for (int v = 0; v < V; v++) {
+            idfs[v] = Math.log(D) - Math.log(dfs[v] + 1);
+        }
+        return idfs;
+    }
 
     public static ArrayList<RankingItem<Integer>> getRankingList(SparseVector vector) {
         ArrayList<RankingItem<Integer>> rankItems = new ArrayList<RankingItem<Integer>>();
@@ -63,6 +85,9 @@ public class MiscUtils {
 
     public static int getRoundStepSize(int total, int numSteps) {
         int stepSize = (int) Math.pow(10, (int) Math.log10(total / numSteps));
+        if (stepSize == 0) {
+            return 1;
+        }
         return stepSize;
     }
 

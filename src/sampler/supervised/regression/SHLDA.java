@@ -32,7 +32,7 @@ import util.MiscUtils;
 import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -354,9 +354,9 @@ public class SHLDA extends AbstractSampler
             logln("--- # tokens:\t" + tokenCount);
             logln("--- # sentences:\t" + sentCount);
             logln("--- response distributions:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -1012,7 +1012,7 @@ public class SHLDA extends AbstractSampler
             addReg += path[level].getRegressionParameter() * levelCounts[level] / denom;
         }
         double mean = docValues[d] + addReg;
-        double resLlh = StatisticsUtils.logNormalProbability(
+        double resLlh = StatUtils.logNormalProbability(
                 responses[d], mean, sqrtRho);
         return resLlh;
     }
@@ -1826,7 +1826,7 @@ public class SHLDA extends AbstractSampler
                 addReg += path[level].getRegressionParameter() * levelCounts[level] / denom;
             }
             double authorMean = curAuthorVal + addReg;
-            double resLlh = StatisticsUtils.logNormalProbability(
+            double resLlh = StatUtils.logNormalProbability(
                     authorResponse, authorMean, sqrtRho);
             nodeResLogProbs.put(pathNode, resLlh);
         }
@@ -2304,7 +2304,7 @@ public class SHLDA extends AbstractSampler
         while (!stack.isEmpty()) {
             SNode node = stack.pop();
             wordLlh += node.getLogProbability(node.getContent().getSparseCounts());
-            regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+            regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                     mus[node.getLevel()], Math.sqrt(sigmas[node.getLevel()]));
             if (!isLeafNode(node)) {
                 treeLogProb += node.getLogJointProbability(gammas[node.getLevel()]);
@@ -2325,7 +2325,7 @@ public class SHLDA extends AbstractSampler
         if (responses != null) {
             double[] regValues = getRegressionValues();
             for (int d = 0; d < D; d++) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d],
+                resLlh += StatUtils.logNormalProbability(responses[d],
                         regValues[d], sqrtRho);
             }
         }
@@ -2734,11 +2734,11 @@ public class SHLDA extends AbstractSampler
 
         for (int d = 0; d < D; d++) {
             for (int s = 0; s < words[d].length; s++) {
-                if (words[d][s].length != StatisticsUtils.sum(sentLevelCounts[d][s])) {
+                if (words[d][s].length != StatUtils.sum(sentLevelCounts[d][s])) {
                     throw new RuntimeException("Counts mismatch. d = " + d
                             + ". s = " + s
                             + ". " + words[d][s].length
-                            + " vs. " + StatisticsUtils.sum(sentLevelCounts[d][s]));
+                            + " vs. " + StatUtils.sum(sentLevelCounts[d][s]));
                 }
             }
         }
@@ -2865,10 +2865,10 @@ public class SHLDA extends AbstractSampler
             }
         }
         str.append("\t>>> # tables:")
-                .append(". min: ").append(MiscUtils.formatDouble(StatisticsUtils.min(numTables)))
-                .append(". max: ").append(MiscUtils.formatDouble(StatisticsUtils.max(numTables)))
-                .append(". avg: ").append(MiscUtils.formatDouble(StatisticsUtils.mean(numTables)))
-                .append(". total: ").append(MiscUtils.formatDouble(StatisticsUtils.sum(numTables)))
+                .append(". min: ").append(MiscUtils.formatDouble(StatUtils.min(numTables)))
+                .append(". max: ").append(MiscUtils.formatDouble(StatUtils.max(numTables)))
+                .append(". avg: ").append(MiscUtils.formatDouble(StatUtils.mean(numTables)))
+                .append(". total: ").append(MiscUtils.formatDouble(StatUtils.sum(numTables)))
                 .append("\n");
         str.append("\t>>> # customers: ").append(totalTableCusts);
         return str.toString();

@@ -91,7 +91,7 @@ public class PredictionUtils {
                     + "\t" + trueValues.length
                     + "\t" + predValues.length);
         }
-
+        System.out.println("Outputing regression predictions to " + outputFile);
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write(instanceIds.length + "\n");
@@ -197,6 +197,7 @@ public class PredictionUtils {
      * @param outputFile The output file
      * @param labels List of true labels
      * @param preds List of predicted labels
+     * @return
      */
     public static ArrayList<Measurement> outputBinaryClassificationResults(
             File outputFile,
@@ -228,6 +229,7 @@ public class PredictionUtils {
      * @param outputFile The output file
      * @param trueValues List of true values
      * @param predValues List of predicted values
+     * @return
      */
     public static ArrayList<Measurement> outputRegressionResults(
             File outputFile,
@@ -244,6 +246,7 @@ public class PredictionUtils {
             eval.computeRSquared();
             eval.computePredictiveRSquared();
             measurements = eval.getMeasurements();
+            measurements.add(new Measurement("N", predValues.length));
             for (Measurement m : measurements) {
                 writer.write(m.getName() + "\t" + m.getValue() + "\n");
             }
@@ -598,7 +601,7 @@ public class PredictionUtils {
                         trueLabels.length);
 
                 for (int d = 0; d < trueLabels.length; d++) {
-                    predResponses[d] += StatisticsUtils.mean(predictions[d]);
+                    predResponses[d] += StatUtils.mean(predictions[d]);
                 }
             }
 
@@ -735,7 +738,7 @@ public class PredictionUtils {
                 // compute the prediction values as the average values
                 avgPred = new double[predictions.length];
                 for (int d = 0; d < avgPred.length; d++) {
-                    avgPred[d] = StatisticsUtils.mean(predictions[d]);
+                    avgPred[d] = StatUtils.mean(predictions[d]);
                 }
 
                 outputRegressionPredictions(
@@ -744,7 +747,6 @@ public class PredictionUtils {
                 outputRegressionResults(
                         new File(outputFolder, SINGLE_AVG + "-" + filename + ".result"),
                         trueResponses, avgPred);
-
 
                 RegressionEvaluation eval = new RegressionEvaluation(trueResponses, avgPred);
                 eval.computeCorrelationCoefficient();
@@ -900,7 +902,7 @@ public class PredictionUtils {
                         trueResponses.length);
 
                 for (int d = 0; d < trueResponses.length; d++) {
-                    predResponses[d] += StatisticsUtils.mean(predictions[d]);
+                    predResponses[d] += StatUtils.mean(predictions[d]);
                 }
 
                 double[] tempPredResponses = new double[trueResponses.length];

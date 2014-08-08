@@ -27,7 +27,7 @@ import sampling.util.SparseCount;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -704,7 +704,7 @@ public class SentSHLDASampler extends AbstractSampler {
             if (observed) {
                 double sum = preSum + curPathRegParams[l];
                 double mean = sum / docTokenCounts[d];
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d],
+                double resLlh = StatUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
 
                 lp += resLlh;
@@ -880,7 +880,7 @@ public class SentSHLDASampler extends AbstractSampler {
             }
 
             double mean = (preSum + addSum) / docTokenCounts[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SentSHLDANode child : node.getChildren()) {
@@ -1148,7 +1148,7 @@ public class SentSHLDASampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood();
 
             if (supervised) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         mus[node.getLevel()], Math.sqrt(sigmas[node.getLevel()]));
             }
 
@@ -1167,7 +1167,7 @@ public class SentSHLDASampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             stickLgprob += doc_level_distr[d].getLogLikelihood();
             if (supervised) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d],
+                resLlh += StatUtils.logNormalProbability(responses[d],
                         regValues[d], Math.sqrt(hyperparams.get(RHO)));
             }
         }
@@ -1213,7 +1213,7 @@ public class SentSHLDASampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood(newBetas[node.getLevel()], uniform);
 
             if (supervised) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         newMus[node.getLevel()], Math.sqrt(newSigmas[node.getLevel()]));
             }
 
@@ -1232,7 +1232,7 @@ public class SentSHLDASampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             stickLgprob += doc_level_distr[d].getLogLikelihood(tParams.get(MEAN), tParams.get(SCALE));
             if (supervised) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(tParams.get(RHO)));
+                resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(tParams.get(RHO)));
             }
         }
         double llh = wordLlh + treeLogProb + stickLgprob + regParamLgprob + resLlh;

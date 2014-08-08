@@ -2,12 +2,13 @@ package util;
 
 import java.util.ArrayList;
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
+import sampling.util.SparseCount;
 
 /**
  *
  * @author vietan
  */
-public class StatisticsUtils {
+public class StatUtils {
     // for computing digamma
 
     public static final double c1 = -0.5;
@@ -18,8 +19,8 @@ public class StatisticsUtils {
 
     public static ArrayList<Integer> discretize(double[] values, int numClasses) {
         ArrayList<Integer> disVals = new ArrayList<Integer>();
-        double min = StatisticsUtils.min(values);
-        double max = StatisticsUtils.max(values) + 0.00001;
+        double min = StatUtils.min(values);
+        double max = StatUtils.max(values) + 0.00001;
         double step = (max - min) / numClasses;
         for (int i = 0; i < values.length; i++) {
             int cls = (int) ((values[i] - min) / step);
@@ -30,8 +31,8 @@ public class StatisticsUtils {
 
     public static ArrayList<Integer> discretize(ArrayList<Double> values, int numClasses) {
         ArrayList<Integer> disVals = new ArrayList<Integer>();
-        double min = StatisticsUtils.min(values);
-        double max = StatisticsUtils.max(values) + 0.00001;
+        double min = StatUtils.min(values);
+        double max = StatUtils.max(values) + 0.00001;
         double step = (max - min) / numClasses;
         for (int i = 0; i < values.size(); i++) {
             int cls = (int) ((values.get(i) - min) / step);
@@ -87,7 +88,7 @@ public class StatisticsUtils {
     }
 
     public static double computeRSquared(double[] trueValues, double[] predValues) {
-        double mean = StatisticsUtils.mean(trueValues);
+        double mean = StatUtils.mean(trueValues);
         double totalSS = 0.0;
         double errSS = 0.0;
         for (int i = 0; i < trueValues.length; i++) {
@@ -273,6 +274,28 @@ public class StatisticsUtils {
             ssd += (values[i] - mean) * (values[i] - mean);
         }
         return Math.sqrt(ssd / (values.length - 1));
+    }
+
+    public static double standardDeviation(SparseCount counts) {
+        int countSum = counts.getCountSum();
+        if (countSum <= 1) {
+            return 0.0;
+        }
+        double mean = mean(counts);
+        double ssd = 0.0;
+        for (int i : counts.getIndices()) {
+            double diff = i - mean;
+            ssd += diff * diff * counts.getCount(i);
+        }
+        return Math.sqrt(ssd / (countSum - 1));
+    }
+
+    public static double mean(SparseCount counts) {
+        double total = 0.0;
+        for (int i : counts.getIndices()) {
+            total += i * counts.getCount(i);
+        }
+        return total / counts.getCountSum();
     }
 
     public static double mean(int[] values) {

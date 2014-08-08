@@ -1,6 +1,11 @@
 package sampler.supervised.objective;
 
+import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizable;
+import java.util.Random;
+import util.MiscUtils;
+import util.SamplerUtils;
+import util.SparseVector;
 
 /**
  * Bayesian version of IndependentLinearRegressionObject where the parameters
@@ -192,5 +197,66 @@ public class GaussianIndLinearRegObjective implements Optimizable.ByGradientValu
     public void setParameters(double[] newParameters) {
         assert (newParameters.length == parameters.length);
         System.arraycopy(newParameters, 0, parameters, 0, parameters.length);
+    }
+
+    public static void main(String[] args) {
+        Random rand = new Random(11235813);
+        double sigma = 1.0;
+        double rho = 100;
+        double mean = 0.0;
+
+        int D = 10000;
+        int V = 5;
+
+        double[] trueParams = new double[V];
+        for (int v = 0; v < V; v++) {
+            trueParams[v] = SamplerUtils.getGaussian(mean, sigma);
+        }
+
+        double[][] designMatrix = new double[D][V];
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
+                double w = rand.nextFloat();
+                designMatrix[d][v] = w;
+            }
+        }
+
+        // generate response
+        double[] responseVector = new double[D];
+        for (int d = 0; d < D; d++) {
+            for (int v = 0; v < V; v++) {
+                responseVector[d] += designMatrix[d][v] * trueParams[v];
+            }
+        }
+        for (int d = 0; d < D; d++) {
+            responseVector[d] = SamplerUtils.getGaussian(responseVector[d], rho);
+        }
+
+        double[] initParams = new double[V];
+        for (int v = 0; v < V; v++) {
+            initParams[v] = SamplerUtils.getGaussian(mean, sigma);
+        }
+        System.out.println("I params: " + MiscUtils.arrayToString(initParams));
+
+        GaussianIndLinearRegObjective obj = 
+                new GaussianIndLinearRegObjective(initParams, 
+                        designMatrix, responseVector, rho, mean, sigma);
+
+        LimitedMemoryBFGS opt = new LimitedMemoryBFGS(obj);
+        boolean converged = false;
+        try {
+            converged = opt.optimize();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("converged: " + converged);
+
+        System.out.println("T params: " + MiscUtils.arrayToString(trueParams));
+
+        double[] ps = new double[V];
+        for (int v = 0; v < V; v++) {
+            ps[v] = obj.getParameter(v);
+        }
+        System.out.println("L params: " + MiscUtils.arrayToString(ps));
     }
 }

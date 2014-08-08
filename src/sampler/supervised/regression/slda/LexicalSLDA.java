@@ -11,7 +11,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -197,7 +197,7 @@ public class LexicalSLDA extends SLDA {
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
                 double mean = docRegressMeans[d] + regParams[k] * K / (words[d].length * V);
-                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
+                logprobs[k] += StatUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
             }
         }
@@ -268,7 +268,7 @@ public class LexicalSLDA extends SLDA {
 
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
-            responseLlh += StatisticsUtils.logNormalProbability(
+            responseLlh += StatUtils.logNormalProbability(
                     responses[d],
                     docRegressMeans[d],
                     Math.sqrt(hyperparams.get(RHO)));
@@ -276,7 +276,7 @@ public class LexicalSLDA extends SLDA {
 
         double regParamLlh = 0.0;
         for (int ii = 0; ii < K + V; ii++) {
-            regParamLlh += StatisticsUtils.logNormalProbability(
+            regParamLlh += StatUtils.logNormalProbability(
                     regParams[ii],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
@@ -310,7 +310,7 @@ public class LexicalSLDA extends SLDA {
 
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
-            responseLlh += StatisticsUtils.logNormalProbability(
+            responseLlh += StatUtils.logNormalProbability(
                     responses[d],
                     docRegressMeans[d],
                     Math.sqrt(hyperparams.get(RHO)));
@@ -318,7 +318,7 @@ public class LexicalSLDA extends SLDA {
 
         double regParamLlh = 0.0;
         for (int ii = 0; ii < K + V; ii++) {
-            regParamLlh += StatisticsUtils.logNormalProbability(
+            regParamLlh += StatUtils.logNormalProbability(
                     regParams[ii],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));

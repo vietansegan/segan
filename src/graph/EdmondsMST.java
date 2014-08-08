@@ -196,12 +196,12 @@ public class EdmondsMST<C> {
         }
 
         // rank external edges according to their weight differences
-        ArrayList<RankingItem<GraphEdge>> rankExternalEdges =
-                new ArrayList<RankingItem<GraphEdge>>();
+        ArrayList<RankingItem<GraphEdge>> rankExternalEdges
+                = new ArrayList<RankingItem<GraphEdge>>();
         for (GraphEdge e : cycleAllInEdges) {
+            GraphEdge ie = (GraphEdge) minGraph.getInEdges(e.getTarget()).get(0);
             double w = e.getWeight()
-                    - (minGraph.getInEdges(e.getTarget()).get(0).getWeight()
-                    - minInternalEdge.getWeight());
+                    - (ie.getWeight() - minInternalEdge.getWeight());
             rankExternalEdges.add(new RankingItem<GraphEdge>(e, w));
         }
         Collections.sort(rankExternalEdges);

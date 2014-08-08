@@ -180,21 +180,4 @@ public class SparseCount implements Cloneable, Serializable {
         }
         return sp;
     }
-
-    public static void main(String[] args) {
-        SparseCount sc1 = new SparseCount();
-        sc1.changeCount(0, 1);
-        sc1.changeCount(1, 2);
-        sc1.changeCount(2, 3);
-        SparseCount sc2 = new SparseCount();
-        sc2.changeCount(1, 1);
-        sc2.changeCount(2, 2);
-        sc2.changeCount(3, 3);
-
-        System.out.println(sc1.toString());
-        System.out.println(sc2.toString());
-
-        SparseCount sc3 = SparseCount.add(sc1, sc2);
-        System.out.println(sc3.toString());
-    }
 }

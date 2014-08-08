@@ -31,7 +31,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -790,7 +790,7 @@ public class SGHLDASampler extends AbstractSampler {
                 double resLlh = 0.0;
                 if (isSupervised() && resObserved) {
                     double mean = (regParamSum + path[l].getRegressionParameter()) / tokenCount;
-                    resLlh = StatisticsUtils.logNormalProbability(responses[d][t], mean, sqrtRho);
+                    resLlh = StatUtils.logNormalProbability(responses[d][t], mean, sqrtRho);
                 }
                 double logProb = logPrior + stickLogPrior + wordLlh + resLlh;
                 tableLevelList.add(table.getIndex() + "_" + l);
@@ -1251,7 +1251,7 @@ public class SGHLDASampler extends AbstractSampler {
                 }
 
                 double mean = sum / docTokenCount;
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d][docIdx], mean, Math.sqrt(var));
+                double resLlh = StatUtils.logNormalProbability(responses[d][docIdx], mean, Math.sqrt(var));
 
                 // debug
 //                System.out.println(">>> mean = " + MiscUtils.formatDouble(mean) 
@@ -1369,14 +1369,14 @@ public class SGHLDASampler extends AbstractSampler {
             double regParamSum,
             int tokenCount) {
         double mean = (regParamSum + curNode.getRegressionParameter()) / tokenCount;
-        double resLlh = StatisticsUtils.logNormalProbability(response, mean, sqrtRho);
+        double resLlh = StatUtils.logNormalProbability(response, mean, sqrtRho);
         nodeResLlh.put(curNode, resLlh);
 
         if (!isLeafNode(curNode)) {
             int childLevel = curNode.getLevel() + 1;
             double pseudoMean = (regParamSum + mus[childLevel]) / tokenCount;
             double pseudoVar = sigmas[childLevel] / (tokenCount * tokenCount) + hyperparams.get(RHO);
-            double pseudoLlh = StatisticsUtils.logNormalProbability(response, pseudoMean, Math.sqrt(pseudoVar));
+            double pseudoLlh = StatUtils.logNormalProbability(response, pseudoMean, Math.sqrt(pseudoVar));
             nodeResLlh.put(curNode.getPseudoChild(), pseudoLlh);
 
             for (SGHLDANode child : curNode.getChildren()) {
@@ -1483,10 +1483,10 @@ public class SGHLDASampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             numTables[d] = localRestaurants[d].getNumTables();
         }
-        str.append(">>> local: # tables: min = ").append(StatisticsUtils.min(numTables))
-                .append(". max = ").append(StatisticsUtils.max(numTables))
-                .append(". avg = ").append(StatisticsUtils.mean(numTables))
-                .append(". total = ").append(StatisticsUtils.sum(numTables))
+        str.append(">>> local: # tables: min = ").append(StatUtils.min(numTables))
+                .append(". max = ").append(StatUtils.max(numTables))
+                .append(". avg = ").append(StatUtils.mean(numTables))
+                .append(". total = ").append(StatUtils.sum(numTables))
                 .append("\n");
 
         return str.toString();
@@ -1548,7 +1548,7 @@ public class SGHLDASampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood();
 
             if (isSupervised()) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         mus[node.getLevel()], sqrtSigmas[node.getLevel()]);
             }
 
@@ -1574,7 +1574,7 @@ public class SGHLDASampler extends AbstractSampler {
             if (isSupervised()) {
                 for (int t = 0; t < words[d].length; t++) {
                     double mean = getRegressionSum(d, t) / words[d][t].length;
-                    resLlh += StatisticsUtils.logNormalProbability(responses[d][t], mean, sqrtRho);
+                    resLlh += StatUtils.logNormalProbability(responses[d][t], mean, sqrtRho);
                 }
             }
         }
@@ -1621,7 +1621,7 @@ public class SGHLDASampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood(newBetas[node.getLevel()], uniform);
 
             if (isSupervised()) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         newMus[node.getLevel()], Math.sqrt(newSigmas[node.getLevel()]));
             }
 
@@ -1647,7 +1647,7 @@ public class SGHLDASampler extends AbstractSampler {
             if (isSupervised()) {
                 for (int t = 0; t < words[d].length; t++) {
                     double mean = getRegressionSum(d, t) / words[d][t].length;
-                    resLlh += StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
+                    resLlh += StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
                 }
             }
         }

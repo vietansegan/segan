@@ -23,7 +23,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -611,7 +611,7 @@ public class MSHDPSampler extends AbstractSampler {
 
             if (resObserved) {
                 double mean = (weightedSum + table.getEta()) / numTokens;
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
+                double resLlh = StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
                 logprob += resLlh;
 
                 // debug
@@ -955,14 +955,14 @@ public class MSHDPSampler extends AbstractSampler {
         for (SHDPDish dish : globalRestaurant.getTables()) {
             double mean = dish.getMean();
             double var = hyperparams.get(SIGMA_LOCAL);
-            double resLlh = StatisticsUtils.logNormalProbability(eta, mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(eta, mean, Math.sqrt(var));
             resLlhs.put(dish.getIndex(), resLlh);
         }
 
         // for new dish
         double mean = hyperparams.get(MU);
         double var = hyperparams.get(SIGMA_GLOBAL) + hyperparams.get(SIGMA_LOCAL);
-        double resLlh = StatisticsUtils.logNormalProbability(eta, mean, Math.sqrt(var));
+        double resLlh = StatUtils.logNormalProbability(eta, mean, Math.sqrt(var));
         resLlhs.put(PSEUDO_INDEX, resLlh);
 
         return resLlhs;
@@ -978,7 +978,7 @@ public class MSHDPSampler extends AbstractSampler {
         for (SHDPDish dish : globalRestaurant.getTables()) {
             double mean = (weightedSum + dish.getMean()) / tokenCount;
             double var = hyperparams.get(SIGMA_LOCAL) / tokenCountSquare + hyperparams.get(RHO);
-            double resLlh = StatisticsUtils.logNormalProbability(response, mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(response, mean, Math.sqrt(var));
             resLlhs.put(dish.getIndex(), resLlh);
         }
 
@@ -986,7 +986,7 @@ public class MSHDPSampler extends AbstractSampler {
         double mean = (weightedSum + hyperparams.get(MU)) / tokenCount;
         double var = (hyperparams.get(SIGMA_GLOBAL) + hyperparams.get(SIGMA_LOCAL)) / tokenCountSquare
                 + hyperparams.get(RHO);
-        double resLlh = StatisticsUtils.logNormalProbability(response, mean, Math.sqrt(var));
+        double resLlh = StatUtils.logNormalProbability(response, mean, Math.sqrt(var));
         resLlhs.put(PSEUDO_INDEX, resLlh);
 
         return resLlhs;
@@ -1043,9 +1043,9 @@ public class MSHDPSampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             numTables[d] = this.localRestaurants[d].getNumTables();
         }
-        str.append(">>> >>> # tables: avg: ").append(StatisticsUtils.mean(numTables))
-                .append(". min: ").append(StatisticsUtils.min(numTables))
-                .append(". max: ").append(StatisticsUtils.max(numTables));
+        str.append(">>> >>> # tables: avg: ").append(StatUtils.mean(numTables))
+                .append(". min: ").append(StatUtils.min(numTables))
+                .append(". max: ").append(StatUtils.max(numTables));
         str.append("\n");
         return str.toString();
     }
@@ -1065,14 +1065,14 @@ public class MSHDPSampler extends AbstractSampler {
         double tableRegLlh = 0.0;
         for (int d = 0; d < D; d++) {
             for (SHDPTable table : this.localRestaurants[d].getTables()) {
-                tableRegLlh += StatisticsUtils.logNormalProbability(table.getEta(),
+                tableRegLlh += StatUtils.logNormalProbability(table.getEta(),
                         table.getContent().getMean(), Math.sqrt(hyperparams.get(SIGMA_LOCAL)));
             }
         }
 
         double dishRegLlh = 0.0;
         for (SHDPDish dish : this.globalRestaurant.getTables()) {
-            dishRegLlh += StatisticsUtils.logNormalProbability(dish.getMean(),
+            dishRegLlh += StatUtils.logNormalProbability(dish.getMean(),
                     hyperparams.get(MU), Math.sqrt(hyperparams.get(SIGMA_GLOBAL)));
         }
 
@@ -1084,7 +1084,7 @@ public class MSHDPSampler extends AbstractSampler {
                     mean += table.getEta() * turnCounts[d][t].getCount(table.getIndex());
                 }
                 mean /= words[d][t].length;
-                resLlh += StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
+                resLlh += StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
             }
         }
 
@@ -1114,14 +1114,14 @@ public class MSHDPSampler extends AbstractSampler {
         double tableRegLlh = 0.0;
         for (int d = 0; d < D; d++) {
             for (SHDPTable table : this.localRestaurants[d].getTables()) {
-                tableRegLlh += StatisticsUtils.logNormalProbability(table.getEta(),
+                tableRegLlh += StatUtils.logNormalProbability(table.getEta(),
                         table.getContent().getMean(), Math.sqrt(tParams.get(SIGMA_LOCAL)));
             }
         }
 
         double dishRegLlh = 0.0;
         for (SHDPDish dish : this.globalRestaurant.getTables()) {
-            dishRegLlh += StatisticsUtils.logNormalProbability(dish.getMean(), tParams.get(MU), Math.sqrt(tParams.get(SIGMA_GLOBAL)));
+            dishRegLlh += StatUtils.logNormalProbability(dish.getMean(), tParams.get(MU), Math.sqrt(tParams.get(SIGMA_GLOBAL)));
         }
 
         double resLlh = 0.0;
@@ -1132,7 +1132,7 @@ public class MSHDPSampler extends AbstractSampler {
                     mean += table.getEta() * turnCounts[d][t].getCount(table.getIndex());
                 }
                 mean /= words[d][t].length;
-                resLlh += StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
+                resLlh += StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
             }
         }
 

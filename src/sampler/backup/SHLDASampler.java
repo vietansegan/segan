@@ -22,7 +22,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -460,7 +460,7 @@ public class SHLDASampler extends AbstractSampler {
             // --- c. Compute the actual Gaussian log likelihood of y[d] given the mean
             for (SHLDANode node : pathRegMean.keySet()) {
                 double mean = pathRegMean.get(node);
-                double normLlh = StatisticsUtils.logNormalProbability(y[d], mean, hyperparams.get(RHO));
+                double normLlh = StatUtils.logNormalProbability(y[d], mean, hyperparams.get(RHO));
                 pathObsLlhs.put(node, normLlh);
             }
         }
@@ -688,7 +688,7 @@ public class SHLDASampler extends AbstractSampler {
                 for (int k = regressionLevel; k < L; k++) {
                     mean += pathRegressionParams[k] * empDist[k];
                 }
-                logprobs[l] += StatisticsUtils.logNormalProbability(y[d], mean, hyperparams.get(RHO));
+                logprobs[l] += StatUtils.logNormalProbability(y[d], mean, hyperparams.get(RHO));
             }
         }
 

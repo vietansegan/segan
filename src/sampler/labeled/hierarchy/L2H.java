@@ -35,7 +35,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -1446,15 +1446,15 @@ public class L2H extends AbstractSampler {
         }
 
         public int getTotalNumStays() {
-            return StatisticsUtils.sum(numStays.getValues());
+            return StatUtils.sum(numStays.getValues());
         }
 
         public int getTotalNumPasses() {
-            return StatisticsUtils.sum(numPasses.getValues());
+            return StatUtils.sum(numPasses.getValues());
         }
 
         public int getTotalObservationCount() {
-            return StatisticsUtils.sum(observations.getValues());
+            return StatUtils.sum(observations.getValues());
         }
 
         public void incrementPseudoCount(int obs) {

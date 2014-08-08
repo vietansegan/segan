@@ -36,7 +36,7 @@ import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;
 
@@ -341,9 +341,9 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             logln("--- # sentences = " + sentCount);
             logln("--- # tokens = " + tokenCount);
             logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -963,8 +963,8 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             }
             writer.write(v
                     + "\t" + wordVocab.get(v)
-                    + "\t" + StatisticsUtils.mean(ws)
-                    + "\t" + StatisticsUtils.standardDeviation(ws)
+                    + "\t" + StatUtils.mean(ws)
+                    + "\t" + StatUtils.standardDeviation(ws)
                     + "\n");
         }
         writer.close();
@@ -1187,7 +1187,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
                 double sum = docTopicWeights[d] + docLexicalWeights[d]
                         + curPath[l].getRegressionParameter();
                 double mean = sum / docTokenCounts[d];
-                resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
+                resLlh = StatUtils.logNormalProbability(responses[d], mean, sqrtRho);
             }
             logprobs[l] = logPrior + wordLlh + resLlh;
         }
@@ -1268,7 +1268,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
                 }
 
                 double mean = (docTopicWeights[d] + docLexicalWeights[d] + addTopicWeight) / docTokenCounts[d];
-                resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
+                resLlh = StatUtils.logNormalProbability(responses[d], mean, sqrtRho);
             }
 
             double lp = logprior + wordLlh + resLlh + stickLp;
@@ -1857,7 +1857,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             }
 
             double mean = (docTopicWeights[d] + docLexicalWeights[d] + addSum) / docTokenCounts[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SNode child : node.getChildren()) {
@@ -1900,7 +1900,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             // note: the topic weight of the current sentence s has been excluded
             // from docTopicWeights[d]
             double mean = (docTopicWeights[d] + docLexicalWeights[d] + addTopicWeight) / docTokenCounts[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SNode child : node.getChildren()) {
@@ -2143,10 +2143,10 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             }
         }
         str.append("\t>>> # tables:")
-                .append(". min: ").append(MiscUtils.formatDouble(StatisticsUtils.min(numTables)))
-                .append(". max: ").append(MiscUtils.formatDouble(StatisticsUtils.max(numTables)))
-                .append(". avg: ").append(MiscUtils.formatDouble(StatisticsUtils.mean(numTables)))
-                .append(". total: ").append(MiscUtils.formatDouble(StatisticsUtils.sum(numTables)))
+                .append(". min: ").append(MiscUtils.formatDouble(StatUtils.min(numTables)))
+                .append(". max: ").append(MiscUtils.formatDouble(StatUtils.max(numTables)))
+                .append(". avg: ").append(MiscUtils.formatDouble(StatUtils.mean(numTables)))
+                .append(". total: ").append(MiscUtils.formatDouble(StatUtils.sum(numTables)))
                 .append("\n");
         str.append("\t>>> # customers: ").append(totalTableCusts);
         return str.toString();
@@ -2307,7 +2307,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
 
             wordLlh += node.getContent().getLogLikelihood();
 
-            regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+            regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                     mus[node.getLevel()], Math.sqrt(sigmas[node.getLevel()]));
 
             if (!isLeafNode(node)) {
@@ -2330,7 +2330,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
 
             restLgprob += localRestaurants[d].getJointProbabilityAssignments(hyperparams.get(ALPHA));
 
-            resLlh += StatisticsUtils.logNormalProbability(responses[d],
+            resLlh += StatUtils.logNormalProbability(responses[d],
                     regValues[d], sqrtRho);
         }
 
@@ -3410,7 +3410,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
                     + "variables. Use option -z to perform z-normalization.");
         }
 
-        double meanResponse = StatisticsUtils.mean(data.getResponses());
+        double meanResponse = StatUtils.mean(data.getResponses());
         double[] defaultMus = new double[L];
         for (int i = 0; i < L; i++) {
             defaultMus[i] = meanResponse;
@@ -3560,7 +3560,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
 
             int V = trainData.getWordVocab().size();
 
-            double meanResponse = StatisticsUtils.mean(trainData.getResponses());
+            double meanResponse = StatUtils.mean(trainData.getResponses());
             double[] defaultMus = new double[L];
             for (int i = 0; i < L; i++) {
                 defaultMus[i] = meanResponse;

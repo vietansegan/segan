@@ -499,6 +499,39 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
     }
 
+    /**
+     * Convert a LDA-C-formatted string into a Gibbs-formatted string.
+     *
+     * @param ldacString LDA-C-formatted string
+     * @return Gibbs-formatted string
+     */
+    protected int[] getGibbsString(String ldacString) {
+        String[] sline = ldacString.split(" ");
+
+        int numTypes = Integer.parseInt(sline[0]);
+        int[] types = new int[numTypes];
+        int[] counts = new int[numTypes];
+
+        int numTokens = 0;
+        for (int ii = 0; ii < numTypes; ++ii) {
+            String[] entry = sline[ii + 1].split(":");
+            int count = Integer.parseInt(entry[1]);
+            int id = Integer.parseInt(entry[0]);
+            numTokens += count;
+            types[ii] = id;
+            counts[ii] = count;
+        }
+
+        int[] gibbsString = new int[numTokens];
+        int index = 0;
+        for (int ii = 0; ii < numTypes; ++ii) {
+            for (int jj = 0; jj < counts[ii]; ++jj) {
+                gibbsString[index++] = types[ii];
+            }
+        }
+        return gibbsString;
+    }
+
     protected void inputSentenceTextData(File file) throws Exception {
         if (verbose) {
             logln("--- Reading sentence text data from " + file);
@@ -555,7 +588,6 @@ public class TextDataset extends AbstractTokenizeDataset {
             logln("--- --- # sents: " + numSents);
             logln("--- --- # tokens: " + numTokens);
         }
-
 
         File rawSentFile = new File(file + ".raw");
         if (verbose) {
@@ -623,7 +655,6 @@ public class TextDataset extends AbstractTokenizeDataset {
 //                    logln(">>> " + s + "\t" + sentRawWords[d][s]);
 //                }
 //            }
-
             words[d] = new int[filteredDocWords.size()];
             for (int n = 0; n < words[d].length; n++) {
                 words[d][n] = filteredDocWords.get(n);
@@ -667,11 +698,11 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
 
         String cvName = "";
-        CrossValidation<String, Instance<String>> cv =
-                new CrossValidation<String, Instance<String>>(
-                cvFolder,
-                cvName,
-                instanceList);
+        CrossValidation<String, Instance<String>> cv
+                = new CrossValidation<String, Instance<String>>(
+                        cvFolder,
+                        cvName,
+                        instanceList);
 
         cv.stratify(groupIdList, numFolds, trToDevRatio);
         cv.outputFolds();

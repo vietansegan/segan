@@ -24,7 +24,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -1027,10 +1027,10 @@ public class RCRPSampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             numTables[d] = localRestaurants[d].getNumTables();
         }
-        String s = "\t# tables: min = " + StatisticsUtils.min(numTables)
-                + ". max = " + StatisticsUtils.max(numTables)
-                + ". avg = " + MiscUtils.formatDouble(StatisticsUtils.mean(numTables))
-                + ". total = " + StatisticsUtils.sum(numTables);
+        String s = "\t# tables: min = " + StatUtils.min(numTables)
+                + ". max = " + StatUtils.max(numTables)
+                + ". avg = " + MiscUtils.formatDouble(StatUtils.mean(numTables))
+                + ". total = " + StatUtils.sum(numTables);
         str.append(s);
 
         return str.toString();

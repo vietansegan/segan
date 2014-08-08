@@ -48,6 +48,12 @@ public abstract class AbstractSampler implements Serializable {
 
         RANDOM, SEEDED, FORWARD, PRESET, PRIOR
     }
+
+    public static enum SamplingType {
+
+        GIBBS, MH
+    }
+
     protected static final long RAND_SEED = 1123581321;
     protected static final double MAX_LOG = Math.log(Double.MAX_VALUE);
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
@@ -63,6 +69,7 @@ public abstract class AbstractSampler implements Serializable {
     protected int testSampleLag = 5;
     protected String folder;
     protected String name;
+    protected String basename;
     protected ArrayList<Double> hyperparams; // should have used a HashMap instead of ArrayList
     protected boolean paramOptimized = false;
     protected String prefix = "";// to store description of predefined configurations (e.g., initialization)
@@ -101,6 +108,10 @@ public abstract class AbstractSampler implements Serializable {
         options.addOption("help", false, "Help");
     }
 
+    public String getBasename() {
+        return this.basename;
+    }
+
     public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
         if (tMaxIter < this.testMaxIter) {
             this.testBurnIn = tBurnIn;
@@ -114,6 +125,10 @@ public abstract class AbstractSampler implements Serializable {
         MAX_ITER = max_iter;
         LAG = lag;
         REP_INTERVAL = repInt;
+    }
+
+    public boolean isReporting() {
+        return verbose && iter % REP_INTERVAL == 0;
     }
 
     public int getBurnIn() {

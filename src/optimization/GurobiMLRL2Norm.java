@@ -1,11 +1,11 @@
 package optimization;
 
-import gurobi.GRB;
-import gurobi.GRBEnv;
-import gurobi.GRBLinExpr;
-import gurobi.GRBModel;
-import gurobi.GRBQuadExpr;
-import gurobi.GRBVar;
+//import gurobi.GRB;
+//import gurobi.GRBEnv;
+//import gurobi.GRBLinExpr;
+//import gurobi.GRBModel;
+//import gurobi.GRBQuadExpr;
+//import gurobi.GRBVar;
 import java.util.Random;
 import util.MiscUtils;
 import util.SamplerUtils;
@@ -49,132 +49,132 @@ public class GurobiMLRL2Norm {
         int D = getNumObservations();
         int V = getNumVariables();
         
-        System.out.println("Solving MLR L2 ...");
-        System.out.println("# observations: " + D);
-        System.out.println("# variables: " + V);
-        
-        try {
-            GRBEnv env = new GRBEnv();
-            GRBModel model = new GRBModel(env);
-
-            // variables
-            GRBVar[] variables = new GRBVar[getNumVariables()];
-            for (int v = 0; v < getNumVariables(); v++) {
-                variables[v] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 1.0, GRB.CONTINUOUS, "x-" + v);
-            }
-            model.update();
-
-            // objective function
-            GRBQuadExpr obj = new GRBQuadExpr();
-
-            // likelihood
-            double constTerm = 0.0;
-            double[] firstOrderTerms = new double[V];
-            double[] secondOrderTerms = new double[V];
-            double[][] crossTerms = new double[V][V];
-            for(int d=0; d<D; d++) {
-                constTerm += responseVector[d] * responseVector[d] / rho;
-                for(int v=0; v<V; v++) {
-                    firstOrderTerms[v] += -2 * responseVector[d] * designMatrix[d][v] / rho;
-                    secondOrderTerms[v] += designMatrix[d][v] * designMatrix[d][v] / rho;
-                }
-                for(int ii=0; ii<V; ii++) {
-                    for(int jj=0; jj<ii; jj++) {
-                        crossTerms[ii][jj] += 2 * designMatrix[d][ii] * designMatrix[d][jj] / rho;
-                    }
-                }
-            }
-            obj.addConstant(constTerm);
-            for(int v=0; v<V; v++) {
-                obj.addTerm(firstOrderTerms[v], variables[v]);
-                obj.addTerm(secondOrderTerms[v], variables[v], variables[v]);
-                for(int u=0; u<v; u++) {
-                    obj.addTerm(crossTerms[v][u], variables[v], variables[u]);
-                }
-            }
-
-            // prior
-            for (int v = 0; v < V; v++) {
-                obj.addConstant(getMean(v) * getMean(v) / getSigma(v));
-                obj.addTerm(-2 * getMean(v) / getSigma(v), variables[v]);
-                obj.addTerm(1.0 / getSigma(v), variables[v], variables[v]);
-            }
-
-            model.setObjective(obj, GRB.MINIMIZE);
-
-            // optimize
-            model.optimize();
-
-            // get solution
-            for (int v = 0; v < getNumVariables(); v++) {
-                solution[v] = variables[v].get(GRB.DoubleAttr.X);
-            }
-
-            // dispose of model and environment
-            model.dispose();
-            env.dispose();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while solving " + GurobiMLRL2Norm.class.getName());
-        }
+//        System.out.println("Solving MLR L2 ...");
+//        System.out.println("# observations: " + D);
+//        System.out.println("# variables: " + V);
+//        
+//        try {
+//            GRBEnv env = new GRBEnv();
+//            GRBModel model = new GRBModel(env);
+//
+//            // variables
+//            GRBVar[] variables = new GRBVar[getNumVariables()];
+//            for (int v = 0; v < getNumVariables(); v++) {
+//                variables[v] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 1.0, GRB.CONTINUOUS, "x-" + v);
+//            }
+//            model.update();
+//
+//            // objective function
+//            GRBQuadExpr obj = new GRBQuadExpr();
+//
+//            // likelihood
+//            double constTerm = 0.0;
+//            double[] firstOrderTerms = new double[V];
+//            double[] secondOrderTerms = new double[V];
+//            double[][] crossTerms = new double[V][V];
+//            for(int d=0; d<D; d++) {
+//                constTerm += responseVector[d] * responseVector[d] / rho;
+//                for(int v=0; v<V; v++) {
+//                    firstOrderTerms[v] += -2 * responseVector[d] * designMatrix[d][v] / rho;
+//                    secondOrderTerms[v] += designMatrix[d][v] * designMatrix[d][v] / rho;
+//                }
+//                for(int ii=0; ii<V; ii++) {
+//                    for(int jj=0; jj<ii; jj++) {
+//                        crossTerms[ii][jj] += 2 * designMatrix[d][ii] * designMatrix[d][jj] / rho;
+//                    }
+//                }
+//            }
+//            obj.addConstant(constTerm);
+//            for(int v=0; v<V; v++) {
+//                obj.addTerm(firstOrderTerms[v], variables[v]);
+//                obj.addTerm(secondOrderTerms[v], variables[v], variables[v]);
+//                for(int u=0; u<v; u++) {
+//                    obj.addTerm(crossTerms[v][u], variables[v], variables[u]);
+//                }
+//            }
+//
+//            // prior
+//            for (int v = 0; v < V; v++) {
+//                obj.addConstant(getMean(v) * getMean(v) / getSigma(v));
+//                obj.addTerm(-2 * getMean(v) / getSigma(v), variables[v]);
+//                obj.addTerm(1.0 / getSigma(v), variables[v], variables[v]);
+//            }
+//
+//            model.setObjective(obj, GRB.MINIMIZE);
+//
+//            // optimize
+//            model.optimize();
+//
+//            // get solution
+//            for (int v = 0; v < getNumVariables(); v++) {
+//                solution[v] = variables[v].get(GRB.DoubleAttr.X);
+//            }
+//
+//            // dispose of model and environment
+//            model.dispose();
+//            env.dispose();
+//
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            throw new RuntimeException("Exception while solving " + GurobiMLRL2Norm.class.getName());
+//        }
         return solution;
     }
     
      public double[] solve() {
         double[] solution = new double[getNumVariables()];
-        try {
-            GRBEnv env = new GRBEnv();
-            GRBModel model = new GRBModel(env);
-
-            // add variables
-            GRBVar[] regParams = new GRBVar[getNumVariables()];
-            for (int v = 0; v < getNumVariables(); v++) {
-                regParams[v] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 0.0, GRB.CONTINUOUS, "var-" + v);
-            }
-
-            GRBVar[] docAuxParams = new GRBVar[getNumObservations()];
-            for (int d = 0; d < getNumObservations(); d++) {
-                docAuxParams[d] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 0.0, GRB.CONTINUOUS, "dvar-" + d);
-            }
-
-            model.update();
-
-            // objective function
-            GRBQuadExpr obj = new GRBQuadExpr();
-            for (int d = 0; d < docAuxParams.length; d++) {
-                obj.addTerm(1.0 / getRho(), docAuxParams[d], docAuxParams[d]);
-            }
-            for (int v = 0; v < getNumVariables(); v++) {
-                obj.addTerm(1.0 / getSigma(v), regParams[v], regParams[v]);
-            }
-            model.setObjective(obj, GRB.MINIMIZE);
-
-            // constraints
-            for (int d = 0; d < getNumObservations(); d++) {
-                GRBLinExpr expr = new GRBLinExpr();
-                expr.addTerm(1.0, docAuxParams[d]);
-                for (int v = 0; v < getNumVariables(); v++) {
-                    expr.addTerm(designMatrix[d][v], regParams[v]);
-                }
-                model.addConstr(expr, GRB.EQUAL, responseVector[d], "c-" + d);
-            }
-
-            // optimize
-            model.optimize();
-
-            // get solution
-            for (int v = 0; v < getNumVariables(); v++) {
-                solution[v] = regParams[v].get(GRB.DoubleAttr.X);
-            }
-
-            // dispose of model and environment
-            model.dispose();
-            env.dispose();
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
+//        try {
+//            GRBEnv env = new GRBEnv();
+//            GRBModel model = new GRBModel(env);
+//
+//            // add variables
+//            GRBVar[] regParams = new GRBVar[getNumVariables()];
+//            for (int v = 0; v < getNumVariables(); v++) {
+//                regParams[v] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 0.0, GRB.CONTINUOUS, "var-" + v);
+//            }
+//
+//            GRBVar[] docAuxParams = new GRBVar[getNumObservations()];
+//            for (int d = 0; d < getNumObservations(); d++) {
+//                docAuxParams[d] = model.addVar(-GRB.INFINITY, GRB.INFINITY, 0.0, GRB.CONTINUOUS, "dvar-" + d);
+//            }
+//
+//            model.update();
+//
+//            // objective function
+//            GRBQuadExpr obj = new GRBQuadExpr();
+//            for (GRBVar docAuxParam : docAuxParams) {
+//                obj.addTerm(1.0 / getRho(), docAuxParam, docAuxParam);
+//            }
+//            for (int v = 0; v < getNumVariables(); v++) {
+//                obj.addTerm(1.0 / getSigma(v), regParams[v], regParams[v]);
+//            }
+//            model.setObjective(obj, GRB.MINIMIZE);
+//
+//            // constraints
+//            for (int d = 0; d < getNumObservations(); d++) {
+//                GRBLinExpr expr = new GRBLinExpr();
+//                expr.addTerm(1.0, docAuxParams[d]);
+//                for (int v = 0; v < getNumVariables(); v++) {
+//                    expr.addTerm(designMatrix[d][v], regParams[v]);
+//                }
+//                model.addConstr(expr, GRB.EQUAL, responseVector[d], "c-" + d);
+//            }
+//
+//            // optimize
+//            model.optimize();
+//
+//            // get solution
+//            for (int v = 0; v < getNumVariables(); v++) {
+//                solution[v] = regParams[v].get(GRB.DoubleAttr.X);
+//            }
+//
+//            // dispose of model and environment
+//            model.dispose();
+//            env.dispose();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            System.exit(1);
+//        }
         return solution;
     }
 
@@ -256,7 +256,7 @@ public class GurobiMLRL2Norm {
         double rho = 100;
         double mean = 0.0;
 
-        int D = 100000;
+        int D = 10000;
         int V = 10;
 
         double[] trueParams = new double[V];

@@ -17,7 +17,7 @@ import util.MiscUtils;
 import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
 import util.evaluation.RankingEvaluation;
@@ -590,13 +590,13 @@ public class BinarySLDA extends AbstractSampler {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
 
             // label
-            double dotProd = StatisticsUtils.dotProduct(lambdas, empDist);
+            double dotProd = StatUtils.dotProduct(lambdas, empDist);
             labelLlh += getLabelLogLikelihood(labels[d], dotProd);
         }
 
         double lambdaLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            lambdaLlh += StatisticsUtils.logNormalProbability(
+            lambdaLlh += StatUtils.logNormalProbability(
                     lambdas[k], mean, Math.sqrt(sigma));
         }
 

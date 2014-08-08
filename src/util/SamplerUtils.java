@@ -1,5 +1,6 @@
 package util;
 
+import cc.mallet.util.Randoms;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
@@ -16,9 +17,28 @@ public class SamplerUtils {
     public static final double HALF_LOG_TWO_PI = Math.log(2 * Math.PI) / 2;
     public static final double EULER_MASCHERONI = -0.5772156649015328606065121;
     public static Random rand = new Random(RAND_SEED);
+    public static Randoms randoms = new Randoms((int)RAND_SEED);
 
     public static void resetRand() {
         rand = new Random(RAND_SEED);
+    }
+    
+    public static double[] sampleMultinomial(double[] dirVector) {
+        double[] ts = new double[dirVector.length];
+        double sum = 0.0;
+        for (int v = 0; v < dirVector.length; v++) {
+            ts[v] = randoms.nextGamma(dirVector[v], 1);
+            sum += ts[v];
+        }
+
+        // normalize
+        for (int v = 0; v < dirVector.length; v++) {
+            ts[v] /= sum;
+            if (ts[v] == 0) {
+                ts[v] = 10E-4;
+            }
+        }
+        return ts;
     }
 
     /**
@@ -214,7 +234,7 @@ public class SamplerUtils {
 
     public static double computeLogLhood(SparseCount obs, double[] priorVals) {
         double val = 0.0;
-        double priorValSum = StatisticsUtils.sum(priorVals);
+        double priorValSum = StatUtils.sum(priorVals);
         val += logGammaStirling(priorValSum);
         val -= logGammaStirling(obs.getCountSum() + priorValSum);
         for (int i = 0; i < priorVals.length; i++) {
@@ -327,7 +347,7 @@ public class SamplerUtils {
     public static double computeLogLhood(double[] mult, double[] prior_vals) {
         double val = 0.0;
 
-        double prior_sum = StatisticsUtils.sum(prior_vals);
+        double prior_sum = StatUtils.sum(prior_vals);
         val += logGammaStirling(prior_sum);
         for (double p : prior_vals) {
             val -= logGammaStirling(p);
@@ -497,7 +517,7 @@ public class SamplerUtils {
 
     public static int logMinRescaleSample(double[] logPdf) {
         double[] scaledLogPdf = new double[logPdf.length];
-        double min = StatisticsUtils.min(logPdf);
+        double min = StatUtils.min(logPdf);
         for (int i = 0; i < scaledLogPdf.length; i++) {
             scaledLogPdf[i] = logPdf[i] - min;
         }

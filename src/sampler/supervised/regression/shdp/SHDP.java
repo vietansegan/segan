@@ -23,7 +23,7 @@ import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;
 
@@ -170,9 +170,9 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
             logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
             logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -528,7 +528,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
             if (observed) {
                 double mean = docRegressMeans[d]
                         + topicWords.getComponent(k).regParam / (words[d].length);
-                lp += StatisticsUtils.logNormalProbability(responses[d],
+                lp += StatUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
             }
             logprobs.add(lp);
@@ -543,7 +543,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
                 double mean = docRegressMeans[d] + hyperparams.get(MU) / (words[d].length);
                 double var = hyperparams.get(SIGMA)
                         / (words[d].length * words[d].length) + hyperparams.get(RHO);
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+                double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
                 lp += resLlh;
             }
             logprobs.add(lp);
@@ -673,7 +673,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
 
         double dishRegLlh = 0.0;
         for (int idx : topicWords.getIndices()) {
-            dishRegLlh += StatisticsUtils.logNormalProbability(
+            dishRegLlh += StatUtils.logNormalProbability(
                     topicWords.getComponent(idx).regParam,
                     hyperparams.get(MU), Math.sqrt(hyperparams.get(SIGMA)));
         }
@@ -681,7 +681,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
         double resLlh = 0.0;
         double[] regValues = getPredictedResponses();
         for (int d = 0; d < D; d++) {
-            resLlh += StatisticsUtils.logNormalProbability(responses[d],
+            resLlh += StatUtils.logNormalProbability(responses[d],
                     regValues[d], Math.sqrt(hyperparams.get(RHO)));
         }
 

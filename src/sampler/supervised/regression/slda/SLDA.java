@@ -22,7 +22,7 @@ import util.MiscUtils;
 import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -174,9 +174,9 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
             logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
             logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -469,7 +469,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                             / (topicWords[k].getCountSum() + totalBeta));
                     if (observe) {
                         double mean = docRegressMeans[d] + regParams[k] / words[d].length;
-                        logprobs[k] += StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
+                        logprobs[k] += StatUtils.logNormalProbability(responses[d], mean, sqrtRho);
                     }
                 }
 
@@ -521,7 +521,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
                 double mean = docRegressMeans[d] + regParams[k] / (words[d].length);
-                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
+                logprobs[k] += StatUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
             }
         }
@@ -614,7 +614,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         this.docRegressMeans = new double[D];
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            this.docRegressMeans[d] = StatisticsUtils.dotProduct(regParams, empDist);
+            this.docRegressMeans[d] = StatUtils.dotProduct(regParams, empDist);
         }
     }
 
@@ -633,8 +633,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(regParams, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(
+            double mean = StatUtils.dotProduct(regParams, empDist);
+            responseLlh += StatUtils.logNormalProbability(
                     responses[d],
                     mean,
                     Math.sqrt(hyperparams.get(RHO)));
@@ -642,7 +642,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         double regParamLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            regParamLlh += StatisticsUtils.logNormalProbability(
+            regParamLlh += StatUtils.logNormalProbability(
                     regParams[k],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));
@@ -677,8 +677,8 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
         double responseLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
-            double mean = StatisticsUtils.dotProduct(regParams, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(
+            double mean = StatUtils.dotProduct(regParams, empDist);
+            responseLlh += StatUtils.logNormalProbability(
                     responses[d],
                     mean,
                     Math.sqrt(hyperparams.get(RHO)));
@@ -686,7 +686,7 @@ public class SLDA extends AbstractSampler implements Regressor<ResponseTextDatas
 
         double regParamLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            regParamLlh += StatisticsUtils.logNormalProbability(
+            regParamLlh += StatUtils.logNormalProbability(
                     regParams[k],
                     hyperparams.get(MU),
                     Math.sqrt(hyperparams.get(SIGMA)));

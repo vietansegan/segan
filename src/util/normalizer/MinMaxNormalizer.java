@@ -1,6 +1,6 @@
 package util.normalizer;
 
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -16,8 +16,8 @@ public class MinMaxNormalizer extends AbstractNormalizer {
     private double newDiff;
 
     public MinMaxNormalizer(double[] data, double newMin, double newMax) {
-        this.oldMin = StatisticsUtils.min(data);
-        this.oldMax = StatisticsUtils.max(data);
+        this.oldMin = StatUtils.min(data);
+        this.oldMax = StatUtils.max(data);
         this.newMin = newMin;
         this.newMax = newMax;
 

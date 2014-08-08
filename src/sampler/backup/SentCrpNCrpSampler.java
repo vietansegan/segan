@@ -29,7 +29,7 @@ import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -852,7 +852,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
                 }
 
                 double mean = (preSum + addSum) / docTokenCounts[d];
-                resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
+                resLlh = StatUtils.logNormalProbability(responses[d], mean, sqrtRho);
             }
 
             double lp = logprior + wordLlh + resLlh;
@@ -985,7 +985,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             if (observed) {
                 double sum = preSum + curPath[l].getRegressionParameter();
                 double mean = sum / docTokenCounts[d];
-                resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, sqrtRho);
+                resLlh = StatUtils.logNormalProbability(responses[d], mean, sqrtRho);
             }
             logprobs[l] = logPrior + wordLlh + resLlh;
 
@@ -1150,7 +1150,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         if (debug) {
             double[] regValues = getRegressionValues();
             for (int d = 0; d < D; d++) {
-                resLlhBefore += StatisticsUtils.logNormalProbability(responses[d],
+                resLlhBefore += StatUtils.logNormalProbability(responses[d],
                         regValues[d], sqrtRho);
             }
         }
@@ -1204,12 +1204,12 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         if (debug) {
             int sum = 0;
             for (int d = 0; d < D; d++) {
-                sum += (int) StatisticsUtils.sum(designMatrix[d]);
+                sum += (int) StatUtils.sum(designMatrix[d]);
 
-                if (StatisticsUtils.sum(designMatrix[d]) != docTokenCounts[d]) {
+                if (StatUtils.sum(designMatrix[d]) != docTokenCounts[d]) {
                     throw new RuntimeException("Counts mismatch."
                             + " iter = " + iter
-                            + ": " + StatisticsUtils.sum(designMatrix[d])
+                            + ": " + StatUtils.sum(designMatrix[d])
                             + " vs. " + docTokenCounts[d]);
                 }
             }
@@ -1258,7 +1258,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             double resLlhAfter = 0.0;
             double[] regValues = getRegressionValues();
             for (int d = 0; d < D; d++) {
-                resLlhAfter += StatisticsUtils.logNormalProbability(responses[d],
+                resLlhAfter += StatUtils.logNormalProbability(responses[d],
                         regValues[d], sqrtRho);
             }
             logln("--- optimized iter = " + iter
@@ -1272,7 +1272,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         double resLlhBefore = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlhBefore += StatisticsUtils.logNormalProbability(responses[d],
+            resLlhBefore += StatUtils.logNormalProbability(responses[d],
                     regValues[d], sqrtRho);
         }
 
@@ -1317,12 +1317,12 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         if (debug) {
             int sum = 0;
             for (int d = 0; d < D; d++) {
-                sum += (int) StatisticsUtils.sum(designMatrix[d]);
+                sum += (int) StatUtils.sum(designMatrix[d]);
 
-                if (StatisticsUtils.sum(designMatrix[d]) != docTokenCounts[d]) {
+                if (StatUtils.sum(designMatrix[d]) != docTokenCounts[d]) {
                     throw new RuntimeException("Counts mismatch."
                             + " iter = " + iter
-                            + ": " + StatisticsUtils.sum(designMatrix[d])
+                            + ": " + StatUtils.sum(designMatrix[d])
                             + " vs. " + docTokenCounts[d]);
                 }
             }
@@ -1372,7 +1372,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         double resLlhAfter = 0.0;
         regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlhAfter += StatisticsUtils.logNormalProbability(responses[d],
+            resLlhAfter += StatUtils.logNormalProbability(responses[d],
                     regValues[d], sqrtRho);
         }
         logln("--- optimized iter = " + iter
@@ -1385,7 +1385,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         double resLlhBefore = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlhBefore += StatisticsUtils.logNormalProbability(responses[d],
+            resLlhBefore += StatUtils.logNormalProbability(responses[d],
                     regValues[d], sqrtRho);
         }
 
@@ -1405,7 +1405,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
         double resLlhAfter = 0.0;
         regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlhAfter += StatisticsUtils.logNormalProbability(responses[d],
+            resLlhAfter += StatUtils.logNormalProbability(responses[d],
                     regValues[d], sqrtRho);
         }
         logln("--- optimized iter = " + iter
@@ -1601,7 +1601,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             }
 
             double mean = (preSum + addSum) / docTokenCounts[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SNode child : node.getChildren()) {
@@ -1637,7 +1637,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             }
 
             double mean = (preSum + addSum) / docTokenCounts[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SNode child : node.getChildren()) {
@@ -1864,10 +1864,10 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             }
         }
         str.append("\t>>> # tables:")
-                .append(". min: ").append(MiscUtils.formatDouble(StatisticsUtils.min(numTables)))
-                .append(". max: ").append(MiscUtils.formatDouble(StatisticsUtils.max(numTables)))
-                .append(". avg: ").append(MiscUtils.formatDouble(StatisticsUtils.mean(numTables)))
-                .append(". total: ").append(MiscUtils.formatDouble(StatisticsUtils.sum(numTables)))
+                .append(". min: ").append(MiscUtils.formatDouble(StatUtils.min(numTables)))
+                .append(". max: ").append(MiscUtils.formatDouble(StatUtils.max(numTables)))
+                .append(". avg: ").append(MiscUtils.formatDouble(StatUtils.mean(numTables)))
+                .append(". total: ").append(MiscUtils.formatDouble(StatUtils.sum(numTables)))
                 .append("\n");
         str.append("\t>>> # customers: ").append(totalTableCusts);
         return str.toString();
@@ -1911,7 +1911,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood();
 
             if (supervised) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         mus[node.getLevel()], Math.sqrt(sigmas[node.getLevel()]));
             }
 
@@ -1934,7 +1934,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             restLgprob += localRestaurants[d].getJointProbabilityAssignments(hyperparams.get(ALPHA));
 
             if (supervised) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d],
+                resLlh += StatUtils.logNormalProbability(responses[d],
                         regValues[d], sqrtRho);
             }
         }
@@ -1981,7 +1981,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood(newBetas[node.getLevel()], uniform);
 
             if (supervised) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         newMus[node.getLevel()], Math.sqrt(newSigmas[node.getLevel()]));
             }
 
@@ -2004,7 +2004,7 @@ public class SentCrpNCrpSampler extends AbstractSampler {
             restLgprob += localRestaurants[d].getJointProbabilityAssignments(tParams.get(ALPHA));
 
             if (supervised) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d],
+                resLlh += StatUtils.logNormalProbability(responses[d],
                         regValues[d], Math.sqrt(tParams.get(RHO)));
             }
         }

@@ -12,7 +12,7 @@ import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import util.CLIUtils;
 import util.IOUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -84,7 +84,7 @@ public class CreateCrossValidationFolds extends AbstractRunner {
             int numClasses = CLIUtils.getIntegerArgument(cmd, "num-classes", 1);
 
             // create groupIdList based on the response variable
-            ArrayList<Integer> groupIdList = StatisticsUtils.discretize(dataset.getResponses(), numClasses);
+            ArrayList<Integer> groupIdList = StatUtils.discretize(dataset.getResponses(), numClasses);
 
             System.out.println("\nStratified sampling ... " + outputFolder);
             cv.stratify(groupIdList, numFolds, trToDevRatio);

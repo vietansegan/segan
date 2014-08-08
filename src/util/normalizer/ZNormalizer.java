@@ -1,7 +1,7 @@
 package util.normalizer;
 
 import util.MiscUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -13,8 +13,8 @@ public class ZNormalizer extends AbstractNormalizer {
     private double stdev;
 
     public ZNormalizer(double[] data) {
-        this.mean = StatisticsUtils.mean(data);
-        this.stdev = StatisticsUtils.standardDeviation(data);
+        this.mean = StatUtils.mean(data);
+        this.stdev = StatUtils.standardDeviation(data);
     }
 
     public ZNormalizer(double mean, double stdev) {
@@ -59,7 +59,7 @@ public class ZNormalizer extends AbstractNormalizer {
             System.out.println(normData[i]);
         }
         System.out.println(MiscUtils.arrayToString(normData));
-        System.out.println(StatisticsUtils.mean(normData));
-        System.out.println(StatisticsUtils.standardDeviation(normData));
+        System.out.println(StatUtils.mean(normData));
+        System.out.println(StatUtils.standardDeviation(normData));
     }
 }

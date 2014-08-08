@@ -24,7 +24,7 @@ import sampling.util.TreeNode;
 import util.IOUtils;
 import util.MiscUtils;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -771,7 +771,7 @@ public class LexicalSHLDASampler extends AbstractSampler {
 
             if (observed) {
                 double mean = (preSum + pathRegParams[l]) / words[d].length + docBackgroundSums[d];
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(hyperparams.get(RHO)));
+                double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(hyperparams.get(RHO)));
                 logprobs[l] += resLlh;
 
                 // debug
@@ -1047,7 +1047,7 @@ public class LexicalSHLDASampler extends AbstractSampler {
                 level++;
             }
             double mean = sum / words[d].length + docBackgroundSums[d];
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(node, resLlh);
 
             for (SHLDANode child : node.getChildren()) {
@@ -1221,7 +1221,7 @@ public class LexicalSHLDASampler extends AbstractSampler {
                     .append(", ").append(obsCountPerLevel[l])
                     .append(")\t");
         }
-        str.append("total obs: ").append(StatisticsUtils.sum(obsCountPerLevel));
+        str.append("total obs: ").append(StatUtils.sum(obsCountPerLevel));
         return str.toString();
     }
 
@@ -1325,7 +1325,7 @@ public class LexicalSHLDASampler extends AbstractSampler {
             wordLlh += node.getContent().getLogLikelihood();
 
             if (supervised) {
-                regParamLgprob += StatisticsUtils.logNormalProbability(node.getRegressionParameter(),
+                regParamLgprob += StatUtils.logNormalProbability(node.getRegressionParameter(),
                         mus[node.getLevel()], Math.sqrt(sigmas[node.getLevel()]));
             }
 
@@ -1344,14 +1344,14 @@ public class LexicalSHLDASampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             stickLgprob += doc_level_distr[d].getLogLikelihood();
             if (supervised) {
-                resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(hyperparams.get(RHO)));
+                resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], Math.sqrt(hyperparams.get(RHO)));
             }
         }
 
         double wordSentLlh = 0.0;
         for (int v = 0; v < V; v++) {
             if (this.tokenIndices.contains(v)) {
-                wordSentLlh += StatisticsUtils.logNormalProbability(this.tokenWeights[v],
+                wordSentLlh += StatUtils.logNormalProbability(this.tokenWeights[v],
                         hyperparams.get(TAU_MEAN), hyperparams.get(TAU_SCALE));
             }
         }
@@ -1917,8 +1917,8 @@ public class LexicalSHLDASampler extends AbstractSampler {
                 addObservationsToPath(c[d], docTypeCountPerLevel);
                 c[d] = null;
 
-                pathLlhs.add(StatisticsUtils.mean(sampledLlhs));
-                pathPredRes.add(StatisticsUtils.mean(sampledPredRes));
+                pathLlhs.add(StatUtils.mean(sampledLlhs));
+                pathPredRes.add(StatUtils.mean(sampledPredRes));
             }
 
             // find the path with maximum 

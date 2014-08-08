@@ -27,7 +27,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -782,7 +782,7 @@ public class SRCRPSampler extends AbstractSampler {
 
             if (resObserved) {
                 double mean = (weightedSum + table.getEta()) / numTokens;
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
+                double resLlh = StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(hyperparams.get(RHO)));
                 logprob += resLlh;
 
                 // debug
@@ -1212,7 +1212,7 @@ public class SRCRPSampler extends AbstractSampler {
         double mean = curNode.getMean();
 //        double var = curNode.getVariance();
         double var = sigmas[curNode.getLevel()];
-        double curNodeResLlh = StatisticsUtils.logNormalProbability(eta, mean, Math.sqrt(var));
+        double curNodeResLlh = StatUtils.logNormalProbability(eta, mean, Math.sqrt(var));
         resLlhs.put(curNode.getPathString(), curNodeResLlh);
 
         // debug
@@ -1224,7 +1224,7 @@ public class SRCRPSampler extends AbstractSampler {
 
         if (!this.isLeafNode(curNode)) {
             double pseudoVar = var + this.sigmas[curNode.getLevel() + 1];
-            double pseudoResLlh = StatisticsUtils.logNormalProbability(eta, mean, Math.sqrt(pseudoVar));
+            double pseudoResLlh = StatUtils.logNormalProbability(eta, mean, Math.sqrt(pseudoVar));
             resLlhs.put(curNode.getPseudoChildPathString(), pseudoResLlh);
 
             // debug
@@ -1256,7 +1256,7 @@ public class SRCRPSampler extends AbstractSampler {
             int count) {
         double mean = (weightedSum + curNode.getMean()) / count;
         double var = sigmas[curNode.getLevel()] / (count * count) + hyperparams.get(RHO);
-        double curNodeResLlh = StatisticsUtils.logNormalProbability(response, mean, Math.sqrt(var));
+        double curNodeResLlh = StatUtils.logNormalProbability(response, mean, Math.sqrt(var));
         resLlhs.put(curNode.getPathString(), curNodeResLlh);
 
         // debug
@@ -1269,7 +1269,7 @@ public class SRCRPSampler extends AbstractSampler {
 
         if (!this.isLeafNode(curNode)) {
             double pseudoVar = var + sigmas[curNode.getLevel() + 1] / (count * count);
-            double pseudoResLlh = StatisticsUtils.logNormalProbability(response, mean, Math.sqrt(pseudoVar));
+            double pseudoResLlh = StatUtils.logNormalProbability(response, mean, Math.sqrt(pseudoVar));
             resLlhs.put(curNode.getPseudoChildPathString(), pseudoResLlh);
 
             // debug
@@ -1384,10 +1384,10 @@ public class SRCRPSampler extends AbstractSampler {
         for (int d = 0; d < D; d++) {
             numTables[d] = this.localRestaurants[d].getNumTables();
         }
-        str.append("# tables: avg = ").append(StatisticsUtils.mean(numTables))
-                .append(". min = ").append(StatisticsUtils.min(numTables))
-                .append(". max = ").append(StatisticsUtils.max(numTables))
-                .append(". sum = ").append(StatisticsUtils.sum(numTables));
+        str.append("# tables: avg = ").append(StatUtils.mean(numTables))
+                .append(". min = ").append(StatUtils.min(numTables))
+                .append(". max = ").append(StatUtils.max(numTables))
+                .append(". sum = ").append(StatUtils.sum(numTables));
 
         return str.toString();
     }
@@ -1452,7 +1452,7 @@ public class SRCRPSampler extends AbstractSampler {
             wordsLlh += node.getContent().getLogLikelihood();
 
             if (node.getLevel() != 0) {
-                treeMeans += StatisticsUtils.logNormalProbability(node.getMean(),
+                treeMeans += StatUtils.logNormalProbability(node.getMean(),
                         node.getParent().getMean(), Math.sqrt(sigmas[node.getLevel() - 1]));
 
 //                logln("iter = " + iter 
@@ -1464,7 +1464,7 @@ public class SRCRPSampler extends AbstractSampler {
 //                        node.getParent().getMean(), node.getParent().getVariance()))
 //                        );
             } else {
-                treeMeans += StatisticsUtils.logNormalProbability(node.getMean(),
+                treeMeans += StatUtils.logNormalProbability(node.getMean(),
                         hyperparams.get(MU), Math.sqrt(hyperparams.get(SIGMA)));
             }
 
@@ -1485,7 +1485,7 @@ public class SRCRPSampler extends AbstractSampler {
             restAssignment += localRestaurants[d].getJointProbabilityAssignments(hyperparams.get(ALPHA));
 
             for (SRCRPTable table : this.localRestaurants[d].getTables()) {
-                restRegParam += StatisticsUtils.logNormalProbability(table.getEta(),
+                restRegParam += StatUtils.logNormalProbability(table.getEta(),
                         table.getContent().getMean(), Math.sqrt(sigmas[table.getContent().getLevel()]));
 
                 // debug
@@ -1505,7 +1505,7 @@ public class SRCRPSampler extends AbstractSampler {
                     mean += table.getEta() * turnCounts[d][t].getCount(table.getIndex());
                 }
                 mean /= turnCounts[d][t].getCountSum();
-                resLlh += StatisticsUtils.logNormalProbability(responses[d][t],
+                resLlh += StatUtils.logNormalProbability(responses[d][t],
                         mean, Math.sqrt(hyperparams.get(RHO)));
             }
         }
@@ -1552,10 +1552,10 @@ public class SRCRPSampler extends AbstractSampler {
             wordsLlh += node.getContent().getLogLikelihood(newBetas[node.getLevel()], uniform);
 
             if (node.getLevel() != 0) {
-                treeMeans += StatisticsUtils.logNormalProbability(node.getMean(),
+                treeMeans += StatUtils.logNormalProbability(node.getMean(),
                         node.getParent().getMean(), Math.sqrt(newSigmas[node.getLevel() - 1]));
             } else {
-                treeMeans += StatisticsUtils.logNormalProbability(node.getMean(),
+                treeMeans += StatUtils.logNormalProbability(node.getMean(),
                         tParams.get(MU), Math.sqrt(tParams.get(SIGMA)));
             }
 
@@ -1575,7 +1575,7 @@ public class SRCRPSampler extends AbstractSampler {
             restAssignment += localRestaurants[d].getJointProbabilityAssignments(tParams.get(ALPHA));
 
             for (SRCRPTable table : this.localRestaurants[d].getTables()) {
-                restRegParam += StatisticsUtils.logNormalProbability(table.getEta(),
+                restRegParam += StatUtils.logNormalProbability(table.getEta(),
                         table.getContent().getMean(), Math.sqrt(sigmas[table.getContent().getLevel()]));
             }
 
@@ -1585,7 +1585,7 @@ public class SRCRPSampler extends AbstractSampler {
                     mean += table.getEta() * turnCounts[d][t].getCount(table.getIndex());
                 }
                 mean /= turnCounts[d][t].getCountSum();
-                resLlh += StatisticsUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
+                resLlh += StatUtils.logNormalProbability(responses[d][t], mean, Math.sqrt(tParams.get(RHO)));
             }
         }
 
@@ -2651,7 +2651,7 @@ class MultiscaleStateSpace {
             for (SRCRPTable table : node.getCustomers()) {
                 obs.add(table.getEta());
             }
-            double avg = StatisticsUtils.mean(obs);
+            double avg = StatUtils.mean(obs);
 
             for (int i = 0; i < node.getLevel(); i++) {
                 System.out.print("\t");
@@ -2719,13 +2719,13 @@ class MultiscaleStateSpace {
             for (int i = 0; i < node.getLevel(); i++) {
                 System.out.print("\t");
             }
-            double stdv = StatisticsUtils.standardDeviation(obs);
+            double stdv = StatUtils.standardDeviation(obs);
             System.out.println("["
                     + node.getPathString()
                     + ", " + MiscUtils.formatDouble(node.getMean())
                     //                    + ", " + MiscUtils.formatDouble(node.getVariance())
                     + "]\t"
-                    + "\t" + MiscUtils.formatDouble(StatisticsUtils.mean(obs))
+                    + "\t" + MiscUtils.formatDouble(StatUtils.mean(obs))
                     + "\t" + MiscUtils.formatDouble(stdv * stdv)
                     //                    + "\t" + MiscUtils.listToString(obs)
                     + "\n");

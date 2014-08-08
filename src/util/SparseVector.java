@@ -13,10 +13,14 @@ import java.util.Set;
 public class SparseVector implements Serializable {
 
     private static final long serialVersionUID = 1123581321L;
-    private HashMap<Integer, Double> values;
+    private final HashMap<Integer, Double> values;
 
     public SparseVector() {
         this.values = new HashMap<Integer, Double>();
+    }
+
+    public boolean isEmpty() {
+        return this.values.isEmpty();
     }
 
     public int size() {
@@ -133,6 +137,14 @@ public class SparseVector implements Serializable {
                 continue;
             }
             sum += this.get(idx) * otherVal;
+        }
+        return sum;
+    }
+
+    public double dotProduct(double[] other) {
+        double sum = 0.0;
+        for (int idx : this.getIndices()) {
+            sum += this.get(idx) * other[idx];
         }
         return sum;
     }

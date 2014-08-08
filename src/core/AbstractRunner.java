@@ -12,6 +12,7 @@ import org.apache.commons.cli.Options;
 public class AbstractRunner {
 
     public static final String TopWordFile = "top-words.txt";
+    public static final String TopWordWithDocsFile = "top-words-with-docs.txt";
     public static final String TopicCoherenceFile = "topic-coherence.txt";
     protected static CommandLineParser parser;
     protected static Options options;

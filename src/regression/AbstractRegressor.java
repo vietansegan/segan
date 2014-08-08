@@ -78,6 +78,7 @@ public abstract class AbstractRegressor extends AbstractRunner {
      * @param outputFile The output file
      * @param trueValues List of true values
      * @param predValues List of predicted values
+     * @return 
      */
     public ArrayList<Measurement> outputRegressionResults(
             File outputFile,

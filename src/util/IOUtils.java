@@ -50,10 +50,10 @@ public class IOUtils {
     public static void outputPerplexities(File outputFile, ArrayList<Double> perplexities) {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            writer.write("Average-Perplexity\t" + StatisticsUtils.mean(perplexities) + "\n");
-            writer.write("Min-Perplexity\t" + StatisticsUtils.min(perplexities) + "\n");
-            writer.write("Max-Perplexity\t" + StatisticsUtils.max(perplexities) + "\n");
-            writer.write("Median-Perplexity\t" + StatisticsUtils.median(perplexities) + "\n");
+            writer.write("Average-Perplexity\t" + StatUtils.mean(perplexities) + "\n");
+            writer.write("Min-Perplexity\t" + StatUtils.min(perplexities) + "\n");
+            writer.write("Max-Perplexity\t" + StatUtils.max(perplexities) + "\n");
+            writer.write("Median-Perplexity\t" + StatUtils.median(perplexities) + "\n");
             for (int ii = 0; ii < perplexities.size(); ii++) {
                 writer.write(perplexities.get(ii) + "\n");
             }
@@ -68,10 +68,10 @@ public class IOUtils {
     public static void outputTopicCoherences(File outputFile, ArrayList<Double> topicCoherences) {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            writer.write("Average-Coherence\t" + StatisticsUtils.mean(topicCoherences) + "\n");
-            writer.write("Min-Coherence\t" + StatisticsUtils.min(topicCoherences) + "\n");
-            writer.write("Max-Coherence\t" + StatisticsUtils.max(topicCoherences) + "\n");
-            writer.write("Median-Coherence\t" + StatisticsUtils.median(topicCoherences) + "\n");
+            writer.write("Average-Coherence\t" + StatUtils.mean(topicCoherences) + "\n");
+            writer.write("Min-Coherence\t" + StatUtils.min(topicCoherences) + "\n");
+            writer.write("Max-Coherence\t" + StatUtils.max(topicCoherences) + "\n");
+            writer.write("Median-Coherence\t" + StatUtils.median(topicCoherences) + "\n");
             for (int ii = 0; ii < topicCoherences.size(); ii++) {
                 writer.write(topicCoherences.get(ii) + "\n");
             }
@@ -471,7 +471,8 @@ public class IOUtils {
 
     public static ArrayList<RankingItem<String>> getSortedVocab(double[] distr, ArrayList<String> vocab) {
         if (distr.length != vocab.size()) {
-            throw new RuntimeException("In IOUtils: dimensions mismatched");
+            throw new RuntimeException("In IOUtils: dimensions mismatched. " 
+                    + distr.length + " vs. " + vocab.size());
         }
         ArrayList<RankingItem<String>> sortedVocab = new ArrayList<RankingItem<String>>();
         for (int i = 0; i < distr.length; i++) {
@@ -700,8 +701,8 @@ public class IOUtils {
         BufferedReader reader;
         String line;
         String[] sline;
-        HashMap<String, HashMap<String, ArrayList<Double>>> metaSummary =
-                new HashMap<String, HashMap<String, ArrayList<Double>>>();
+        HashMap<String, HashMap<String, ArrayList<Double>>> metaSummary
+                = new HashMap<String, HashMap<String, ArrayList<Double>>>();
         ArrayList<String> measurementNames = new ArrayList<String>();
         ArrayList<String> modelNames = new ArrayList<String>();
 
@@ -733,8 +734,8 @@ public class IOUtils {
                     double perfValue = Double.parseDouble(sline[i]);
                     String measurementName = measurementNames.get(i - 1);
 
-                    HashMap<String, ArrayList<Double>> measurementTable =
-                            metaSummary.get(measurementName);
+                    HashMap<String, ArrayList<Double>> measurementTable
+                            = metaSummary.get(measurementName);
                     ArrayList<Double> modelPerfList = measurementTable.get(modelName);
                     if (modelPerfList == null) {
                         modelPerfList = new ArrayList<Double>();
@@ -760,7 +761,6 @@ public class IOUtils {
 //                    writer.write("\t" + value);
 //                writer.write("\n");
 //            }
-
             // write header
             for (int i = 0; i < modelNames.size(); i++) {
                 writer.write(modelNames.get(i) + "\t");

@@ -11,7 +11,7 @@ import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import util.CLIUtils;
 import util.IOUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.normalizer.ZNormalizer;
 
 /**
@@ -150,7 +150,7 @@ public class ResponseTextDataset extends TextDataset {
     public void createCrossValidation(String cvFolder, int numFolds,
             double trToDevRatio, int numClasses) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
-        ArrayList<Integer> groupIdList = StatisticsUtils.discretize(responses, numClasses);
+        ArrayList<Integer> groupIdList = StatUtils.discretize(responses, numClasses);
         for (int d = 0; d < this.docIdList.size(); d++) {
             instanceList.add(new Instance<String>(docIdList.get(d)));
         }
@@ -226,11 +226,11 @@ public class ResponseTextDataset extends TextDataset {
     public String toString() {
         StringBuilder str = new StringBuilder();
         str.append("# docs: ").append(docIds.length).append("\n");
-        double max = StatisticsUtils.max(responses);
-        double min = StatisticsUtils.min(responses);
-        double mean = StatisticsUtils.mean(responses);
-        double stdv = StatisticsUtils.standardDeviation(responses);
-        int[] bins = StatisticsUtils.bin(responses, 5);
+        double max = StatUtils.max(responses);
+        double min = StatUtils.min(responses);
+        double mean = StatUtils.mean(responses);
+        double stdv = StatUtils.standardDeviation(responses);
+        int[] bins = StatUtils.bin(responses, 5);
         str.append("range: ").append(min).append(" - ").append(max).append("\n");
         str.append("mean: ").append(mean).append(". stdv: ").append(stdv).append("\n");
         for (int ii = 0; ii < bins.length; ii++) {

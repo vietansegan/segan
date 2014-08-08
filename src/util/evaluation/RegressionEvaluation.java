@@ -1,7 +1,7 @@
 package util.evaluation;
 
 import java.util.ArrayList;
-import util.StatisticsUtils;
+import util.StatUtils;
 
 /**
  *
@@ -24,22 +24,22 @@ public class RegressionEvaluation {
     }
 
     public void computePredictiveRSquared() {
-        this.measurements.add(new Measurement("pR-squared", StatisticsUtils.computePredictedRSquared(trueValues, predValues)));
+        this.measurements.add(new Measurement("pR-squared", StatUtils.computePredictedRSquared(trueValues, predValues)));
     }
 
     public void computeMeanSquareError() {
-        this.measurements.add(new Measurement("MSE", StatisticsUtils.computeMeanSquaredError(trueValues, predValues)));
+        this.measurements.add(new Measurement("MSE", StatUtils.computeMeanSquaredError(trueValues, predValues)));
     }
 
     public void computeMeanAbsoluteError() {
-        this.measurements.add(new Measurement("MAE", StatisticsUtils.computeMeanAbsoluteError(trueValues, predValues)));
+        this.measurements.add(new Measurement("MAE", StatUtils.computeMeanAbsoluteError(trueValues, predValues)));
     }
 
     public void computeCorrelationCoefficient() {
-        this.measurements.add(new Measurement("Correlation-coefficient", StatisticsUtils.computeCorrelationCoefficient(trueValues, predValues)));
+        this.measurements.add(new Measurement("Correlation-coefficient", StatUtils.computeCorrelationCoefficient(trueValues, predValues)));
     }
 
     public void computeRSquared() {
-        this.measurements.add(new Measurement("R-squared", Math.pow(StatisticsUtils.computeCorrelationCoefficient(trueValues, predValues), 2)));
+        this.measurements.add(new Measurement("R-squared", Math.pow(StatUtils.computeCorrelationCoefficient(trueValues, predValues), 2)));
     }
 }

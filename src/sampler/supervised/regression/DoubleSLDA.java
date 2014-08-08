@@ -16,7 +16,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
 import util.evaluation.RegressionEvaluation;
@@ -133,9 +133,9 @@ public class DoubleSLDA extends AbstractSampler {
             logln("--- # tokens:\t" + numTokens);
 
             logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -521,7 +521,7 @@ public class DoubleSLDA extends AbstractSampler {
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
                 double responseMean = docResponseDotProds[d] + etas[k] / (words[d].length);
-                logprobs[k] += StatisticsUtils.logNormalProbability(responses[d],
+                logprobs[k] += StatUtils.logNormalProbability(responses[d],
                         responseMean, Math.sqrt(hyperparams.get(RHO)));
 
                 double dotProd = docLabelDotProds[d] + lambdas[z[d][n]] / words[d].length;
@@ -632,26 +632,26 @@ public class DoubleSLDA extends AbstractSampler {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
 
             // response
-            double mean = StatisticsUtils.dotProduct(etas, empDist);
-            responseLlh += StatisticsUtils.logNormalProbability(
+            double mean = StatUtils.dotProduct(etas, empDist);
+            responseLlh += StatUtils.logNormalProbability(
                     responses[d],
                     mean,
                     Math.sqrt(hyperparams.get(RHO)));
 
             // label
-            double dotProd = StatisticsUtils.dotProduct(lambdas, empDist);
+            double dotProd = StatUtils.dotProduct(lambdas, empDist);
             labelLlh += getLabelLogLikelihood(labels[d], dotProd);
         }
 
         double etaLlh = 0.0;
         double lambdaLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            etaLlh += StatisticsUtils.logNormalProbability(
+            etaLlh += StatUtils.logNormalProbability(
                     etas[k],
                     hyperparams.get(ETA_MEAN),
                     Math.sqrt(hyperparams.get(ETA_VAR)));
 
-            lambdaLlh += StatisticsUtils.logNormalProbability(
+            lambdaLlh += StatUtils.logNormalProbability(
                     lambdas[k],
                     hyperparams.get(LAMBDA_MEAN),
                     Math.sqrt(hyperparams.get(LAMBDA_VAR)));

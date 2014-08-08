@@ -114,7 +114,7 @@ public class DataUtils {
     }
     
     public static void outputVocab(File filepath, ArrayList<String> vocab) throws Exception {
-        outputVocab(filepath, vocab);
+        outputVocab(filepath.getAbsolutePath(), vocab);
     }
 
     public static void outputVocab(String filepath, ArrayList<String> vocab) throws Exception {

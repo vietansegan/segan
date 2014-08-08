@@ -15,7 +15,7 @@ import util.MiscUtils;
 import util.PredictionUtils;
 import util.SamplerUtils;
 import util.SparseVector;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
@@ -583,7 +583,7 @@ public class SLDA extends AbstractSampler {
                 }
                 expDocDPs[l] = Math.exp(expDocDPs[l]);
             }
-            docNorms[d] = StatisticsUtils.sum(expDocDPs);
+            docNorms[d] = StatUtils.sum(expDocDPs);
 
             // sparse vector
             expDocDotProds[d] = new SparseVector();
@@ -1093,7 +1093,7 @@ public class SLDA extends AbstractSampler {
                     }
                     expDocDPs[l] = Math.exp(expDocDPs[l]);
                 }
-                docNorms[d] = StatisticsUtils.sum(expDocDPs);
+                docNorms[d] = StatUtils.sum(expDocDPs);
 
                 // sparse vector
                 expDocDotProds[d] = new SparseVector();

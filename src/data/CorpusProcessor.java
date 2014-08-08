@@ -40,31 +40,31 @@ public class CorpusProcessor {
     private String[] rawTexts;
     private Set<String> excludeFromBigrams; // set of bigrams that should not be considered
     // settings
-    protected int unigramCountCutoff; // minimum count of raw unigrams
-    protected int bigramCountCutoff; // minimum count of raw bigrams
-    protected double bigramScoreCutoff; // minimum bigram score
-    protected int maxVocabSize; // maximum vocab size
+    public int unigramCountCutoff; // minimum count of raw unigrams
+    public int bigramCountCutoff; // minimum count of raw bigrams
+    public double bigramScoreCutoff; // minimum bigram score
+    public int maxVocabSize; // maximum vocab size
     // minimum term frequency (for all items in the vocab, including unigrams and bigrams)
-    protected int vocabTermFreqMinCutoff;
-    protected int vocabTermFreqMaxCutoff; // maximum term frequency
+    public int vocabTermFreqMinCutoff;
+    public int vocabTermFreqMaxCutoff; // maximum term frequency
     // minimum document frequency (for all items in the vocab, including unigrams and bigrams)
-    protected int vocabDocFreqMinCutoff;
-    protected int vocabDocFreqMaxCutoff; // maximum document frequency 
-    protected int docTypeCountCutoff;  // minumum number of types in a document
-    protected int minWordLength = 3; // minimum length of a word type 
-    protected boolean filterStopwords = true; // whether stopwords are filtered
-    protected boolean lemmatization = false; // whether lemmatization should be performed
+    public int vocabDocFreqMinCutoff;
+    public int vocabDocFreqMaxCutoff; // maximum document frequency 
+    public int docTypeCountCutoff;  // minumum number of types in a document
+    public int minWordLength = 3; // minimum length of a word type 
+    public boolean filterStopwords = true; // whether stopwords are filtered
+    public boolean lemmatization = false; // whether lemmatization should be performed
     // tools
     protected Tokenizer tokenizer;
     protected SentenceDetector sentenceDetector;
     private StopwordRemoval stopwordRemoval;
     private Stemmer stemmer;
-    private HashMap<String, Integer> termFreq;
-    private HashMap<String, Integer> docFreq;
-    private HashMap<String, Integer> leftFreq;
-    private HashMap<String, Integer> rightFreq;
-    private HashMap<String, Integer> bigramFreq;
-    private int totalBigram;
+    public HashMap<String, Integer> termFreq;
+    public HashMap<String, Integer> docFreq;
+    protected HashMap<String, Integer> leftFreq;
+    protected HashMap<String, Integer> rightFreq;
+    protected HashMap<String, Integer> bigramFreq;
+    protected int totalBigram;
     // output data after processing
     private ArrayList<String> vocabulary;
     private int[][] numericDocs;
@@ -598,8 +598,8 @@ public class CorpusProcessor {
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm =
-                            Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                    int numericTerm
+                            = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
@@ -619,7 +619,7 @@ public class CorpusProcessor {
         }
     }
 
-    private double scoreBigram(String[] bigramTokens) {
+    protected double scoreBigram(String[] bigramTokens) {
         String left = bigramTokens[0];
         String right = bigramTokens[1];
         if (excludeFromBigrams.contains(left) || excludeFromBigrams.contains(right)) {
@@ -733,11 +733,11 @@ public class CorpusProcessor {
         writer.close();
     }
 
-    private String[] getTokensFromBigram(String bigram) {
+    protected String[] getTokensFromBigram(String bigram) {
         return bigram.split("_");
     }
 
-    private String getBigramString(String left, String right) {
+    protected String getBigramString(String left, String right) {
         return left + "_" + right;
     }
 

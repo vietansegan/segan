@@ -11,7 +11,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import regression.AbstractRegressor;
 import util.IOUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.RankingPerformance;
 
@@ -31,6 +31,9 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static final String TRAIN_PREFIX = "tr_";
     public static final String DEV_PREFIX = "de_";
     public static final String TEST_PREFIX = "te_";
+    public static final String TRAIN_POSFIX = "_tr";
+    public static final String DEV_POSFIX = "_de";
+    public static final String TEST_POSFIX = "_te";
     public static final String RESULT_FOLDER = "result";
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";
@@ -153,6 +156,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         addOption("delta", "delta");
         addOption("lambda", "lambda");
         addOption("sigma", "sigma");
+        addOption("mu", "mu");
         addOption("rho", "rho");
         addOption("epsilon", "epsilon");
         addOption("eta", "eta");
@@ -235,7 +239,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 if (ndcgFile.exists()) {
                     double[] ndcgs = RankingPerformance.inputNDCG(
                             new File(new File(teResultFolder, phase + RANKING_FOLDER),
-                            RankingPerformance.NDCGFile));
+                                    RankingPerformance.NDCGFile));
                     measurements.add(new Measurement("NDCG@1", ndcgs[0]));
                     measurements.add(new Measurement("NDCG@5", ndcgs[4]));
                     measurements.add(new Measurement("NDCG@10", ndcgs[9]));
@@ -320,8 +324,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                         }
                     }
 
-                    double avg = StatisticsUtils.mean(vals);
-                    double std = StatisticsUtils.standardDeviation(vals);
+                    double avg = StatUtils.mean(vals);
+                    double std = StatUtils.standardDeviation(vals);
                     writer.write(model
                             + "\t" + vals.size()
                             + "\t" + avg

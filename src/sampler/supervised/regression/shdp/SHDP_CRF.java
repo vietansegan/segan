@@ -18,7 +18,7 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
 import util.SamplerUtils;
-import util.StatisticsUtils;
+import util.StatUtils;
 import util.evaluation.Measurement;
 import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
@@ -151,9 +151,9 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
             logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
             logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatisticsUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatisticsUtils.standardDeviation(responses)));
-            int[] histogram = StatisticsUtils.bin(responses, 10);
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
             for (int ii = 0; ii < histogram.length; ii++) {
                 logln("--- --- " + ii + "\t" + histogram[ii]);
             }
@@ -632,7 +632,7 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
             if (resObserved) {
                 double mean = docRegressMeans[d]
                         + table.getContent().getRegressionParameter() / words[d].length;
-                double resLlh = StatisticsUtils.logNormalProbability(responses[d],
+                double resLlh = StatUtils.logNormalProbability(responses[d],
                         mean, Math.sqrt(hyperparams.get(RHO)));
                 lp += resLlh;
             }
@@ -929,14 +929,14 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         for (SHDPDish dish : this.globalRestaurant.getTables()) {
             double mean = (preSum + dish.getRegressionParameter()) / tokenCount;
             double var = hyperparams.get(RHO);
-            double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+            double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
             resLlhs.put(dish.getIndex(), resLlh);
         }
 
         // for new dish
         double mean = (preSum + hyperparams.get(MU)) / tokenCount;
         double var = hyperparams.get(SIGMA) / (tokenCount * tokenCount) + hyperparams.get(RHO);
-        double resLlh = StatisticsUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
+        double resLlh = StatUtils.logNormalProbability(responses[d], mean, Math.sqrt(var));
         resLlhs.put(PSEUDO_INDEX, resLlh);
 
         return resLlhs;
@@ -952,10 +952,10 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
             numTables[d] = this.localRestaurants[d].getNumTables();
         }
         str.append(">>> >>> # tables")
-                .append(". avg: ").append(MiscUtils.formatDouble(StatisticsUtils.mean(numTables)))
-                .append(". min: ").append(StatisticsUtils.min(numTables))
-                .append(". max: ").append(StatisticsUtils.max(numTables))
-                .append(". sum: ").append(StatisticsUtils.sum(numTables));
+                .append(". avg: ").append(MiscUtils.formatDouble(StatUtils.mean(numTables)))
+                .append(". min: ").append(StatUtils.min(numTables))
+                .append(". max: ").append(StatUtils.max(numTables))
+                .append(". sum: ").append(StatUtils.sum(numTables));
         str.append("\n");
         return str.toString();
     }
@@ -974,14 +974,14 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
 
         double dishRegLlh = 0.0;
         for (SHDPDish dish : this.globalRestaurant.getTables()) {
-            dishRegLlh += StatisticsUtils.logNormalProbability(dish.getRegressionParameter(),
+            dishRegLlh += StatUtils.logNormalProbability(dish.getRegressionParameter(),
                     hyperparams.get(MU), Math.sqrt(hyperparams.get(SIGMA)));
         }
 
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], 
+            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], 
                     Math.sqrt(hyperparams.get(RHO)));
         }
 
@@ -1009,14 +1009,14 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
 
         double dishRegLlh = 0.0;
         for (SHDPDish dish : this.globalRestaurant.getTables()) {
-            dishRegLlh += StatisticsUtils.logNormalProbability(dish.getRegressionParameter(),
+            dishRegLlh += StatUtils.logNormalProbability(dish.getRegressionParameter(),
                     newParams.get(MU), Math.sqrt(newParams.get(SIGMA)));
         }
 
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatisticsUtils.logNormalProbability(responses[d], regValues[d], 
+            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], 
                     Math.sqrt(newParams.get(RHO)));
         }
 
