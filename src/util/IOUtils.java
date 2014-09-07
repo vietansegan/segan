@@ -15,6 +15,46 @@ import java.util.zip.ZipOutputStream;
  */
 public class IOUtils {
 
+    public static double[][] input2DArray(File inputFile) {
+        double[][] m = null;
+        try {
+            BufferedReader reader = getBufferedReader(inputFile);
+            int nrow = Integer.parseInt(reader.readLine());
+            m = new double[nrow][];
+            for (int ii = 0; ii < nrow; ii++) {
+                String[] sline = reader.readLine().split("\t");
+                int ncol = Integer.parseInt(sline[0]);
+                m[ii] = new double[ncol];
+                for (int jj = 0; jj < ncol; jj++) {
+                    m[ii][jj] = Double.parseDouble(sline[jj + 1]);
+                }
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing from " + inputFile);
+        }
+        return m;
+    }
+
+    public static void output2DArray(File outputFile, double[][] m) {
+        try {
+            BufferedWriter writer = getBufferedWriter(outputFile);
+            writer.write(m.length + "\n");
+            for (double[] row : m) {
+                writer.write(Integer.toString(row.length));
+                for (int jj = 0; jj < row.length; jj++) {
+                    writer.write("\t" + row[jj]);
+                }
+                writer.write("\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + outputFile);
+        }
+    }
+
     public static void outputLibSVM(File outputFile, SparseVector[] features, int[][] labels) {
         System.out.println("Outputing LIBSVM-formatted data to " + outputFile);
         try {
@@ -471,7 +511,7 @@ public class IOUtils {
 
     public static ArrayList<RankingItem<String>> getSortedVocab(double[] distr, ArrayList<String> vocab) {
         if (distr.length != vocab.size()) {
-            throw new RuntimeException("In IOUtils: dimensions mismatched. " 
+            throw new RuntimeException("In IOUtils: dimensions mismatched. "
                     + distr.length + " vs. " + vocab.size());
         }
         ArrayList<RankingItem<String>> sortedVocab = new ArrayList<RankingItem<String>>();

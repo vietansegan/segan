@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import main.GlobalConstants;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
@@ -23,13 +24,15 @@ import util.RankingItem;
  */
 public abstract class AbstractSampler implements Serializable {
 
-    private static final long serialVersionUID = 1123581321L;
+    private static final long serialVersionUID = GlobalConstants.SerialVersionUID;
     public static final int MAX_NUM_PARALLEL_THREADS = 5;
     public static final String IterPredictionFolder = "iter-predictions";
     public static final String TopWordFile = AbstractExperiment.TopWordFile;
     public static final String TopicCoherenceFile = AbstractExperiment.TopicCoherenceFile;
-    public static final String IterPerplexityFolder = "iter-perplexities";
-    public static final String PerplexityFile = "perplexity.txt";
+//    public static final String IterPerplexityFolder = "iter-perplexities";
+//    public static final String PerplexityFile = "perplexity.txt";
+    public static final String IterPerplexityFolder = "iter-perps";
+    public static final String PerplexityFile = "perp.txt";
     public static final String AveragingPerplexityFile = "avg-perplexity.txt";
     public static final String ModelFile = "model.zip";
     public static final String ReportFolder = "report/";
@@ -53,16 +56,16 @@ public abstract class AbstractSampler implements Serializable {
 
         GIBBS, MH
     }
-
     protected static final long RAND_SEED = 1123581321;
     protected static final double MAX_LOG = Math.log(Double.MAX_VALUE);
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
     protected static Random rand = new Random(RAND_SEED);
     protected static long startTime;
-    protected int BURN_IN = 5; // burn-in
-    protected int MAX_ITER = 100; // maximum number of iterations
-    protected int LAG = 1; // for outputing log-likelihood
-    protected int REP_INTERVAL = 10; // report interval
+    // sampling configurations
+    protected int BURN_IN = 5;          // burn-in
+    protected int MAX_ITER = 100;       // maximum number of iterations
+    protected int LAG = 1;              // for outputing log-likelihood
+    protected int REP_INTERVAL = 10;    // report interval
     // test configuration
     protected int testBurnIn = 50;
     protected int testMaxIter = 100;
@@ -409,7 +412,7 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     /**
-     * Slice sampling for hyper-parameter optimization
+     * Slice sampling for hyper-parameter optimization.
      */
     protected void sliceSample() {
         int dim = hyperparams.size();
@@ -480,6 +483,9 @@ public abstract class AbstractSampler implements Serializable {
         }
     }
 
+    /**
+     * Run multiple threads in parallel.
+     */
     public static void runThreads(ArrayList<Thread> threads) throws Exception {
         int c = 0;
         for (int ii = 0; ii < threads.size() / MAX_NUM_PARALLEL_THREADS; ii++) {

@@ -12,11 +12,11 @@ import util.MiscUtils;
 public class RLDA extends LDA {
 
     public static final int INVALID = -1;
-    private boolean[][] valid;
-    private int index;
-    private int level;
-    private RLDA parent;
-    private ArrayList<RLDA> children;
+    private final boolean[][] valid;
+    private final int index;
+    private final int level;
+    private final RLDA parent;
+    private final ArrayList<RLDA> children;
 
     public RLDA(int index, int level, boolean[][] v, RLDA parent) {
         this.index = index;
@@ -60,13 +60,14 @@ public class RLDA extends LDA {
     public void addChild(RLDA child) {
         this.children.add(child);
     }
-    
+
     public int getNumTokens() {
         return this.numTokens;
     }
 
     /**
      * Return the unique path string for each node in the tree
+     * @return Path of this node
      */
     public String getPathString() {
         if (parent == null) {

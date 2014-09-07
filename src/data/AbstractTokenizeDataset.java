@@ -44,7 +44,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         this.formatFilename = name; // by default
         try {
             // initiate tokenizer
-            InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
+            InputStream tokenizeIn = new FileInputStream(GlobalConstants.TokenizerFilePath);
             TokenizerModel tokenizeModel = new TokenizerModel(tokenizeIn);
             this.tokenizer = new TokenizerME(tokenizeModel);
         } catch (Exception e) {
@@ -64,7 +64,7 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
 
         try {
             // initiate tokenizer
-            InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
+            InputStream tokenizeIn = new FileInputStream(GlobalConstants.TokenizerFilePath);
             TokenizerModel tokenizeModel = new TokenizerModel(tokenizeIn);
             this.tokenizer = new TokenizerME(tokenizeModel);
         } catch (Exception e) {

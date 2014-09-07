@@ -13,10 +13,42 @@ import java.util.Set;
 public class SparseVector implements Serializable {
 
     private static final long serialVersionUID = 1123581321L;
-    private final HashMap<Integer, Double> values;
+    private HashMap<Integer, Double> values;
+    private int dim;
 
     public SparseVector() {
         this.values = new HashMap<Integer, Double>();
+    }
+
+    public SparseVector(int dim) {
+        this.values = new HashMap<Integer, Double>();
+        this.dim = dim;
+    }
+
+    public void setDimension(int dim) {
+        this.dim = dim;
+    }
+
+    public int getDimension() {
+        return this.dim;
+    }
+
+    public void scale(double scalar) {
+        for (int kk : getIndices()) {
+            values.put(kk, get(kk) * scalar);
+        }
+    }
+
+    public void reset() {
+        this.values = new HashMap<Integer, Double>();
+    }
+
+    public double[] dense() {
+        double[] vec = new double[dim];
+        for (int idx : getIndices()) {
+            vec[idx] = get(idx);
+        }
+        return vec;
     }
 
     public boolean isEmpty() {
@@ -47,8 +79,11 @@ public class SparseVector implements Serializable {
         this.values.remove(index);
     }
 
-    public Double get(int index) {
-        return this.values.get(index);
+    public double get(int index) {
+        if (containsIndex(index)) {
+            return this.values.get(index);
+        }
+        return 0.0;
     }
 
     public void set(int index, Double value) {
@@ -150,7 +185,7 @@ public class SparseVector implements Serializable {
     }
 
     public double cosineSimilarity(SparseVector other) {
-        if (this.size() == 0 || other.size() == 0) {
+        if (this.isEmpty() || other.isEmpty()) {
             return 0.0;
         }
         double thisL2Norm = this.getL2Norm();

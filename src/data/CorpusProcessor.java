@@ -163,12 +163,12 @@ public class CorpusProcessor {
             }
 
             // initiate tokenizer
-            InputStream tokenizeIn = new FileInputStream(GlobalConstants.tokenizerFilePath);
+            InputStream tokenizeIn = new FileInputStream(GlobalConstants.TokenizerFilePath);
             TokenizerModel tokenizeModel = new TokenizerModel(tokenizeIn);
             this.tokenizer = new TokenizerME(tokenizeModel);
             tokenizeIn.close();
 
-            InputStream tokenizeSent = new FileInputStream(GlobalConstants.sentDetectorFilePath);
+            InputStream tokenizeSent = new FileInputStream(GlobalConstants.SentDetectorFilePath);
             SentenceModel sentenceModel = new SentenceModel(tokenizeSent);
             this.sentenceDetector = new SentenceDetectorME(sentenceModel);
             tokenizeSent.close();

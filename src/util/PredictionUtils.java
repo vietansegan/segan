@@ -50,6 +50,7 @@ public class PredictionUtils {
      * Input predictions.
      *
      * @param inputFile The input file
+     * @return 
      */
     public static double[] inputPredictions(File inputFile) {
         double[] predResponses = null;
@@ -138,6 +139,7 @@ public class PredictionUtils {
                     + "\t" + trueLabels.length
                     + "\t" + predValues.length);
         }
+        System.out.println("Outputing classification results to " + outputFile);
 
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
@@ -173,6 +175,7 @@ public class PredictionUtils {
                     + "\t" + trueLabels.length
                     + "\t" + predValues.length);
         }
+        System.out.println("Outputing classification predictions to " + outputFile);
 
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
