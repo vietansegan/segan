@@ -780,7 +780,7 @@ public class SLDA extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/topo.jar' " + SLDA.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + SLDA.class.getName() + " -help";
     }
 
     private static void addOpitions() throws Exception {

@@ -600,23 +600,22 @@ public class LDA extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/topo.jar' " + LDA.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + LDA.class.getName() + " -help";
     }
 
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
 
-        // data
+        // data input
         addOption("dataset", "Dataset");
         addOption("word-voc-file", "Word vocabulary file");
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
-        addOption("output-folder", "Output folder");
+        addOption("selected-docs-file", "(Optional) Indices of selected documents");
 
-//        addOption("data-folder", "Folder that stores the processed data");
-//        addOption("format-folder", "Folder that stores formatted data");
-//        addOption("format-file", "Formatted file name");
+        // data output
+        addOption("output-folder", "Output folder");
 
         // sampling
         addSamplingOptions();
@@ -626,7 +625,7 @@ public class LDA extends AbstractSampler {
         addOption("beta", "Beta");
         addOption("K", "Number of topics");
         addOption("num-top-words", "Number of top words per topic");
-        
+
         // configurations
         addOption("init", "Initialization");
 
@@ -691,7 +690,23 @@ public class LDA extends AbstractSampler {
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
 
-        sampler.train(data.getWords(), null);
+        ArrayList<Integer> selectedDocIndices = null;
+        if (cmd.hasOption("selected-docs-file")) {
+            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
+            selectedDocIndices = new ArrayList<>();
+            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int docIdx = Integer.parseInt(line);
+                if (docIdx >= data.getDocIds().length) {
+                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
+                }
+                selectedDocIndices.add(Integer.parseInt(line));
+            }
+            reader.close();
+        }
+
+        sampler.train(data.getWords(), selectedDocIndices);
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
@@ -714,7 +729,8 @@ public class LDA extends AbstractSampler {
             // date and time
             DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
             Date dateobj = new Date();
-            System.out.println("Elapsed time: " + ((System.currentTimeMillis() - sTime) / 1000) + "s");
+            long eTime = (System.currentTimeMillis() - sTime) / 1000;
+            System.out.println("Elapsed time: " + eTime + "s");
             System.out.println("End time: " + df.format(dateobj));
         } catch (Exception e) {
             e.printStackTrace();
