@@ -787,11 +787,14 @@ public class SLDA extends AbstractSampler {
         parser = new BasicParser();
         options = new Options();
 
-        // data
+        // data input
         addOption("dataset", "Dataset");
         addOption("word-voc-file", "Word vocabulary file");
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
+        addOption("selected-docs-file", "(Optional) Indices of selected documents");
+
+        // data output
         addOption("output-folder", "Output folder");
 
         // sampling
@@ -880,7 +883,23 @@ public class SLDA extends AbstractSampler {
             docResponses = zNorm.normalize(docResponses);
         }
 
-        sampler.train(data.getWords(), null, docResponses);
+        ArrayList<Integer> selectedDocIndices = null;
+        if (cmd.hasOption("selected-docs-file")) {
+            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
+            selectedDocIndices = new ArrayList<>();
+            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int docIdx = Integer.parseInt(line);
+                if (docIdx >= data.getDocIds().length) {
+                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
+                }
+                selectedDocIndices.add(Integer.parseInt(line));
+            }
+            reader.close();
+        }
+
+        sampler.train(data.getWords(), selectedDocIndices, docResponses);
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
@@ -903,7 +922,8 @@ public class SLDA extends AbstractSampler {
             // date and time
             DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
             Date dateobj = new Date();
-            System.out.println("Elapsed time: " + ((System.currentTimeMillis() - sTime) / 1000) + "s");
+            long eTime = (System.currentTimeMillis() - sTime) / 1000;
+            System.out.println("Elapsed time: " + eTime + "s");
             System.out.println("End time: " + df.format(dateobj));
         } catch (Exception e) {
             e.printStackTrace();
