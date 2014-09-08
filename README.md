@@ -74,7 +74,7 @@ java -cp 'dist/segan.jar:lib/*' data.ResponseTextDataset --dataset amazon-data -
 ```
 
 ```
-java -cp "dist/segan.jar:lib/*" sampler.unsupervised.LDA --dataset amazon-data --word-voc-file demo/amazon-data/format-unsupervised/amazon-data.wvoc --word-file demo/amazon-data/format-unsupervised/amazon-data.dat --info-file demo/amazon-data/format-unsupervised/amazon-data.docinfo --output-folder demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --report 5 --K 25 --alpha 0.1 --beta 0.1 --init random -v -d
+java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/supervised-models --burnIn 250 --maxIter 500 --sampleLag 25 --report 5 --K 50 --alpha 0.1 --beta 0.1 --rho 1.0 --sigma 1.0 --mu 0.0 --init random -v -d -z
 ```
 
 Notes:
