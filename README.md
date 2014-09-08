@@ -6,12 +6,11 @@
 Take a look at the `build.xml` for more options.
 
 # SLDA
-This provides an implementation of Supervised Latent Dirichlet allocation (Blei and McAuliffe, NIPS'07). SLDA takes as inputs a set of documents, each of which is associated with a continuous response variable.
+This provides an implementation of Supervised Latent Dirichlet allocation (Blei and McAuliffe, NIPS'07). SLDA's input is a set of documents, each of which is associated with a continuous response variable.
 
-To run SLDA:
+### Running SLDA
 ```
 java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SLDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization>
-
 ```
 
 - `<dataset-name>`: Name of the dataset
@@ -48,7 +47,37 @@ In `<doc-word-file>`, each line represents a document. The first number (e.g., `
 - `-v`: Verbose
 - `-d`: Debug
 
-Example of running command line:
+### Processing data for SLDA
+You can either preprocess your raw data into the format described above to run SLDA or use the existing tool provided in `segan`. To process data using `segan`:
 ```
-java -Xmx10000M -Xms10000M -cp "dist/segan.jar:lib/*" sampler.unsupervised.LDA --dataset amazon-data --word-voc-file demo/amazon-data/format-unsupervised/amazon-data.wvoc --word-file demo/amazon-data/format-unsupervised/amazon-data.dat --info-file demo/amazon-data/format-unsupervised/amazon-data.docinfo --output-folder demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --report 5 --K 25 --alpha 0.1 --beta 0.1 --init random -v -d
+java -cp 'dist/segan.jar:dist/lib/*' data.ResponseTextDataset --dataset <dataset-name> --text-data <input-text> --data-folder <data-folder> --format-folder <format-folder> --run-mode process --response-file <response-file>
 ```
+- `<dataset-name>`:	The name of the dataset
+- `<input-text>`:	Raw input documents. This can be either (1) a file in which each line is a document, or (2) a folder in which each file is a document. If `<input-text>` is a file, each line has to have the format `<doc_id>\t<doc_content>\n`. If `<input-text>` is a folder, each file stores the document text and the file name will be treated as the `doc_id`.
+- `<data-folder>`:	The folder where the processed data will be stored
+- `<format-folder>`:	The subfolder that the processed data will be stored. More specifically, after running this, the processed data will be stored in `<output-folder>/<dataset-name>/<format-folder>`.
+- `<format-file>`(optional): By default, all processed data files will be named `<dataset-name>.<extension>`, e.g., `<dataset-name>.dat`, `<dataset-name>.wvoc` etc. If you want to rename these formatted files to `<format-file>.dat`, `<format-file>.wvoc` etc, use this option.
+- `<response-file>`: File contains the documents' responses
+Other important input arguments:
+- `--u`: Minimum unigram frequency (default: 1)
+- `--b`: Minimum bigram frequency (default: 1)
+- `--bs`: Minimum bigram chi-squared score (default: 5)
+- `--V`: Maximum vocabulary size
+- `-s`: Whether stop words are filtered
+- `-l`: Whether stemming/lemmatization is performed
+- `-v`: Verbose
+- `-d`: Debug 
+
+Example of running command lines:
+```
+java -cp 'dist/segan.jar:lib/*' data.ResponseTextDataset --dataset amazon-data --text-data demo/amazon-data/raw/text.txt --response-file demo/amazon-data/raw/response.txt --data-folder demo --format-folder format-supervised --run-mode process -v -d --u 5 -s -l --bs 10 --b 5 --V 10000
+```
+
+```
+java -cp "dist/segan.jar:lib/*" sampler.unsupervised.LDA --dataset amazon-data --word-voc-file demo/amazon-data/format-unsupervised/amazon-data.wvoc --word-file demo/amazon-data/format-unsupervised/amazon-data.dat --info-file demo/amazon-data/format-unsupervised/amazon-data.docinfo --output-folder demo/amazon-data/20140512format-models --burnIn 25 --maxIter 50 --sampleLag 5 --report 5 --K 25 --alpha 0.1 --beta 0.1 --init random -v -d
+```
+
+Notes:
+- To avoid the Java Heap Space Errors, increase `-Xmx` and `-Xms`. For example, `-Xmx10000M -Xms10000M`.
+- For other input arguments, use `-help`. For example, `java -cp dist/segan.jar data.ResponseTextData -help`.
+- For each document in the input folder, the filename is used as its ID. If the filename has `txt` as the file extension, `txt` will be discarded. For example, a document stored in file `doc-1.txt` will have `doc-1` as its ID, whereas a document stored in file `doc-2.dat` will have `doc-2.dat` as its ID.
