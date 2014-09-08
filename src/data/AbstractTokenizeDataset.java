@@ -77,12 +77,6 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         this.corpProc = cp;
     }
 
-    protected void outputDataPreprocessingConfigurations() throws Exception {
-        BufferedWriter writer = IOUtils.getBufferedWriter(folder);
-        writer.write(this.corpProc.getSettings() + "\n");
-        writer.close();
-    }
-
     public void setFormatFilename(String fn) {
         this.formatFilename = fn;
     }

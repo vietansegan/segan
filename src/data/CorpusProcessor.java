@@ -196,12 +196,16 @@ public class CorpusProcessor {
 
     public String getSettings() {
         StringBuilder str = new StringBuilder();
-        str.append("Raw unigram count cut-off:\t").append(unigramCountCutoff).append("\n");
-        str.append("Raw bigram count cut-off:\t").append(bigramCountCutoff).append("\n");
-        str.append("Bigram score cut-off:\t").append(bigramScoreCutoff).append("\n");
-        str.append("Vocab term frequency cut-off:\t").append(vocabTermFreqMinCutoff).append("\n");
-        str.append("Vocab doc frequency cut-off:\t").append(vocabDocFreqMinCutoff).append("\n");
+        str.append("Raw unigram min count:\t").append(unigramCountCutoff).append("\n");
+        str.append("Raw bigram min count:\t").append(bigramCountCutoff).append("\n");
+        str.append("Bigram min score:\t").append(bigramScoreCutoff).append("\n");
+        str.append("Vocab term min freq:\t").append(vocabTermFreqMinCutoff).append("\n");
+        str.append("Vocab term max freq:\t").append(vocabTermFreqMaxCutoff).append("\n");
+        str.append("Vocab doc min freq:\t").append(vocabDocFreqMinCutoff).append("\n");
+        str.append("Vocab doc max freq:\t").append(vocabDocFreqMaxCutoff).append("\n");
+        str.append("Doc min word type:\t").append(docTypeCountCutoff).append("\n");
         str.append("Max vocab size:\t").append(maxVocabSize).append("\n");
+        str.append("Word min length:\t").append(minWordLength).append("\n");
         str.append("Filter stopwords:\t").append(filterStopwords).append("\n");
         str.append("Lemmatization:\t").append(lemmatization);
         return str.toString();
@@ -598,8 +602,7 @@ public class CorpusProcessor {
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
                 for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm
-                            = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                    int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }

@@ -94,6 +94,9 @@ public class ResponseTextDataset extends TextDataset {
             this.responses[index] = docResponse;
         }
         reader.close();
+        if (verbose) {
+            logln("--- --- Loaded " + this.responses.length + " responses");
+        }
     }
 
     @Override
@@ -300,14 +303,18 @@ public class ResponseTextDataset extends TextDataset {
             debug = cmd.hasOption("d");
 
             String runMode = cmd.getOptionValue("run-mode");
-            if (runMode.equals("process")) {
-                process();
-            } else if (runMode.equals("load")) {
-                load();
-            } else if (runMode.equals("cross-validation")) {
-                crossValidate();
-            } else {
-                throw new RuntimeException("Run mode " + runMode + " is not supported");
+            switch (runMode) {
+                case "process":
+                    process();
+                    break;
+                case "load":
+                    load();
+                    break;
+                case "cross-validation":
+                    crossValidate();
+                    break;
+                default:
+                    throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
 
         } catch (Exception e) {
@@ -379,6 +386,7 @@ public class ResponseTextDataset extends TextDataset {
             throw new RuntimeException(textInputData + " is neither a file nor a folder");
         }
         dataset.loadResponses(responseFile); // load response data
+        dataset.setHasSentences(cmd.hasOption("sent"));
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
     }
 

@@ -49,7 +49,8 @@ public class ZNormalizer extends AbstractNormalizer {
     }
 
     public static void main(String[] args) {
-        double[] data = {2.02, 2.33, 2.99, 6.85, 9.20, 8.80, 7.50, 6.00, 5.85, 3.85, 4.85, 3.85, 2.22, 1.45, 1.34};
+        double[] data = {2.02, 2.33, 2.99, 6.85, 9.20, 8.80, 7.50, 6.00, 5.85, 
+            3.85, 4.85, 3.85, 2.22, 1.45, 1.34};
         ZNormalizer n = new ZNormalizer(data);
         System.out.println("mean = " + n.mean);
         System.out.println("stdev = " + n.stdev);

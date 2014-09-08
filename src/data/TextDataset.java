@@ -37,6 +37,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected MimnoTopicCoherence topicCoherence;
     protected double[] tfidfs;
     protected double[] idfs;
+    protected boolean sent = false; // output/input sentences
 
     static {
         verbose = true;
@@ -66,6 +67,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         this.docIdList = new ArrayList<String>();
         this.textList = new ArrayList<String>();
         this.processedDocIndices = new ArrayList<Integer>();
+    }
+
+    public void setHasSentences(boolean sent) {
+        this.sent = sent;
     }
 
     /**
@@ -276,7 +281,9 @@ public class TextDataset extends AbstractTokenizeDataset {
         outputWordVocab(outputFolder);
         outputTextData(outputFolder);
         outputDocumentInfo(outputFolder);
-        outputSentTextData(outputFolder);
+        if (sent) {
+            outputSentTextData(outputFolder);
+        }
     }
 
     /**
@@ -420,15 +427,44 @@ public class TextDataset extends AbstractTokenizeDataset {
         if (verbose) {
             logln("--- Loading formatted data from " + fFolder);
         }
+        loadFormattedData(new File(fFolder, formatFilename + wordVocabExt),
+                new File(fFolder, formatFilename + numDocDataExt),
+                new File(fFolder, formatFilename + docInfoExt),
+                new File(fFolder, formatFilename + numSentDataExt));
+    }
+
+    /**
+     * Load formatted data.
+     *
+     * @param wordVocabFile File contains the word vocabulary
+     * @param docWordFile File contains document tokens
+     * @param docInfoFile File contains document info
+     * @param sentFile (Optional) File contains sentences
+     */
+    public void loadFormattedData(File wordVocabFile,
+            File docWordFile,
+            File docInfoFile,
+            File sentFile) {
+        if (verbose) {
+            logln("--- Loading formatted data ...");
+            logln("--- --- Word file: " + docWordFile);
+            logln("--- --- Info file: " + docInfoFile);
+            logln("--- --- Word vocab file: " + wordVocabFile);
+            if (sentFile != null && sentFile.exists()) {
+                logln("--- --- Sentence file: " + sentFile);
+            }
+        }
+
         try {
-            inputWordVocab(new File(fFolder, formatFilename + wordVocabExt));
-            inputTextData(new File(fFolder, formatFilename + numDocDataExt));
-            inputDocumentInfo(new File(fFolder, formatFilename + docInfoExt));
-            inputSentenceTextData(new File(fFolder, formatFilename + numSentDataExt));
+            inputWordVocab(wordVocabFile);
+            inputTextData(docWordFile);
+            inputDocumentInfo(docInfoFile);
+            if (sentFile != null && sentFile.exists()) {
+                inputSentenceTextData(sentFile);
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while loading formatted data "
-                    + "from " + fFolder);
+            throw new RuntimeException("Exception while loading formatted data");
         }
     }
 
@@ -532,6 +568,11 @@ public class TextDataset extends AbstractTokenizeDataset {
         return gibbsString;
     }
 
+    /**
+     * Load sentence-level formatted data.
+     *
+     * @param file Sentence file
+     */
     protected void inputSentenceTextData(File file) throws Exception {
         if (verbose) {
             logln("--- Reading sentence text data from " + file);
@@ -590,10 +631,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
 
         File rawSentFile = new File(file + ".raw");
-        if (verbose) {
-            logln("--- Reading sentence raw text data from " + rawSentFile);
-        }
         if (rawSentFile.exists()) {
+            if (verbose) {
+                logln("--- Reading sentence raw text data from " + rawSentFile);
+            }
             try {
                 sentRawWords = new String[sentWords.length][];
                 int count = 0;
@@ -698,11 +739,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         }
 
         String cvName = "";
-        CrossValidation<String, Instance<String>> cv
-                = new CrossValidation<String, Instance<String>>(
-                        cvFolder,
-                        cvName,
-                        instanceList);
+        CrossValidation<String, Instance<String>> cv = new CrossValidation<String, Instance<String>>(
+                cvFolder,
+                cvName,
+                instanceList);
 
         cv.stratify(groupIdList, numFolds, trToDevRatio);
         cv.outputFolds();
@@ -784,14 +824,18 @@ public class TextDataset extends AbstractTokenizeDataset {
             debug = cmd.hasOption("d");
 
             String runMode = CLIUtils.getStringArgument(cmd, "run-mode", "process");
-            if (runMode.equals("process")) {
-                process();
-            } else if (runMode.equals("load")) {
-                load();
-            } else if (runMode.equals("cross-validation")) {
-                crossValidate();
-            } else {
-                throw new RuntimeException("Run mode " + runMode + " is not supported");
+            switch (runMode) {
+                case "process":
+                    process();
+                    break;
+                case "load":
+                    load();
+                    break;
+                case "cross-validation":
+                    crossValidate();
+                    break;
+                default:
+                    throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
 
         } catch (Exception e) {
@@ -828,9 +872,9 @@ public class TextDataset extends AbstractTokenizeDataset {
         addOption("min-df", "Document frequency minimum cutoff");
         addOption("max-df", "Document frequency maximum cutoff");
         addOption("min-doc-length", "Document minimum length");
+        options.addOption("sent", false, "Whether sentences are outputed");
         options.addOption("s", false, "Whether stopwords are filtered");
         options.addOption("l", false, "Whether lemmatization is performed");
-        options.addOption("file", false, "Whether the text input data is stored in a file or a folder");
     }
 
     public static CorpusProcessor createCorpusProcessor() {
@@ -865,6 +909,10 @@ public class TextDataset extends AbstractTokenizeDataset {
         if (cmd.hasOption("word-voc-file")) {
             String wordVocFile = cmd.getOptionValue("word-voc-file");
             corpProc.loadVocab(wordVocFile);
+        }
+        if (verbose) {
+            logln("Processing corpus with the following settings:\n"
+                    + corpProc.getSettings());
         }
         return corpProc;
     }
@@ -917,11 +965,15 @@ public class TextDataset extends AbstractTokenizeDataset {
         dataset.setFormatFilename(formatFile);
 
         // load text data
-        if (cmd.hasOption("file")) {
+        File textPath = new File(textInputData);
+        if (textPath.isFile()) {
             dataset.loadTextDataFromFile(textInputData);
-        } else {
+        } else if (textPath.isDirectory()) {
             dataset.loadTextDataFromFolder(textInputData);
+        } else {
+            throw new RuntimeException(textInputData + " is neither a file nor a folder");
         }
+        dataset.setHasSentences(cmd.hasOption("sent"));
         dataset.format(new File(dataset.getDatasetFolderPath(), formatFolder));
     }
 }
