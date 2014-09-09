@@ -668,7 +668,6 @@ public class HDP extends AbstractSampler {
             String[] topWords = getTopWords(distrs, numTopWords);
             writer.write("[" + k
                     + ", " + topicWords.getComponent(k).getCountSum()
-                    + ", " + globalWeights.get(k)
                     + "]");
             for (String topWord : topWords) {
                 writer.write("\t" + topWord);

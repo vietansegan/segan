@@ -1,22 +1,13 @@
 package sampler.labeled.hierarchy;
 
 import cc.mallet.types.Dirichlet;
+import cc.mallet.util.Randoms;
 import core.AbstractSampler;
-import data.LabelTextDataset;
-import gnu.trove.TIntDoubleHashMap;
-import gnu.trove.TIntIntHashMap;
-import graph.DirectedGraph;
-import graph.EdmondsMST;
-import graph.GraphEdge;
-import graph.GraphNode;
-import graph.PrimMST;
-import graph.UndirectedGraph;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,19 +15,21 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.Options;
 import sampler.labeled.LabeledLDA;
+import sampling.likelihood.CascadeDirMult.PathAssumption;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
-import util.CLIUtils;
+import taxonomy.AbstractTaxonomyBuilder;
 import util.IOUtils;
 import util.MiscUtils;
+import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
+import util.SparseVector;
 import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
+
 
 /**
  *
@@ -44,59 +37,81 @@ import util.evaluation.MimnoTopicCoherence;
  */
 public class L2H extends AbstractSampler {
 
-    public static final int STAY = 0;
-    public static final int PASS = 1;
-
-    public static enum SubtreeType {
-
-        PATH, PATH_INSIDE, OUTSIDE_INSIDE
-    }
-
-    public static enum PathAssumption {
-
-        MINIMAL, MAXIMAL
-    }
-    public static final int ALPHA = 0;
-    public static final int BETA = 1;
-    public static final int GAMMA = 2;
-    public static final int MEAN = 3;
-    public static final int SCALE = 4;
+    public static Randoms randoms = new Randoms(1);
+    public static final int INSIDE = 0;
+    public static final int OUTSIDE = 1;
+    // hyperparameter indices
+    public static final int ALPHA = 0; // concentration parameter
+    public static final int BETA = 1; // concentration parameter
+    public static final int A_0 = 2;
+    public static final int B_0 = 3;
+    // inputs
     protected int[][] words; // [D] x [N_d]
     protected int[][] labels; // [D] x [T_d] 
-    protected int L;
-    protected int V;
-    protected int D;
-    protected int minPairFreq;
-    private ArrayList<String> labelVocab;
-    private PathAssumption pathAssumption;
-    private SubtreeType subtreeType;
-    // tree-based hierarchy
+    protected int V;    // vocab size
+    protected int L;    // number of unique labels
+    protected int D;    // number of documents
+    // graph
+    private SparseVector[] inWeights; // the weights of in-edges for each nodes
+    // tree
+    private AbstractTaxonomyBuilder treeBuilder;
     private Node root;
-    private ArrayList<Node> leaves;
-    private Node[] nodeList;
-    // label graph
-    private GraphNode<Integer> graphRoot;
+    private Node[] nodes;
+    // latent variables
+    private int[][] x;
     private int[][] z;
+    private DirMult[] docSwitches;
+    private SparseCount[] docLabelCounts;
+    private Set<Integer>[] docMaskes;
+    // configurations
+    private PathAssumption pathAssumption;
+    private boolean treeUpdated;
+    private boolean sampleExact = false;
+    // internal
+    private HashMap<Integer, Set<Integer>> labelDocIndices;
+    // information
+    private ArrayList<String> labelVocab;
     private int numTokens;
     private int numTokensChange;
+    private int numAccepts; // number of sampled nodes accepted
+    private int[] labelFreqs;
+    private double[] switchPrior;
 
     public void setLabelVocab(ArrayList<String> labelVocab) {
         this.labelVocab = labelVocab;
     }
 
+    public void configure(L2H sampler) {
+        this.configure(sampler.folder,
+                sampler.V,
+                sampler.hyperparams.get(ALPHA),
+                sampler.hyperparams.get(BETA),
+                sampler.hyperparams.get(A_0),
+                sampler.hyperparams.get(B_0),
+                sampler.treeBuilder,
+                sampler.treeUpdated,
+                sampler.sampleExact,
+                sampler.initState,
+                sampler.pathAssumption,
+                sampler.paramOptimized,
+                sampler.BURN_IN,
+                sampler.MAX_ITER,
+                sampler.LAG,
+                sampler.REP_INTERVAL);
+        this.setWordVocab(sampler.wordVocab);
+        this.setLabelVocab(sampler.labelVocab);
+    }
+
     public void configure(String folder,
-            int[][] words, int[][] labels,
             int V,
-            int L,
-            int minPairFreq,
             double alpha,
             double beta,
-            double gamma,
-            double mean,
-            double scale,
+            double a0, double b0,
+            AbstractTaxonomyBuilder treeBuilder,
+            boolean treeUp,
+            boolean sampleExact,
             InitialState initState,
             PathAssumption pathAssumption,
-            SubtreeType subtreeType,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInterval) {
         if (verbose) {
@@ -104,23 +119,28 @@ public class L2H extends AbstractSampler {
         }
 
         this.folder = folder;
-        this.words = words;
-        this.labels = labels;
 
-        this.L = L;
+        this.treeBuilder = treeBuilder;
+        this.labelVocab = treeBuilder.getLabelVocab();
+
+        this.L = labelVocab.size();
         this.V = V;
-        this.D = this.words.length;
-        this.minPairFreq = minPairFreq;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
         this.hyperparams.add(beta);
-        this.hyperparams.add(gamma);
-        this.hyperparams.add(mean);
-        this.hyperparams.add(scale);
+        this.hyperparams.add(a0);
+        this.hyperparams.add(b0);
+
+        this.switchPrior = new double[2];
+        this.switchPrior[INSIDE] = a0;
+        this.switchPrior[OUTSIDE] = b0;
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
+
+        this.treeUpdated = treeUp;
+        this.sampleExact = sampleExact;
 
         this.BURN_IN = burnin;
         this.MAX_ITER = maxiter;
@@ -129,63 +149,105 @@ public class L2H extends AbstractSampler {
 
         this.initState = initState;
         this.pathAssumption = pathAssumption;
-        this.subtreeType = subtreeType;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.setName();
-
-        this.numTokens = 0;
-        for (int d = 0; d < D; d++) {
-            this.numTokens += words[d].length;
-        }
-
-        int[] labelFreqs = this.getLabelFrequencies();
-        for (int ll = 0; ll < L; ll++) {
-            labelVocab.set(ll, labelVocab.get(ll) + " (" + labelFreqs[ll] + ")");
-        }
-
-        if (!debug) {
-            System.err.close();
-        }
 
         if (verbose) {
             logln("--- folder\t" + folder);
             logln("--- label vocab:\t" + L);
             logln("--- word vocab:\t" + V);
-            logln("--- # documents:\t" + D);
-            logln("--- # tokens:\t" + numTokens);
+
             logln("--- alpha:\t" + MiscUtils.formatDouble(alpha));
             logln("--- beta:\t" + MiscUtils.formatDouble(beta));
-            logln("--- gamma:\t" + MiscUtils.formatDouble(gamma));
-            logln("--- mean:\t" + MiscUtils.formatDouble(mean));
-            logln("--- scale:\t" + MiscUtils.formatDouble(scale));
+            logln("--- a0:\t" + MiscUtils.formatDouble(a0));
+            logln("--- b0:\t" + MiscUtils.formatDouble(b0));
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
             logln("--- sample lag:\t" + LAG);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
             logln("--- path assumption:\t" + pathAssumption);
-            logln("--- subtree type:\t" + subtreeType);
+            logln("--- tree builder:\t" + treeBuilder.getName());
+            logln("--- updating tree?\t" + treeUpdated);
+            logln("--- exact sampling?\t" + sampleExact);
         }
     }
 
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_H2L")
+                .append("_L2H")
                 .append("_K-").append(L)
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
-                .append("_a-").append(MiscUtils.formatDouble(hyperparams.get(ALPHA)))
-                .append("_b-").append(MiscUtils.formatDouble(hyperparams.get(BETA)))
-                .append("_g-").append(MiscUtils.formatDouble(hyperparams.get(GAMMA)))
-                .append("_m-").append(MiscUtils.formatDouble(hyperparams.get(MEAN)))
-                .append("_s-").append(MiscUtils.formatDouble(hyperparams.get(SCALE)))
                 .append("_opt-").append(this.paramOptimized)
-                .append("_").append(this.pathAssumption)
-                .append("_").append(this.subtreeType);
+                .append("_").append(this.pathAssumption);
+        for (double hp : this.hyperparams) {
+            str.append("-").append(MiscUtils.formatDouble(hp));
+        }
+        str.append("-").append(treeBuilder.getName());
+        str.append("-").append(treeUpdated);
+        str.append("-").append(sampleExact);
         this.name = str.toString();
+    }
+
+    public void train(int[][] newWords, int[][] newLabels) {
+        this.words = newWords;
+        this.labels = newLabels;
+        this.D = this.words.length;
+        this.labelDocIndices = new HashMap<Integer, Set<Integer>>();
+        for (int d = 0; d < D; d++) {
+            for (int ll : labels[d]) {
+                Set<Integer> docIndices = this.labelDocIndices.get(ll);
+                if (docIndices == null) {
+                    docIndices = new HashSet<Integer>();
+                }
+                docIndices.add(d);
+                this.labelDocIndices.put(ll, docIndices);
+            }
+        }
+
+        int emptyDocCount = 0;
+        this.numTokens = 0;
+        this.labelFreqs = new int[L];
+        for (int d = 0; d < D; d++) {
+            if (labels[d].length == 0) {
+                emptyDocCount++;
+                continue;
+            }
+            this.numTokens += words[d].length;
+            for (int ii = 0; ii < labels[d].length; ii++) {
+                labelFreqs[labels[d][ii]]++;
+            }
+        }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # empty documents:\t" + emptyDocCount);
+            logln("--- # tokens:\t" + numTokens);
+        }
+    }
+
+    public void test(int[][] newWords) {
+        this.words = newWords;
+        this.labels = null;
+        this.D = this.words.length;
+
+        this.numTokens = 0;
+        for (int d = 0; d < D; d++) {
+            this.numTokens += words[d].length;
+        }
+
+        if (verbose) {
+            logln("--- # documents:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+        }
+    }
+
+    protected String getLabelString(int labelIdx) {
+        return this.labelVocab.get(labelIdx) + " (" + this.labelFreqs[labelIdx] + ")";
     }
 
     @Override
@@ -198,57 +260,146 @@ public class L2H extends AbstractSampler {
 
         initializeModelStructure();
 
-        initializeModelStructureHierarchy();
-
-        initializeModelStructureTopics();
-
         initializeDataStructure();
 
         initializeAssignments();
 
         if (debug) {
             validate("Initialized");
+            logln("Tree:\n" + this.printTree(10));
+            logln("Tree structure:\n" + this.printTreeStructure());
         }
     }
 
-    private void initializeModelStructureHierarchy() {
+    private void initializeModelStructure() {
         if (verbose) {
-            logln("--- --- Initializing tree from graph ...");
+            logln("--- Initializing model structure ...");
         }
 
-        int[] labelFreqs = getLabelFrequencies();
-        HashMap<String, Integer> labelPairFreqs = getLabelPairFrequencies();
-        TreeInitializer treeInit = new TreeInitializer(
-                labelFreqs,
-                labelPairFreqs);
-//        DirectedGraph<Integer> labelGraph = treeInit.initializeUsingEntropies(minPairFreq);
-        DirectedGraph<Integer> labelGraph = treeInit.initializeUsingConditionalProbabilities(this.minPairFreq);
-//        treeInit.initializeUsingMutualInformation();
-        DirectedGraph<Integer> tree = treeInit.tree;
-        this.graphRoot = treeInit.getGraphRoot();
-        this.setTree(tree, graphRoot);
+        this.nodes = new Node[L];
+        this.root = new Node(treeBuilder.getTreeRoot().getContent(), 0, 0,
+                new SparseCount(), null);
+        Stack<TreeNode<TreeNode, Integer>> stack = new Stack<TreeNode<TreeNode, Integer>>();
+        stack.add(treeBuilder.getTreeRoot());
+        while (!stack.isEmpty()) {
+            TreeNode<TreeNode, Integer> node = stack.pop();
+            for (TreeNode<TreeNode, Integer> child : node.getChildren()) {
+                stack.add(child);
+            }
 
-        if (true) {
-            logln("--- --- Initialized tree.");
-            logln("--- --- # edges in label graph: " + labelGraph.getAllEdges().size());
-            logln("--- --- # sources in label graph: " + labelGraph.getSourceNodeSet().size());
-            logln("--- --- # targets in label graph: " + labelGraph.getTargetNodeSet().size());
+            int labelIdx = node.getContent();
+
+            // parents
+            Node gParent = null;
+            if (!node.isRoot()) {
+                TreeNode<TreeNode, Integer> parent = node.getParent();
+                int parentLabelIdx = parent.getContent();
+                gParent = nodes[parentLabelIdx];
+            }
+
+            // global node
+            Node gNode = new Node(labelIdx,
+                    node.getIndex(),
+                    node.getLevel(),
+                    new SparseCount(),
+                    gParent);
+            nodes[labelIdx] = gNode;
+            if (gParent != null) {
+                gParent.addChild(gNode.getIndex(), gNode);
+            }
+            if (node.isRoot()) {
+                root = gNode;
+            }
         }
-
-        // set weights (for updating graphs)
-//        for (GraphNode<Integer> source : labelGraph.getSourceNodeSet()) {
-//            for (GraphEdge edge : labelGraph.getOutEdges(source)) {
-//                GraphNode<Integer> target = edge.getTarget();
-//                this.nodeList[source.getId()].putWeight(target.getId(), edge.getWeight());
-//            }
-//        }
+        estimateEdgeWeights(); // estimate edge weights
     }
 
-    private void initializeModelStructureTopics() {
-        if (verbose) {
-            logln("--- --- Initializing topics using Labeled LDA ...");
+    public void estimateEdgeWeights() {
+        this.inWeights = new SparseVector[L];
+        for (int ll = 0; ll < L; ll++) {
+            this.inWeights[ll] = new SparseVector();
+        }
+        int[] labelFreq = new int[L];
+        for (int dd = 0; dd < D; dd++) {
+            for (int l : labels[dd]) {
+                labelFreq[l]++;
+            }
+        }
+        int maxLabelFreq = StatUtils.max(labelFreq);
+
+        // pair frequencies
+        for (int dd = 0; dd < D; dd++) {
+            int[] docLabels = labels[dd];
+            for (int ii = 0; ii < docLabels.length; ii++) {
+                for (int jj = 0; jj < docLabels.length; jj++) {
+                    if (ii == jj) {
+                        continue;
+                    }
+                    Double weight = this.inWeights[docLabels[jj]].get(docLabels[ii]);
+                    if (weight == null) {
+                        this.inWeights[docLabels[jj]].set(docLabels[ii], 1.0);
+                    } else {
+                        this.inWeights[docLabels[jj]].set(docLabels[ii], weight + 1.0);
+                    }
+                }
+            }
         }
 
+        // root weights
+        for (int l = 0; l < L; l++) {
+            int lFreq = labelFreq[l];
+            for (int ii : inWeights[l].getIndices()) {
+                double weight = inWeights[l].get(ii) / lFreq;
+                inWeights[l].set(ii, weight);
+            }
+
+            double selfWeight = (double) lFreq / maxLabelFreq;
+            inWeights[l].set(L - 1, selfWeight);
+        }
+    }
+
+    private void initializeDataStructure() {
+        if (verbose) {
+            logln("--- Initializing data structure ...");
+        }
+        this.z = new int[D][];
+        this.x = new int[D][];
+        this.docSwitches = new DirMult[D];
+        this.docLabelCounts = new SparseCount[D];
+        this.docMaskes = new Set[D];
+
+        for (int d = 0; d < D; d++) {
+            this.z[d] = new int[words[d].length];
+            this.x[d] = new int[words[d].length];
+            this.docSwitches[d] = new DirMult(new double[]{hyperparams.get(A_0),
+                        hyperparams.get(B_0)});
+            this.docLabelCounts[d] = new SparseCount();
+            this.docMaskes[d] = new HashSet<Integer>();
+            if (labels != null) { // if labels are given during training time
+                updateMaskes(d);
+            }
+        }
+    }
+
+    private void initializeAssignments() {
+        if (verbose) {
+            logln("--- --- Initializing assignments. " + initState + " ...");
+        }
+        switch (initState) {
+            case PRESET:
+                initializePresetAssignments();
+                break;
+            default:
+                throw new RuntimeException("Initialization not supported");
+        }
+    }
+
+    private void initializePresetAssignments() {
+        if (verbose) {
+            logln("--- Initializing assignments ...");
+            logln("--- --- 1. Estimating topics using Labeled LDA");
+            logln("--- --- 2. Forward sampling using the estimated topics");
+        }
         int lda_burnin = 50;
         int lda_maxiter = 100;
         int lda_samplelag = 5;
@@ -260,80 +411,49 @@ public class L2H extends AbstractSampler {
         llda.setDebug(debug);
         llda.setVerbose(verbose);
         llda.setLog(false);
-        llda.configure(null,
+        llda.configure(folder,
                 V, L, lda_alpha, lda_beta, initState, false,
                 lda_burnin, lda_maxiter, lda_samplelag, lda_repInterval);
-        llda.train(words, labels);
+        // add the root label to all documents
+        int[][] tempLabels = new int[D][];
+        for (int dd = 0; dd < D; dd++) {
+            tempLabels[dd] = new int[labels[dd].length + 1];
+            System.arraycopy(labels[dd], 0, tempLabels[dd], 0, labels[dd].length);
+            tempLabels[dd][labels[dd].length] = labelVocab.size() - 1;
+        }
+        llda.train(words, tempLabels);
         try {
-            File lldaZFile = new File(this.folder, "labeled-lda-init-" + L + ".zip");
+            File lldaZFile = new File(llda.getSamplerFolderPath(), "init.zip");
             if (lldaZFile.exists()) {
                 llda.inputState(lldaZFile);
             } else {
+                IOUtils.createFolder(llda.getSamplerFolderPath());
                 llda.sample();
                 llda.outputState(lldaZFile);
             }
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while initializing topics with Labeled LDA");
+            throw new RuntimeException("Exception while initializing topics "
+                    + "with Labeled LDA");
         }
         setLog(true);
 
-        // topics
-        DirMult[] labelWordDists = llda.getTopicWordDistributions();
+        DirMult[] tps = llda.getTopicWordDistributions();
         for (int ll = 0; ll < L; ll++) {
-            double[] topic = labelWordDists[ll].getDistribution();
-            this.nodeList[ll].setTopic(topic);
-        }
-
-        // use the Laplace-smoothed background distribution for the root's topics
-        double[] topic = new double[V];
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                topic[words[d][n]]++;
-            }
-        }
-        for (int v = 0; v < V; v++) {
-            topic[v] = (topic[v] + 1) / (this.numTokens + V);
-        }
-        this.nodeList[L].setTopic(topic);
-    }
-
-    private void initializeModelStructure() {
-        if (verbose) {
-            logln("--- Initializing model structure ...");
-        }
-
-        // create list of labels
-        this.nodeList = new Node[L + 1];
-        this.labelVocab.add("Background");
-
-        // create tree root
-        this.root = new Node(-1, 0, 0, L, null);
-        this.leaves = new ArrayList<Node>();
-    }
-
-    private void initializeDataStructure() {
-        if (verbose) {
-            logln("--- Initializing data structure ...");
-        }
-        this.z = new int[D][];
-        for (int d = 0; d < D; d++) {
-            this.z[d] = new int[words[d].length];
+            nodes[ll].topic = tps[ll].getDistribution();
         }
 
         if (verbose) {
-            logln("--- --- Data structure initialized\n" + this.printTreeStructure());
+            logln("--- Initializing assignments by sampling ...");
         }
-    }
-
-    private void initializeAssignments() {
-        if (verbose) {
-            logln("--- Initializing assignments ...");
+        long eTime;
+        if (sampleExact) {
+            eTime = sampleXZsExact(!REMOVE, ADD, !REMOVE, ADD);
+        } else {
+            eTime = sampleXZsMH(!REMOVE, ADD, !REMOVE, ADD);
         }
-        this.sampleTopicAssignments(!REMOVE, ADD);
-
         if (verbose) {
-            logln("--- --- Assignments initialized\n" + this.printGlobalTree(10));
+            logln("--- --- Elapsed time: " + eTime);
         }
     }
 
@@ -350,7 +470,7 @@ public class L2H extends AbstractSampler {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while outputing to report folder");
         }
 
         if (log && !isLogging()) {
@@ -361,26 +481,44 @@ public class L2H extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
+            // sampling x's and z's
+            long sampleXZTime;
+            if (sampleExact) {
+                sampleXZTime = sampleXZsExact(REMOVE, ADD, REMOVE, ADD);
+            } else {
+                sampleXZTime = sampleXZsMH(REMOVE, ADD, REMOVE, ADD);
+            }
+
+            // sampling topics
+            long sampleTopicTime = sampleTopics();
+
+            // updating tree
+            long updateTreeTime = 0;
+            if (treeUpdated) {
+                updateTreeTime = updateTree();
+            }
+
             if (verbose && iter % REP_INTERVAL == 0) {
-                String str = "Iter " + iter
+                double loglikelihood = this.getLogLikelihood();
+                logLikelihoods.add(loglikelihood);
+                String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
                         + "\t # tokens changed: " + numTokensChange
-                        + " (" + ((double) numTokensChange / numTokens) + ")"
-                        + "\t" + getCurrentState();
+                        + " (" + MiscUtils.formatDouble((double) numTokensChange / numTokens) + ")"
+                        + "\t # accepts: " + numAccepts
+                        + " (" + MiscUtils.formatDouble((double) numAccepts / L) + ")"
+                        + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
                 } else {
                     logln("--- Sampling. " + str);
                 }
+                logln("--- Elapsed time: sXZs: " + sampleXZTime
+                        + "\tsTopic: " + sampleTopicTime
+                        + "\tuTree: " + updateTreeTime);
+                System.out.println();
             }
 
-            sampleTopicAssignments(REMOVE, ADD);
-
-            sampleTopics();
-
-            updateTree();
 
             if (debug) {
                 validate("iter " + iter);
@@ -408,22 +546,14 @@ public class L2H extends AbstractSampler {
                 }
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
-                System.out.println();
-            }
-
             // store model
-            if (report && iter >= BURN_IN && iter % LAG == 0) {
-                outputState(new File(
-                        new File(getSamplerFolderPath(), ReportFolder),
-                        "iter-" + iter + ".zip"));
+            if (report && iter > BURN_IN && iter % LAG == 0) {
+                outputState(new File(getReportFolderPath(), "iter-" + iter + ".zip"));
             }
         }
 
         if (report) {
-            outputState(new File(
-                    new File(getSamplerFolderPath(), ReportFolder),
-                    "iter-" + iter + ".zip"));
+            outputState(new File(getReportFolderPath(), "iter-" + iter + ".zip"));
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -432,321 +562,563 @@ public class L2H extends AbstractSampler {
         if (log && isLogging()) {
             closeLogger();
         }
-
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(
-                    new File(getSamplerFolderPath(), "likelihoods.txt"));
-            for (int i = 0; i < logLikelihoods.size(); i++) {
-                writer.write(i + "\t" + logLikelihoods.get(i) + "\n");
-            }
-            writer.close();
-
-            if (paramOptimized && log) {
-                this.outputSampledHyperparameters(new File(getSamplerFolderPath(),
-                        "hyperparameters.txt"));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
     }
 
     /**
-     * Get a set of candidate labels for a document, which contains all nodes on
-     * the paths from root to the document's observed labels.
-     *
-     * @param d Document index
+     * Update the structure of the tree. This is done by (1) proposing a new
+     * parent node for each node in the tree using the edge weights of the
+     * background graph, (2) accepting or rejecting the proposed new parent
+     * using Metropolis-Hastings.
      */
-    private Set<Integer> getPathCandidateLabels(int d) {
-        Set<Integer> candLabels = new HashSet<Integer>();
-        for (int ii = 0; ii < labels[d].length; ii++) {
-            int l = labels[d][ii];
-            Node node = this.nodeList[l];
-            while (node.getParent() != null) {
-                int labelId = node.getContent();
-                candLabels.add(labelId);
+    private long updateTree() {
+        long sTime = System.currentTimeMillis();
 
-                node = node.getParent();
-            }
-        }
-        return candLabels;
-    }
-
-    /**
-     * Set a set of candidate labels for a document, which contains all nodes on
-     * the paths from the root to the document's observed labels and all nodes
-     * in the subtrees rooted at the document's observed labels.
-     *
-     * @param d Document index
-     */
-    private Set<Integer> getPathInsideSubtreeCandidateLabels(int d) {
-        Set<Integer> candLabels = new HashSet<Integer>();
-        // all nodes on the paths from root to observed labels
-        Set<Integer> candOnPaths = getPathCandidateLabels(d);
-        for (int cand : candOnPaths) {
-            candLabels.add(cand);
+        if (verbose && iter % REP_INTERVAL == 0) {
+            logln("--- Updating tree ...");
         }
 
-        // all nodes on the subtrees rooted at observed labels
-        for (int ii = 0; ii < labels[d].length; ii++) {
-            Set<Integer> subtreeLabels = getSubtreeLabelIds(labels[d][ii]);
-            for (int cand : subtreeLabels) {
-                candLabels.add(cand);
+        numAccepts = 0;
+        for (int ll = 0; ll < L; ll++) {
+
+            Node node = nodes[ll];
+            if (node.isRoot()) {
+                continue;
             }
 
-        }
-        return candLabels;
-    }
+            // current and new parents
+            Node currentParent = node.getParent();
+            Node proposeParent = proposeParent(node);
 
-    /**
-     * Get a set of candidate labels for a document, which contains all nodes
-     * under the subtree rooted at any first-level nodes on the paths from root
-     * to the document's observed labels.
-     *
-     * @param d The document index
-     */
-    private Set<Integer> getSubtreeCandidateLabels(int d) {
-        Set<Integer> candLabels = new HashSet<Integer>();
-        Set<Integer> firstLevelLabels = new HashSet<Integer>();
-        for (int ii = 0; ii < labels[d].length; ii++) {
-            int l = labels[d][ii];
-            Node node = this.nodeList[l];
-            while (node.getParent() != null) {
-                int labelId = node.getContent();
-                candLabels.add(labelId);
+            if (proposeParent.equals(node.getParent())) { // if the same node, move on
+                numAccepts++;
+                continue;
+            }
 
-                if (node.getLevel() == 1) {
-                    firstLevelLabels.add(labelId);
+            Set<Integer> subtreeDocs = getSubtreeDocumentIndices(node);
+            Set<Integer> subtreeNodes = node.getSubtree();
+
+            // current x & z log prob
+            double curXLogprob = 0.0;
+            double curZLogprob = 0.0;
+            for (int d : subtreeDocs) {
+                curXLogprob += docSwitches[d].getLogLikelihood();
+                curZLogprob += computeDocLabelLogprob(docLabelCounts[d], docMaskes[d]);
+            }
+
+            // phi
+            double curPhiLogprob = computeWordLogprob(node, currentParent);
+            double newPhiLogprob = computeWordLogprob(node, proposeParent);
+            double newXLogprob = 0.0;
+            double newZLogprob = 0.0;
+            HashMap<Integer, Set<Integer>> proposedMasks = new HashMap<Integer, Set<Integer>>();
+            for (int d : subtreeDocs) {
+                Set<Integer> proposedMask = getProposedMask(d, node.id, subtreeNodes, proposeParent);
+                newZLogprob += computeDocLabelLogprob(docLabelCounts[d], proposedMask);
+                proposedMasks.put(d, proposedMask);
+
+                int[] proposedSwitchCount = new int[2];
+                for (int n = 0; n < words[d].length; n++) {
+                    if (proposedMask.contains(z[d][n])) {
+                        proposedSwitchCount[INSIDE]++;
+                    } else {
+                        proposedSwitchCount[OUTSIDE]++;
+                    }
+                }
+                newXLogprob += SamplerUtils.computeLogLhood(proposedSwitchCount,
+                        words[d].length, switchPrior);
+            }
+
+            double curLogprob = curPhiLogprob + curXLogprob + curZLogprob;
+            double newLogprob = newPhiLogprob + newXLogprob + newZLogprob;
+            double mhRatio = Math.exp(newLogprob - curLogprob);
+
+            if (rand.nextDouble() < mhRatio) {
+                numAccepts++;
+
+                // update parent
+                currentParent.removeChild(node.getIndex());
+                int newIndex = proposeParent.getNextChildIndex();
+                node.setIndex(newIndex);
+                proposeParent.addChild(newIndex, node);
+                node.setParent(proposeParent);
+
+                // update level of nodes in the subtree
+                for (int n : subtreeNodes) {
+                    nodes[n].setLevel(nodes[n].getLevel()
+                            - currentParent.getLevel()
+                            + proposeParent.getLevel());
                 }
 
-                node = node.getParent();
+//                if (verbose && debug) {
+//                    logln("Accept. iter = " + iter
+//                            + ". ratio: " + mhRatio
+//                            + ". node " + node.toString()
+//                            + ". " + labelVocab.get(node.id));
+//                    logln("Old parent: " + currentParent.toString() + ". " + labelVocab.get(currentParent.id));
+//                    logln("New parent: " + proposeParent.toString() + ". " + labelVocab.get(proposeParent.id));
+//                    String[] nodeTopWords = getTopWords(node.topic, 15);
+//                    String[] curParentTopWords = getTopWords(currentParent.topic, 15);
+//                    String[] newParentTopWords = getTopWords(proposeParent.topic, 15);
+//                    System.out.println("Node: " + MiscUtils.arrayToString(nodeTopWords));
+//                    System.out.println("Cur parent: " + MiscUtils.arrayToString(curParentTopWords));
+//                    System.out.println("New parent: " + MiscUtils.arrayToString(newParentTopWords));
+//                    logln("Current: " + MiscUtils.formatDouble(curPhiLogprob)
+//                            + ". " + MiscUtils.formatDouble(curXLogprob)
+//                            + ". " + MiscUtils.formatDouble(curZLogprob)
+//                            + ". " + MiscUtils.formatDouble(curLogprob));
+//                    logln("Propose: " + MiscUtils.formatDouble(newPhiLogprob)
+//                            + ". " + MiscUtils.formatDouble(newXLogprob)
+//                            + ". " + MiscUtils.formatDouble(newZLogprob)
+//                            + ". " + MiscUtils.formatDouble(newLogprob));
+//                    System.out.println();
+//                }
+
+                // remove current switch assignments
+                for (int d : subtreeDocs) {
+                    docMaskes[d] = proposedMasks.get(d);
+                    for (int n = 0; n < words[d].length; n++) {
+                        docSwitches[d].decrement(x[d][n]); // decrement
+
+                        // update
+                        if (docMaskes[d].contains(z[d][n])) {
+                            x[d][n] = INSIDE;
+                        } else {
+                            x[d][n] = OUTSIDE;
+                        }
+                        docSwitches[d].increment(x[d][n]); // increment
+                    }
+                }
+            }
+
+            if (debug) {
+                validate("Update node " + ll + ". " + node.toString());
             }
         }
+        return System.currentTimeMillis() - sTime;
+    }
 
-        for (int firstLevelLabel : firstLevelLabels) {
-            Set<Integer> subtreeLabelIds = getSubtreeLabelIds(firstLevelLabel);
-            for (int id : subtreeLabelIds) {
-                candLabels.add(id);
-            }
+    private double computeWordLogprob(Node node, Node parent) {
+        SparseCount obs = new SparseCount();
+        for (int v : node.getContent().getIndices()) {
+            obs.changeCount(v, node.getContent().getCount(v));
         }
-
-        return candLabels;
+        for (int v : node.pseudoCounts.getIndices()) {
+            obs.changeCount(v, node.pseudoCounts.getCount(v));
+        }
+        return SamplerUtils.computeLogLhood(obs, parent.topic, hyperparams.get(BETA));
     }
 
     /**
-     * Get the set of labels in a subtree rooted at a given label
+     * Compute the log probability of the topic assignments of a document given
+     * a candidate set.
      *
-     * @param labelId The root node's label ID
+     * @param docLabelCount Store the number of times tokens in this document
+     * assigned to each topic
+     * @param docMask The candidate set
      */
-    private Set<Integer> getSubtreeLabelIds(int labelId) {
-        Set<Integer> subtreeLabelIds = new HashSet<Integer>();
-        Node rootNode = this.nodeList[labelId];
+    private double computeDocLabelLogprob(SparseCount docLabelCount, Set<Integer> docMask) {
+        double priorVal = hyperparams.get(ALPHA);
+        double logGammaPriorVal = SamplerUtils.logGammaStirling(priorVal);
+
+        double insideLp = 0.0;
+        insideLp += SamplerUtils.logGammaStirling(priorVal * docMask.size());
+        insideLp -= docMask.size() * logGammaPriorVal;
+
+
+        double outsideLp = 0.0;
+        outsideLp += SamplerUtils.logGammaStirling(priorVal * (L - docMask.size()));
+        outsideLp -= (L - docMask.size()) * logGammaPriorVal;
+
+        int insideCountSum = 0;
+        int outsideCountSum = 0;
+        for (int ll : docLabelCount.getIndices()) {
+            int count = docLabelCount.getCount(ll);
+
+            if (docMask.contains(ll)) {
+                insideLp += SamplerUtils.logGammaStirling(count + priorVal);
+                insideCountSum += count;
+            } else {
+                outsideLp += SamplerUtils.logGammaStirling(count + priorVal);
+                outsideCountSum += count;
+            }
+        }
+
+        insideLp -= SamplerUtils.logGammaStirling(insideCountSum + priorVal * docMask.size());
+        outsideLp -= SamplerUtils.logGammaStirling(outsideCountSum + priorVal * (L - docMask.size()));
+
+        double logprob = insideLp + outsideLp;
+        return logprob;
+    }
+
+    /**
+     * Return the set of documents whose label set contains any label in the
+     * subtree rooted at a given node.
+     *
+     * @param node The root of the subtree
+     */
+    private Set<Integer> getSubtreeDocumentIndices(Node node) {
+        Set<Integer> docIdx = new HashSet<Integer>();
         Stack<Node> stack = new Stack<Node>();
-        stack.add(rootNode);
+        stack.add(node);
+        while (!stack.isEmpty()) {
+            Node n = stack.pop();
+
+            for (Node c : n.getChildren()) {
+                stack.add(c);
+            }
+
+            for (int d : this.labelDocIndices.get(n.id)) {
+                docIdx.add(d);
+            }
+        }
+        return docIdx;
+    }
+
+    /**
+     * Return the set of mask node if the subtree root node become a child of
+     * the a proposed parent node.
+     *
+     * @param d Document index
+     * @param subtreeRoot The ID of the root of the subtree
+     * @param subtree Set of nodes in the subtree
+     * @param proposedParent The proposed parent node
+     */
+    private Set<Integer> getProposedMask(int d,
+            int subtreeRoot,
+            Set<Integer> subtree,
+            Node proposedParent) {
+        Set<Integer> ppMask = new HashSet<Integer>();
+        boolean insideSubtree = false;
+        for (int label : labels[d]) {
+            Node n = nodes[label];
+
+            // if this label is inside the subtree, add all nodes from the label
+            // node to the subtree root to the mask
+            if (subtree.contains(label)) {
+                while (n.id != subtreeRoot) {
+                    ppMask.add(n.id);
+                    n = n.getParent();
+                }
+                ppMask.add(subtreeRoot);
+                insideSubtree = true;
+            } // if this label is outside the subtree, all all nodes from the label
+            // node to the root as usual
+            else {
+                while (n != null) {
+                    ppMask.add(n.id);
+                    n = n.getParent();
+                }
+            }
+        }
+
+        // if there is any label inside the subtree, add nodes from the proposed
+        // label to the root
+        if (insideSubtree) {
+            Node n = nodes[proposedParent.id];
+            while (n != null) {
+                ppMask.add(n.id);
+                n = n.getParent();
+            }
+        }
+
+        // debug
+//        System.out.println("\n");
+//        for (int ll : labels[d]) {
+//            System.out.println("label: " + nodes[ll].toString());
+//        }
+//        System.out.println("Subtree root: " + subtreeRoot + ". " + nodes[subtreeRoot].toString());
+//        System.out.println("Propose parent: " + proposedParent.toString());
+//        for (int ii : subtree) {
+//            System.out.println("--- subtree node: " + nodes[ii].toString());
+//        }
+//
+//        System.out.println("Proposed mask");
+//        for (int ii : ppMask) {
+//            System.out.println(">>> ppm node: " + nodes[ii].toString());
+//        }
+
+        return ppMask;
+    }
+
+    /**
+     * Propose a parent node for a given node by sampling from the prior weights
+     * (the MLE conditional probabilities)
+     *
+     * @param node A node
+     */
+    private Node proposeParent(Node node) {
+        // sort candidate parents
+        ArrayList<RankingItem<Node>> rankCandNodes = new ArrayList<RankingItem<Node>>();
+        for (int idx : inWeights[node.id].getIndices()) {
+            Node candNode = nodes[idx];
+            if (node.isDescendent(candNode)) {
+                continue;
+            }
+            double weight = inWeights[node.id].get(idx);
+            rankCandNodes.add(new RankingItem<Node>(nodes[idx], weight));
+        }
+        Collections.sort(rankCandNodes);
+
+        // sample from a limited set
+        ArrayList<Node> candNodes = new ArrayList<Node>();
+        ArrayList<Double> candWeights = new ArrayList<Double>();
+        int numCands = Math.min(10, rankCandNodes.size());
+        for (int ii = 0; ii < numCands; ii++) {
+            RankingItem<Node> rankNode = rankCandNodes.get(ii);
+            candNodes.add(rankNode.getObject());
+            candWeights.add(rankNode.getPrimaryValue());
+        }
+        int sampledIdx = SamplerUtils.scaleSample(candWeights);
+        Node sampledNode = candNodes.get(sampledIdx);
+
+        // debug
+//        int ll = node.id;
+//        System.out.println("ll = " + ll
+//                + "\t size: " + candNodes.size()
+//                + "\t" + nodes[ll].toString()
+//                + "\t" + labelVocab.get(ll)
+//                + "\tcurpar: " + labelVocab.get(nodes[ll].getParent().id)
+//                + "\t" + inWeights[node.id].get(nodes[ll].getParent().id));
+//        for (int ii = 0; ii < candNodes.size(); ii++) {
+//            System.out.println("cand " + ii
+//                    + "\t" + candNodes.get(ii).toString()
+//                    + "\t" + candWeights.get(ii)
+//                    + "\t" + labelVocab.get(candNodes.get(ii).id));
+//        }
+//        System.out.println(">>> sampledIdx: " + sampledIdx
+//                + "\t" + sampledNode.toString()
+//                + "\t" + labelVocab.get(sampledNode.id)
+//                + "\t" + candWeights.get(sampledIdx));
+//        System.out.println();
+
+        return sampledNode;
+    }
+
+    /**
+     * Sample x and z together for all documents.
+     *
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     */
+    private long sampleXZsExact(
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        numTokensChange = 0;
+        long sTime = System.currentTimeMillis();
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                sampleXZExact(d, n, removeFromModel, addToModel, removeFromData, addToData);
+            }
+        }
+        return System.currentTimeMillis() - sTime;
+    }
+
+    /**
+     * Sample x and z together for a token.
+     *
+     * @param d
+     * @param n
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     */
+    private void sampleXZExact(int d, int n,
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        if (removeFromModel) {
+            nodes[z[d][n]].getContent().decrement(words[d][n]);
+            nodes[z[d][n]].removeToken(d, n);
+        }
+        if (removeFromData) {
+            docSwitches[d].decrement(x[d][n]);
+            docLabelCounts[d].decrement(z[d][n]);
+        }
+
+        double[] logprobs = new double[L];
+        for (int ll = 0; ll < L; ll++) {
+            boolean inside = docMaskes[d].contains(ll);
+            double xLlh;
+            double zLlh;
+            double wLlh = Math.log(nodes[ll].topic[words[d][n]]);
+
+            if (inside) {
+                xLlh = Math.log(docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0));
+                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size()));
+            } else {
+                xLlh = Math.log(docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0));
+                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size())));
+            }
+            logprobs[ll] = xLlh + zLlh + wLlh;
+        }
+        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+
+        if (sampledZ != z[d][n]) {
+            numTokensChange++;
+        }
+        z[d][n] = sampledZ;
+        if (docMaskes[d].contains(z[d][n])) {
+            x[d][n] = INSIDE;
+        } else {
+            x[d][n] = OUTSIDE;
+        }
+
+        if (addToModel) {
+            nodes[z[d][n]].getContent().increment(words[d][n]);
+            nodes[z[d][n]].addToken(d, n);
+        }
+
+        if (addToData) {
+            docSwitches[d].increment(x[d][n]);
+            docLabelCounts[d].increment(z[d][n]);
+        }
+    }
+
+    /**
+     * Sample x and z. This is done by first sampling x, and given the value of
+     * x, sample z. This is an approximation of sampleXZsExact.
+     *
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     */
+    private long sampleXZsMH(
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        numTokensChange = 0;
+        long sTime = System.currentTimeMillis();
+        for (int d = 0; d < D; d++) {
+            for (int n = 0; n < words[d].length; n++) {
+                sampleXZMH(d, n, removeFromModel, addToModel, removeFromData, addToData);
+            }
+        }
+        return System.currentTimeMillis() - sTime;
+    }
+
+    /**
+     * Sample x and z. This is done by first sampling x, and given the value of
+     * x, sample z. This is an approximation of sampleXZsExact.
+     *
+     * @param d
+     * @param n
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     */
+    private void sampleXZMH(int d, int n,
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        if (removeFromModel) {
+            nodes[z[d][n]].getContent().decrement(words[d][n]);
+            nodes[z[d][n]].removeToken(d, n);
+        }
+        if (removeFromData) {
+            docSwitches[d].decrement(x[d][n]);
+            docLabelCounts[d].decrement(z[d][n]);
+        }
+
+        // propose
+        int pX;
+        if (!docMaskes[d].isEmpty()) {
+            double[] ioLogProbs = new double[2];
+            ioLogProbs[INSIDE] = docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0);
+            ioLogProbs[OUTSIDE] = docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0);
+            pX = SamplerUtils.scaleSample(ioLogProbs);
+        } else { // if candidate set is empty
+            pX = OUTSIDE;
+        }
+        int pZ = proposeZ(d, n, pX);
+
+        // compute MH ratio: accept all for now
+        if (pZ != z[d][n]) {
+            numTokensChange++;
+        }
+        z[d][n] = pZ;
+        x[d][n] = pX;
+        // accept or reject
+
+        if (docMaskes[d].contains(z[d][n])) {
+            x[d][n] = INSIDE;
+        } else {
+            x[d][n] = OUTSIDE;
+        }
+
+        if (addToModel) {
+            nodes[z[d][n]].getContent().increment(words[d][n]);
+            nodes[z[d][n]].addToken(d, n);
+        }
+
+        if (addToData) {
+            docSwitches[d].increment(x[d][n]);
+            docLabelCounts[d].increment(z[d][n]);
+        }
+    }
+
+    /**
+     * Sample a node for a token given the binary indicator x.
+     *
+     * @param d Document index
+     * @param n Token index
+     * @param pX Binary indicator specifying whether the given token should be
+     * assigned to a node in the candidate set or not.
+     */
+    private int proposeZ(int d, int n, int pX) {
+        ArrayList<Integer> indices = new ArrayList<Integer>();
+        ArrayList<Double> logprobs = new ArrayList<Double>();
+        if (pX == INSIDE) {
+            for (int ll : docMaskes[d]) {
+                double zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size()));
+                double wLlh = Math.log(nodes[ll].topic[words[d][n]]);
+                logprobs.add(zLlh + wLlh);
+                indices.add(ll);
+            }
+        } else {
+            for (int ll = 0; ll < L; ll++) {
+                if (docMaskes[d].contains(ll)) {
+                    continue;
+                }
+                double zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size())));
+                double wLlh = Math.log(nodes[ll].topic[words[d][n]]);
+                logprobs.add(zLlh + wLlh);
+                indices.add(ll);
+            }
+        }
+        int sampledIdx = SamplerUtils.logMaxRescaleSample(logprobs);
+        return indices.get(sampledIdx);
+    }
+
+    /**
+     * Sample topics (distributions over words) in the tree. This is done by (1)
+     * performing a bottom-up smoothing to compute the pseudo-counts from
+     * children for each node, and (2) top-down sampling to get the topics.
+     */
+    private long sampleTopics() {
+        if (verbose && iter % REP_INTERVAL == 0) {
+            logln("--- Sampling topics ...");
+        }
+        long sTime = System.currentTimeMillis();
+        // get all leaves of the tree
+        ArrayList<Node> leaves = new ArrayList<Node>();
+        Stack<Node> stack = new Stack<Node>();
+        stack.add(root);
         while (!stack.isEmpty()) {
             Node node = stack.pop();
-            subtreeLabelIds.add(node.getContent());
+            if (node.getChildren().isEmpty()) {
+                leaves.add(node);
+            }
             for (Node child : node.getChildren()) {
                 stack.add(child);
             }
         }
-        return subtreeLabelIds;
-    }
 
-    /**
-     * Add an observation in a document to a node.
-     *
-     * @param node The node to be added to
-     * @param d Document index
-     * @param obs The observation
-     */
-    private void addObservationToNode(Node node, int d, int obs) {
-        node.adjustNumStays(d, 1);
-        node.incrementObservation(obs);
-        Node tmpNode = node.getParent();
-        while (tmpNode != null) {
-            tmpNode.adjustNumPasses(d, 1);
-            tmpNode = tmpNode.getParent();
-        }
-    }
-
-    /**
-     * Remove an observation in a document from a node.
-     *
-     * @param node The node to be removed from
-     * @param d Document index
-     * @param obs The observation
-     */
-    private void removeObservationFromNode(Node node, int d, int obs) {
-        node.adjustNumStays(d, -1);
-        node.decrementObservation(obs);
-        Node tmpNode = node.getParent();
-        while (tmpNode != null) {
-            tmpNode.adjustNumPasses(d, -1);
-            tmpNode = tmpNode.getParent();
-        }
-    }
-
-    /**
-     * Sample topic assignments for all tokens in all documents.
-     *
-     * @param remove Whether the existing assignments should be removed
-     * @param add Whether the new sampled assignments should be added
-     */
-    protected void sampleTopicAssignments(boolean remove, boolean add) {
-        int docStepSize = MiscUtils.getRoundStepSize(D, 5);
-        numTokensChange = 0;
-        for (int d = 0; d < D; d++) {
-            // only allow this document to be assigned to a subset of the tree
-            // depending on the document's set of labels
-            Set<Integer> candidateLabels;
-            if (this.subtreeType == SubtreeType.PATH) {
-                candidateLabels = this.getPathCandidateLabels(d);
-            } else if (this.subtreeType == SubtreeType.PATH_INSIDE) {
-                candidateLabels = this.getPathInsideSubtreeCandidateLabels(d);
-            } else if (this.subtreeType == SubtreeType.OUTSIDE_INSIDE) {
-                candidateLabels = this.getSubtreeCandidateLabels(d);
-            } else {
-                throw new RuntimeException("Subtree type " + subtreeType
-                        + " is not supported");
-            }
-
-            // debug
-            if (verbose && debug && d % docStepSize == 0) {
-                logln("iter = " + iter
-                        + ". d = " + d + " / " + D);
-            }
-
-            for (int n = 0; n < words[d].length; n++) {
-                if (remove) {
-                    removeObservationFromNode(nodeList[z[d][n]], d, words[d][n]);
-                }
-
-                HashMap<Node, Double> nodeLogPriors = new HashMap<Node, Double>();
-                getNodeLogPrior(d, root, 0.0, nodeLogPriors, candidateLabels);
-
-                ArrayList<Node> nlist = new ArrayList<Node>();
-                ArrayList<Double> logprobs = new ArrayList<Double>();
-                for (Node node : nodeLogPriors.keySet()) {
-                    double logprob = nodeLogPriors.get(node)
-                            + Math.log(node.getTopic()[words[d][n]]);
-
-                    nlist.add(node);
-                    logprobs.add(logprob);
-                }
-                int sampledIdx = SamplerUtils.logMaxRescaleSample(logprobs);
-                if (sampledIdx == logprobs.size()) {
-                    logln("iter = " + iter
-                            + ". d = " + d
-                            + ". n = " + n
-                            + ". sampled idx: " + sampledIdx);
-
-                    for (Node node : nodeLogPriors.keySet()) {
-                        double nodeLlh = Math.log(node.getTopic()[words[d][n]]);
-                        logln("--- node " + node.toString()
-                                + ". " + MiscUtils.formatDouble(nodeLogPriors.get(node))
-                                + ". " + MiscUtils.formatDouble(nodeLlh));
-                    }
-                    throw new RuntimeException("Sampling-out-of-bound Exception");
-                }
-
-                int labelIdx = nlist.get(sampledIdx).getContent();
-
-                if (labelIdx != z[d][n]) {
-                    numTokensChange++;
-                }
-
-                z[d][n] = labelIdx;
-                if (add) {
-                    addObservationToNode(nodeList[z[d][n]], d, words[d][n]);
-                }
-            }
-        }
-    }
-
-    /**
-     * Recursively compute the log prior of assigning to each node in the tree.
-     *
-     * @param d Document index
-     * @param node Current node
-     * @param val Value passed from the parent node
-     * @param vals Hash map to store the results
-     * @param candNodes Set of candidate nodes
-     */
-    private void getNodeLogPrior(
-            int d,
-            Node node,
-            double val,
-            HashMap<Node, Double> vals,
-            Set<Integer> candNodes) {
-        int numStays = node.getNumStays(d);
-        int numPasses = node.getNumPasses(d);
-
-        // compute the probability of staying at the current node
-        double stayingProb =
-                (numStays + hyperparams.get(MEAN) * hyperparams.get(SCALE))
-                / (numStays + numPasses + hyperparams.get(SCALE));
-        vals.put(node, val + Math.log(stayingProb));
-
-        // compute the probability of moving pass the current node
-        double passingLogProb = Math.log(1.0 - stayingProb);
-
-        // debug
-//        System.out.println(node.toString()
-//                + "\t" + numStays
-//                + "\t" + numPasses
-//                + "\tstaying: " + stayingProb
-//                + "\tlog passing: " + passingLogProb
-//                + "\tpre-val = " + val
-//                + "\tval = " + (val + Math.log(stayingProb))
-//                );
-
-        // compute the probability of choosing a child node
-        double totalChildRawScore = 0;
-        HashMap<Node, Double> childRawScores = new HashMap<Node, Double>();
-        for (Node child : node.getChildren()) {
-            if (candNodes != null && !candNodes.contains(child.getContent())) {
-                continue;
-            }
-
-            double childRawScore =
-                    child.getNumStays(d)
-                    + child.getNumPasses(d)
-                    + hyperparams.get(ALPHA);
-            totalChildRawScore += childRawScore;
-            childRawScores.put(child, childRawScore);
-
-            // debug
-//            System.out.println("--- --- child " + child.toString()
-//                    + "\t" + child.getNumStayingCustomers()
-//                    + "\t" + child.getNumPassingCustomers()
-//                    + "\t" + childRawScore);
-        }
-
-        for (Node vChild : childRawScores.keySet()) {
-            double childLogProb =
-                    passingLogProb
-                    + Math.log(childRawScores.get(vChild) / totalChildRawScore);
-
-            // debug
-//            System.out.println("+++ +++ child " + vChild.toString()
-//                    + "\t" + passingLogProb
-//                    + "\t" + childRawScores.get(vChild)
-//                    + "\t" + totalChildRawScore
-//                    + "\t" + Math.log(childRawScores.get(vChild) / totalChildRawScore)
-//                    + "\t" + childLogProb);
-
-            this.getNodeLogPrior(d, vChild, val + childLogProb, vals, candNodes);
-        }
-    }
-
-    /**
-     * Sample the word distributions at all nodes. This is done by 2 steps: (1)
-     * bottom-up smoothing to compute pseudo-counts at each node from all of its
-     * children, and (2) top-down sampling to sample the actual word
-     * distributions.
-     */
-    protected void sampleTopics() {
         // bottom-up smoothing to compute pseudo-counts from children
         Queue<Node> queue = new LinkedList<Node>();
         for (Node leaf : leaves) {
@@ -754,19 +1126,13 @@ public class L2H extends AbstractSampler {
         }
         while (!queue.isEmpty()) {
             Node node = queue.poll();
-            if (node.equals(root)) {
-                break;
-            }
-
             Node parent = node.getParent();
-            if (!queue.contains(parent)) {
+            if (!node.isRoot() && !queue.contains(parent)) {
                 queue.add(parent);
             }
-
             if (node.isLeaf()) {
                 continue;
             }
-
             if (this.pathAssumption == PathAssumption.MINIMAL) {
                 node.getPseudoCountsFromChildrenMin();
             } else if (this.pathAssumption == PathAssumption.MAXIMAL) {
@@ -785,63 +1151,25 @@ public class L2H extends AbstractSampler {
             for (Node child : node.getChildren()) {
                 queue.add(child);
             }
-
             node.sampleTopic();
         }
-    }
-
-    protected void updateTree() {
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
-
-            if (node.isRoot()) {
-                continue;
-            }
-
-            // propose
-            // compute ratio
-            // accept or reject
-        }
+        return System.currentTimeMillis() - sTime;
     }
 
     /**
-     * Convert a minimum spanning tree to the label hierarchy
+     * Update the set of candidate labels for a document d. This set is defined
+     * based on the set of actual document labels and the topic tree structure.
      *
-     * @param tree The minimum spanning tree, represented by adjacency list
-     * @param graphRoot The root of the minimum spanning tree
+     * @param d Document index
      */
-    private void setTree(DirectedGraph<Integer> tree, GraphNode<Integer> graphRoot) {
-        this.leaves = new ArrayList<Node>();
-        Queue<GraphNode<Integer>> queue = new LinkedList<GraphNode<Integer>>();
-        queue.add(graphRoot);
-        this.nodeList[L] = this.root;
-        while (!queue.isEmpty()) {
-            GraphNode<Integer> mstNode = queue.poll();
-            Node node = this.root;
-            if (mstNode.getId() < L) {
-                node = this.nodeList[mstNode.getId()];
-            }
-
-            if (node.getChildren().isEmpty()) {
-                this.leaves.add(node);
-            }
-
-            if (tree.hasOutEdges(mstNode)) {
-                for (GraphEdge edge : tree.getOutEdges(mstNode)) {
-                    GraphNode<Integer> mstChild = edge.getTarget();
-                    int labelIdx = mstChild.getId();
-                    Node childNode = new Node(-1,
-                            node.getNextChildIndex(),
-                            node.getLevel() + 1, labelIdx, node);
-                    node.addChild(childNode.getIndex(), childNode);
-                    this.nodeList[labelIdx] = childNode;
-                    queue.add(mstChild);
+    private void updateMaskes(int d) {
+        if (labels[d].length > 0) {
+            this.docMaskes[d] = new HashSet<Integer>();
+            for (int label : labels[d]) {
+                Node node = nodes[label];
+                while (node != null) {
+                    docMaskes[d].add(node.id);
+                    node = node.getParent();
                 }
             }
         }
@@ -850,38 +1178,61 @@ public class L2H extends AbstractSampler {
     @Override
     public double getLogLikelihood() {
         double wordLlh = 0.0;
-        for (int kk = 0; kk < L + 1; kk++) {
-            wordLlh += nodeList[kk].getLogLikelihood();
+        for (int ll = 0; ll < L; ll++) {
+            wordLlh += nodes[ll].getWordLogLikelihood();
         }
 
-        double treeLlh = 0.0;
-        double heightLogprob = 0.0;
-        double widthLogprob = 0.0;
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
+        double docSwitchesLlh = 0.0;
+        for (int dd = 0; dd < D; dd++) {
+            docSwitchesLlh += docSwitches[dd].getLogLikelihood();
+        }
 
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-
-                double weight = node.getWeight(child.getContent()); // constant if the tree is fixed
-                treeLlh += weight;
+        double docLabelLlh = 0.0;
+        for (int dd = 0; dd < D; dd++) {
+            // inside
+            if (!docMaskes[dd].isEmpty()) {
+                int[] insideCounts = new int[docMaskes[dd].size()];
+                int insideCountSum = 0;
+                int ii = 0;
+                for (int ll : docMaskes[dd]) {
+                    insideCounts[ii++] = docLabelCounts[dd].getCount(ll);
+                    insideCountSum += docLabelCounts[dd].getCount(ll);
+                }
+                double insideLlh = SamplerUtils.computeLogLhood(insideCounts,
+                        insideCountSum, hyperparams.get(ALPHA));
+                docLabelLlh += insideLlh;
             }
 
-            heightLogprob += node.getHeightLogLikelihood(hyperparams.get(MEAN),
-                    hyperparams.get(SCALE));
+            // outside
+            int[] outsideCounts = new int[L - docMaskes[dd].size()];
+            int outsideCountSum = 0;
+            int ii = 0;
+            for (int ll = 0; ll < L; ll++) {
+                if (docMaskes[dd].contains(ll)) {
+                    continue;
+                }
+                outsideCounts[ii++] = docLabelCounts[dd].getCount(ll);
+                outsideCountSum += docLabelCounts[dd].getCount(ll);
+            }
+            double outsideLlh = SamplerUtils.computeLogLhood(outsideCounts,
+                    outsideCountSum, hyperparams.get(ALPHA));
+            docLabelLlh += outsideLlh;
         }
 
-        double llh = wordLlh + treeLlh + heightLogprob + widthLogprob;
-        if (verbose) {
-            logln("--- word: " + MiscUtils.formatDouble(wordLlh)
-                    + ". tree: " + MiscUtils.formatDouble(treeLlh)
-                    + ". height: " + MiscUtils.formatDouble(heightLogprob)
-                    + ". width: " + MiscUtils.formatDouble(widthLogprob)
-                    + ". llh = " + MiscUtils.formatDouble(llh));
+        double treeLp = 0.0;
+        for (int ll = 0; ll < L; ll++) {
+            Node node = nodes[ll];
+            if (node.isRoot()) {
+                continue;
+            }
+            treeLp += Math.log(inWeights[ll].get(node.getParent().id));
         }
-        return llh;
+
+        logln(">>> >>> word: " + MiscUtils.formatDouble(wordLlh)
+                + ". switch: " + MiscUtils.formatDouble(docSwitchesLlh)
+                + ". label: " + MiscUtils.formatDouble(docLabelLlh)
+                + ". tree: " + MiscUtils.formatDouble(treeLp));
+        return wordLlh + docSwitchesLlh + docLabelLlh + treeLp;
     }
 
     @Override
@@ -895,75 +1246,60 @@ public class L2H extends AbstractSampler {
 
     @Override
     public String getCurrentState() {
-        StringBuilder str = new StringBuilder();
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(root);
-
-        int totalObs = 0;
-        int numNodes = 0;
-        TIntIntHashMap tokenCountPerLevel = new TIntIntHashMap();
-        TIntIntHashMap nodeCountPerLevel = new TIntIntHashMap();
-
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-            numNodes++;
-            int numStays = node.getTotalNumStays();
-            tokenCountPerLevel.adjustOrPutValue(node.getLevel(), numStays, numStays);
-            nodeCountPerLevel.adjustOrPutValue(node.getLevel(), 1, 1);
-            totalObs += node.getTotalObservationCount();
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
-        }
-        str.append(">>> # observations = ").append(totalObs)
-                .append("\n>>> # nodes = ").append(numNodes)
-                .append("\n");
-        int[] levels = tokenCountPerLevel.keys();
-        Arrays.sort(levels);
-        for (int level : levels) {
-            str.append(">>> level ").append(level)
-                    .append(". ").append(nodeCountPerLevel.get(level))
-                    .append(": ").append(tokenCountPerLevel.get(level))
-                    .append("\n");
-        }
-        return str.toString();
+        return this.getSamplerFolderPath();
     }
 
     @Override
     public void validate(String msg) {
-        int numNodes = 0;
-
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
+        int numNodes = 0;
         while (!stack.isEmpty()) {
             Node node = stack.pop();
-
             numNodes++;
-            node.validate(msg);
-
-            int numPassesFromChildren = 0;
             for (Node child : node.getChildren()) {
                 stack.add(child);
-                numPassesFromChildren +=
-                        child.getTotalNumPasses()
-                        + child.getTotalNumStays();
             }
-
-            if (numPassesFromChildren != node.getTotalNumPasses()) {
-                throw new RuntimeException(msg
-                        + ". Number of passing customers mismatches. "
-                        + " Node " + node.toString()
-                        + ". " + numPassesFromChildren
-                        + " vs. " + node.getTotalNumPasses());
-            }
+            node.validate(msg);
         }
 
-        if (numNodes != L + 1) {
-            throw new RuntimeException(msg + ". Number of nodes mismatches. "
-                    + numNodes + " vs. " + (L + 1));
+        if (numNodes != L) {
+            throw new RuntimeException(msg + ". Number of connected nodes: "
+                    + numNodes + ". L = " + L);
         }
 
-        logln("Passed validation. " + msg);
+        for (int d = 0; d < D; d++) {
+            docSwitches[d].validate(msg);
+            docLabelCounts[d].validate(msg);
+
+            if (labels[d].length > 0) {
+                HashSet<Integer> tempDocMask = new HashSet<Integer>();
+                for (int label : labels[d]) {
+                    Node node = nodes[label];
+                    while (node != null) {
+                        tempDocMask.add(node.id);
+                        node = node.getParent();
+                    }
+                }
+
+                if (tempDocMask.size() != docMaskes[d].size()) {
+                    for (int ll : labels[d]) {
+                        System.out.println("label " + ll + "\t" + nodes[ll].toString());
+                    }
+                    System.out.println();
+                    for (int ii : tempDocMask) {
+                        System.out.println("true " + ii + "\t" + nodes[ii].toString());
+                    }
+                    System.out.println();
+                    for (int ii : docMaskes[d]) {
+                        System.out.println("actu " + ii + "\t" + nodes[ii].toString());
+                    }
+                    throw new RuntimeException(msg + ". Mask sizes mismatch. "
+                            + tempDocMask.size() + " vs. " + docMaskes[d].size()
+                            + " in document " + d);
+                }
+            }
+        }
     }
 
     @Override
@@ -971,50 +1307,57 @@ public class L2H extends AbstractSampler {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
         }
-
         try {
+            // model
             StringBuilder modelStr = new StringBuilder();
-            for (int k = 0; k < nodeList.length; k++) {
-                Node node = nodeList[k];
-                modelStr.append(k).append("\n");
-
-                // parent
-                Node parent = node.getParent();
-                if (parent == null) {
-                    modelStr.append(-1).append("\n");
-                } else {
-                    modelStr.append(parent.getContent()).append("\n");
+            for (int k = 0; k < nodes.length; k++) {
+                Node node = nodes[k];
+                modelStr.append(k)
+                        .append("\t").append(node.getIndex())
+                        .append("\t").append(node.getLevel())
+                        .append("\n");
+                for (int v = 0; v < node.topic.length; v++) {
+                    modelStr.append(node.topic[v]).append("\t");
                 }
-
-                // children
-                Collection<Node> children = node.getChildren();
-                modelStr.append(children.size()).append("\n");
-                for (Node child : children) {
-                    modelStr.append(child.getContent()).append("\n");
-                }
-
-                modelStr.append(node.getIterationCreated()).append("\n");
-                modelStr.append(node.getIndex()).append("\n");
-                modelStr.append(node.getLevel()).append("\n");
-
-                modelStr.append(outputIntIntHashMap(node.numStays)).append("\n");
-                modelStr.append(outputIntIntHashMap(node.numPasses)).append("\n");
-                modelStr.append(outputIntIntHashMap(node.observations)).append("\n");
-                modelStr.append(outputDoubleArray(node.topic)).append("\n");
+                modelStr.append("\n");
             }
 
-            // assignments
+            for (int k = 0; k < nodes.length; k++) {
+                modelStr.append(k);
+                if (nodes[k].getParent() == null) {
+                    modelStr.append("\t-1\n");
+                } else {
+                    modelStr.append("\t").append(nodes[k].getParent().id).append("\n");
+                }
+            }
+
+            for (int k = 0; k < nodes.length; k++) {
+                modelStr.append(k).append("\t")
+                        .append(SparseVector.output(inWeights[k])).append("\n");
+            }
+
+            // data
             StringBuilder assignStr = new StringBuilder();
             for (int d = 0; d < D; d++) {
                 assignStr.append(d).append("\n");
+                assignStr.append(DirMult.output(docSwitches[d])).append("\n");
+                assignStr.append(SparseCount.output(docLabelCounts[d])).append("\n");
                 for (int n = 0; n < words[d].length; n++) {
                     assignStr.append(z[d][n]).append("\t");
                 }
                 assignStr.append("\n");
+                for (int n = 0; n < words[d].length; n++) {
+                    assignStr.append(x[d][n]).append("\t");
+                }
+                assignStr.append("\n");
             }
+
+            // output to a compressed file
+            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while outputing state to "
+                    + filepath);
         }
     }
 
@@ -1023,94 +1366,88 @@ public class L2H extends AbstractSampler {
         if (verbose) {
             logln("--- Reading state from " + filepath);
         }
-
         try {
             inputModel(filepath);
 
             inputAssignments(filepath);
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Excepion while inputing state from "
+                    + filepath);
         }
-
-        validate("Done reading state from " + filepath);
     }
 
     private void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath);
         }
-
         try {
             // initialize
-            this.initializeModelStructure();
-
+            this.nodes = new Node[L];
+//            this.inWeights = new SparseVector[L];
             String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
-            int numLabels = Integer.parseInt(reader.readLine());
-            if (numLabels != L + 1) {
-                throw new RuntimeException("Number of labels mismatches. "
-                        + numLabels + " vs. " + (L + 1));
+
+            for (int k = 0; k < L; k++) {
+                // node ids
+                String[] sline = reader.readLine().split("\t");
+                int id = Integer.parseInt(sline[0]);
+                if (id != k) {
+                    throw new RuntimeException("Mismatch");
+                }
+                int idx = Integer.parseInt(sline[1]);
+                int level = Integer.parseInt(sline[2]);
+                nodes[k] = new Node(id, idx, level, null, null);
+
+                // node topic
+                sline = reader.readLine().split("\t");
+                double[] topic = new double[V];
+                if (sline.length != V) {
+                    throw new RuntimeException("Mismatch: " + sline.length + " vs. " + V);
+                }
+                for (int v = 0; v < V; v++) {
+                    topic[v] = Double.parseDouble(sline[v]);
+                }
+                nodes[k].topic = topic;
             }
 
-            // load node contents
-            ArrayList<Integer>[] childrenList = new ArrayList[numLabels];
-            int[] parentList = new int[numLabels];
-            for (int k = 0; k < numLabels; k++) {
-                int nodeId = Integer.parseInt(reader.readLine());
-                if (nodeId != k) {
-                    throw new RuntimeException("Node id mismatches. "
-                            + nodeId + " vs. " + k);
+            // tree structure
+            for (int k = 0; k < L; k++) {
+                String[] sline = reader.readLine().split("\t");
+                if (Integer.parseInt(sline[0]) != k) {
+                    throw new RuntimeException("Mismatch");
                 }
-
-                // parent
-                int parentId = Integer.parseInt(reader.readLine());
-                parentList[k] = parentId;
-
-                // children
-                int numChildren = Integer.parseInt(reader.readLine());
-                ArrayList<Integer> children = new ArrayList<Integer>();
-                for (int ii = 0; ii < numChildren; ii++) {
-                    children.add(Integer.parseInt(reader.readLine()));
-                }
-                childrenList[k] = children;
-
-                int iterCreated = Integer.parseInt(reader.readLine());
-                int index = Integer.parseInt(reader.readLine());
-                int level = Integer.parseInt(reader.readLine());
-
-                if (k == L) {
-                    nodeList[k] = this.root;
+                int parentId = Integer.parseInt(sline[1]);
+                if (parentId == -1) {
+                    root = nodes[k];
                 } else {
-                    nodeList[k] = new Node(iterCreated, index, level, nodeId, null);
-                }
-                nodeList[k].numStays = inputIntIntHashMap(reader.readLine());
-                nodeList[k].numPasses = inputIntIntHashMap(reader.readLine());
-                nodeList[k].observations = inputIntIntHashMap(reader.readLine());
-                nodeList[k].topic = inputDoubleArray(reader.readLine());
-            }
-
-            // assign parent/child relationships
-            for (int kk = 0; kk < numLabels; kk++) {
-                Node node = nodeList[kk];
-
-                // parent
-                if (kk < L) {
-                    Node parent = nodeList[parentList[kk]];
-                    node.setParent(parent);
-                }
-
-                // children
-                ArrayList<Integer> children = childrenList[kk];
-                for (int ii : children) {
-                    Node child = nodeList[ii];
-                    node.addChild(ii, child);
-                }
-
-                if (children.isEmpty()) {
-                    leaves.add(node);
+                    nodes[k].setParent(nodes[parentId]);
+                    nodes[parentId].addChild(nodes[k].getIndex(), nodes[k]);
                 }
             }
+            for (int k = 0; k < L; k++) {
+                nodes[k].fillInactiveChildIndices();
+            }
+
+            // edge weight
+//            String line;
+//            int count = 0;
+//            while((line = reader.readLine()) != null) {
+//                String[] sline = line.split("\t");
+//                if (Integer.parseInt(sline[0]) != count) {
+//                    throw new RuntimeException("Mismatch");
+//                }
+//                this.inWeights[count] = SparseVector.input(sline[1]);
+//                count ++;
+//            }
+
+//            for (int k = 0; k < L; k++) {
+//                String[] sline = reader.readLine().split("\t");
+//                if (Integer.parseInt(sline[0]) != k) {
+//                    throw new RuntimeException("Mismatch");
+//                }
+//                this.inWeights[k] = SparseVector.input(sline[1]);
+//            }
 
             reader.close();
         } catch (Exception e) {
@@ -1118,13 +1455,16 @@ public class L2H extends AbstractSampler {
             throw new RuntimeException("Exception while inputing model from "
                     + zipFilepath);
         }
+
+        if (verbose) {
+            logln("--- Model loaded.\n" + printTreeStructure());
+        }
     }
 
-    private void inputAssignments(String zipFilepath) throws Exception {
+    private void inputAssignments(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath);
         }
-
         try {
             // initialize
             this.initializeDataStructure();
@@ -1136,10 +1476,21 @@ public class L2H extends AbstractSampler {
                 if (docIdx != d) {
                     throw new RuntimeException("Indices mismatch when loading assignments");
                 }
-
-                String[] sline = reader.readLine().split("\t");
+                docSwitches[d] = DirMult.input(reader.readLine());
+                docLabelCounts[d] = SparseCount.input(reader.readLine());
+                String[] sline = reader.readLine().trim().split("\t");
+                if (sline.length != words[d].length) {
+                    throw new RuntimeException("Mismatch");
+                }
                 for (int n = 0; n < words[d].length; n++) {
                     z[d][n] = Integer.parseInt(sline[n]);
+                }
+                sline = reader.readLine().trim().split("\t");
+                if (sline.length != words[d].length) {
+                    throw new RuntimeException("Mismatch");
+                }
+                for (int n = 0; n < words[d].length; n++) {
+                    x[d][n] = Integer.parseInt(sline[n]);
                 }
             }
             reader.close();
@@ -1151,48 +1502,6 @@ public class L2H extends AbstractSampler {
     }
 
     /**
-     * Get the document frequency of each label
-     *
-     * @return An array of label's document frequency
-     */
-    private int[] getLabelFrequencies() {
-        int[] labelFreqs = new int[L];
-        for (int dd = 0; dd < D; dd++) {
-            for (int ii = 0; ii < labels[dd].length; ii++) {
-                labelFreqs[labels[dd][ii]]++;
-            }
-        }
-        return labelFreqs;
-    }
-
-    /**
-     * Get the document frequency of each label pair
-     *
-     * @return Document frequency of each label pair
-     */
-    private HashMap<String, Integer> getLabelPairFrequencies() {
-        HashMap<String, Integer> pairFreqs = new HashMap<String, Integer>();
-        for (int d = 0; d < D; d++) {
-            int[] docLabels = labels[d];
-            for (int ii = 0; ii < docLabels.length; ii++) {
-                for (int jj = 0; jj < docLabels.length; jj++) {
-                    if (ii == jj) {
-                        continue;
-                    }
-                    String pair = docLabels[ii] + "-" + docLabels[jj];
-                    Integer count = pairFreqs.get(pair);
-                    if (count == null) {
-                        pairFreqs.put(pair, 1);
-                    } else {
-                        pairFreqs.put(pair, count + 1);
-                    }
-                }
-            }
-        }
-        return pairFreqs;
-    }
-
-    /**
      * Print out the structure (number of observations at each level) of the
      * global tree.
      */
@@ -1201,25 +1510,33 @@ public class L2H extends AbstractSampler {
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
 
-        SparseCount levelNodeCounts = new SparseCount();
-        int maxLevel = -1;
+        SparseCount nodeCountPerLevel = new SparseCount();      // nodes
+        SparseCount obsCountPerLevel = new SparseCount();       // observation
 
         while (!stack.isEmpty()) {
             Node node = stack.pop();
-            levelNodeCounts.increment(node.getLevel());
-            if (node.getLevel() > maxLevel) {
-                maxLevel = node.getLevel();
+            // node
+            nodeCountPerLevel.increment(node.getLevel());
+            // observation
+            if (node.getContent() != null) {
+                obsCountPerLevel.changeCount(node.getLevel(),
+                        node.getContent().getCountSum());
             }
             for (Node child : node.getChildren()) {
                 stack.add(child);
             }
         }
 
-        for (int ii = 0; ii < maxLevel; ii++) {
-            str.append("level ").append(ii).append("\t")
-                    .append("# nodes: ").append(levelNodeCounts.getCount(ii))
+        for (int level : nodeCountPerLevel.getSortedIndices()) {
+            str.append(">>> level ").append(level)
+                    .append(". n: ").append(nodeCountPerLevel.getCount(level))
+                    .append(". o: ").append(obsCountPerLevel.getCount(level))
+                    .append(" (").append((double) obsCountPerLevel.getCount(level)
+                    / nodeCountPerLevel.getCount(level)).append(")")
                     .append("\n");
         }
+        str.append(">>> >>> # nodes: ").append(nodeCountPerLevel.getCountSum()).append("\n");
+        str.append(">>> >>> # obs  : ").append(obsCountPerLevel.getCountSum()).append("\n");
         return str.toString();
     }
 
@@ -1228,36 +1545,43 @@ public class L2H extends AbstractSampler {
      *
      * @param numTopWords Number of top words shown for each topic
      */
-    public String printGlobalTree(int numTopWords) {
+    public String printTree(int numTopWords) {
         StringBuilder str = new StringBuilder();
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
 
         int totalObs = 0;
         int numNodes = 0;
-        TIntIntHashMap tokenCountPerLevel = new TIntIntHashMap();
-        TIntIntHashMap nodeCountPerLevel = new TIntIntHashMap();
+        SparseCount nodeCountPerLevel = new SparseCount(); // nodes
+        SparseCount obsCountPerLevel = new SparseCount();  // observations
 
         while (!stack.isEmpty()) {
             Node node = stack.pop();
             numNodes++;
-            int numStays = node.getTotalNumStays();
-            tokenCountPerLevel.adjustOrPutValue(node.getLevel(), numStays, numStays);
-            nodeCountPerLevel.adjustOrPutValue(node.getLevel(), 1, 1);
+            // node
+            nodeCountPerLevel.increment(node.getLevel());
+
+            // observation
+            if (node.getContent() != null) {
+                obsCountPerLevel.changeCount(node.getLevel(),
+                        node.getContent().getCountSum());
+                totalObs += node.getContent().getCountSum();
+            }
 
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("\t");
             }
 
-            String[] topWords = getTopWords(node.topic, numTopWords);
-            str
-                    .append(node.toString()).append(", ")
-                    .append(labelVocab.get(node.getContent()))
-                    .append(" ").append(node.getTotalObservationCount())
-                    .append(" ").append(Arrays.toString(topWords))
-                    .append("\n\n");
+            String[] topWords = null;
+            if (node.topic != null) {
+                topWords = getTopWords(node.topic, numTopWords);
+            }
 
-            totalObs += node.getTotalObservationCount();
+            str.append(node.toString()).append(", ")
+                    .append(getLabelString(node.id))
+                    .append(" ").append(node.getContent() == null ? "" : node.getContent().getCountSum())
+                    .append(" ").append(topWords == null ? "" : Arrays.toString(topWords))
+                    .append("\n\n");
 
             for (Node child : node.getChildren()) {
                 stack.add(child);
@@ -1266,12 +1590,10 @@ public class L2H extends AbstractSampler {
         str.append(">>> # observations = ").append(totalObs)
                 .append("\n>>> # nodes = ").append(numNodes)
                 .append("\n");
-        int[] levels = tokenCountPerLevel.keys();
-        Arrays.sort(levels);
-        for (int level : levels) {
+        for (int level : nodeCountPerLevel.getSortedIndices()) {
             str.append(">>> level ").append(level)
-                    .append(". ").append(nodeCountPerLevel.get(level))
-                    .append(": ").append(tokenCountPerLevel.get(level))
+                    .append(". n: ").append(nodeCountPerLevel.getCount(level))
+                    .append(". o: ").append(obsCountPerLevel.getCount(level))
                     .append("\n");
         }
         return str.toString();
@@ -1282,758 +1604,1705 @@ public class L2H extends AbstractSampler {
             logln("Outputing global tree to " + outputFile);
         }
         BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        writer.write(this.printGlobalTree(numTopWords));
+        writer.write(this.printTree(numTopWords));
         writer.close();
     }
 
-    public void outputTopicCoherence(
-            File file,
-            MimnoTopicCoherence topicCoherence) throws Exception {
+    public void outputLexicalCorrelations(File outputFile) throws Exception {
         if (verbose) {
-            logln("Outputing topic coherence to file " + file);
+            logln("Outputing lexical correlations to " + outputFile);
         }
 
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        double[][] avgTopics = new double[L - 1][V];
+        int numModels = 0;
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+                for (int ll = 0; ll < L - 1; ll++) {
+                    double[] topic = nodes[ll].topic;
+                    for (int v = 0; v < V; v++) {
+                        avgTopics[ll][v] += topic[v];
+                    }
+                }
+                numModels++;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing label "
+                    + "correlation to " + outputFile);
+        }
+
+        for (int ll = 0; ll < avgTopics.length; ll++) {
+            for (int v = 0; v < V; v++) {
+                avgTopics[ll][v] /= numModels;
+            }
+        }
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int v = 0; v < V; v++) {
+            writer.write(v + "," + v + ":1 ");
+            for (int u = 0; u < v; u++) {
+                double score = 0.0;
+                for (int ll = 0; ll < avgTopics.length; ll++) {
+                    score += avgTopics[ll][v] * avgTopics[ll][u];
+                }
+                writer.write((u + L) + "," + (v + L) + ":" + score + " ");
+                writer.write((v + L) + "," + (u + L) + ":" + score + " ");
+            }
+        }
+        writer.write("\n");
+        writer.close();
+    }
+
+    public void outputLabelCorrelations(File outputFile) throws Exception {
+        if (verbose) {
+            logln("Outputing label correlations to " + outputFile);
+        }
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        double[][] avgTopics = new double[L - 1][V];
+        int numModels = 0;
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+                for (int ll = 0; ll < L - 1; ll++) {
+                    double[] topic = nodes[ll].topic;
+                    for (int v = 0; v < V; v++) {
+                        avgTopics[ll][v] += topic[v];
+                    }
+                }
+                numModels++;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing label "
+                    + "correlation to " + outputFile);
+        }
+
+        for (int ll = 0; ll < avgTopics.length; ll++) {
+            for (int v = 0; v < V; v++) {
+                avgTopics[ll][v] /= numModels;
+            }
+        }
+
+        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+        for (int ii = 0; ii < L - 1; ii++) {
+            writer.write(ii + "," + ii + ":1 ");
+            for (int jj = 0; jj < ii; jj++) {
+                double cosine = StatUtils.cosineSimilarity(avgTopics[ii], avgTopics[jj]);
+                if (cosine > 0.1) {
+                    writer.write(ii + "," + jj + ":" + cosine + " ");
+                    writer.write(jj + "," + ii + ":" + cosine + " ");
+                }
+//                double klDivij = StatisticsUtils.KLDivergenceAsymmetric(nodes[ii].topic, nodes[jj].topic);
+//                double klDivji = StatisticsUtils.KLDivergenceAsymmetric(nodes[jj].topic, nodes[ii].topic);
+//                writer.write(ii + "," + jj + ":" + klDivij + " ");
+//                writer.write(jj + "," + ii + ":" + klDivji + " ");
+            }
+        }
+        writer.write("\n");
+        writer.close();
+    }
+
+    // ******************* Start prediction ************************************
+    /**
+     * Sample test documents in parallel.
+     *
+     * @param newWords Test document
+     * @param numLabels Number of labels used for prediction
+     * @param iterPredFolder Folder to store predictions using different models
+     * @param sampler The configured sampler
+     * @param initPredictions Initial predictions from TF-IDF
+     * @param topK The number of nearest neighbors to be initially included in
+     * the candidate set
+     */
+    public static void parallelTest(int[][] newWords, File iterPredFolder, L2H sampler,
+            double[][] initPredictions, int topK) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPredFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                // folder contains multiple samples during test using a learned model
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPredFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+
+                L2HTestRunner runner = new L2HTestRunner(sampler,
+                        newWords, stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath(),
+                        initPredictions, topK);
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+            runThreads(threads); // run MAX_NUM_PARALLEL_THREADS threads at a time
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during parallel test.");
+        }
+    }
+
+    /**
+     * Perform sampling for test documents to predict labels.
+     *
+     * @param stateFile File containing learned model
+     * @param newWords Test document
+     * @param outputSamplingFolder Output file
+     */
+    public void sampleNewDocuments(String stateFile,
+            int[][] newWords,
+            String outputResultFile,
+            double[][] initPredictions,
+            int topK) {
+        if (verbose) {
+            System.out.println();
+            logln("Perform prediction using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        // test data
+        this.words = newWords;
+        this.labels = null;
+        this.D = this.words.length;
+
+        // initialize data structure
+        this.z = new int[D][];
+        this.x = new int[D][];
+        this.docSwitches = new DirMult[D];
+        this.docLabelCounts = new SparseCount[D];
+        this.docMaskes = new Set[D];
+
+        for (int d = 0; d < D; d++) {
+            this.z[d] = new int[words[d].length];
+            this.x[d] = new int[words[d].length];
+            this.docSwitches[d] = new DirMult(
+                    new double[]{hyperparams.get(A_0), hyperparams.get(B_0)});
+            this.docLabelCounts[d] = new SparseCount();
+            this.docMaskes[d] = new HashSet<Integer>();
+
+            Set<Integer> cands = getCandidates(initPredictions[d], topK);
+            for (int label : cands) {
+                Node node = nodes[label];
+                while (node != null) {
+                    docMaskes[d].add(node.id);
+                    node = node.getParent();
+                }
+            }
+        }
+
+        // initialize: sampling using global distribution over labels
+        if (verbose) {
+            logln("--- Sampling on test data ...");
+        }
+        double[][] predictedScores = new double[D][L - 1]; // exclude root
+        int count = 0;
+        for (iter = 0; iter < testMaxIter; iter++) {
+            if (iter % testSampleLag == 0) {
+                logln("--- --- iter " + iter + "/" + testMaxIter
+                        + " @ thread " + Thread.currentThread().getId()
+                        + "\t" + getSamplerFolderPath());
+            }
+            if (iter == 0) {
+                sampleXZsMH(!REMOVE, !ADD, !REMOVE, ADD);
+            } else {
+                sampleXZsMH(!REMOVE, !ADD, REMOVE, ADD);
+            }
+
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                for (int dd = 0; dd < D; dd++) {
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        predictedScores[dd][ll] +=
+                                (double) docLabelCounts[dd].getCount(ll) / words[dd].length;
+                    }
+                }
+                count++;
+            }
+        }
+
+        // output result during test time
+        if (verbose) {
+            logln("--- Outputing result to " + outputResultFile);
+        }
+        for (int dd = 0; dd < D; dd++) {
+            for (int ll = 0; ll < L - 1; ll++) {
+                predictedScores[dd][ll] /= count;
+            }
+        }
+        PredictionUtils.outputSingleModelClassifications(new File(outputResultFile),
+                predictedScores);
+    }
+
+    /**
+     * TODO: add other ways to get the candidate set.
+     */
+    private Set<Integer> getCandidates(double[] scores, int topK) {
+        Set<Integer> cands = new HashSet<Integer>();
+        ArrayList<RankingItem<Integer>> docRankLabels = MiscUtils.getRankingList(scores);
+        for (int ii = 0; ii < topK; ii++) {
+            cands.add(docRankLabels.get(ii).getObject());
+        }
+        return cands;
+    }
+
+    private Set<Integer> getCandidatesNew(double[] scores) {
+        Set<Integer> cands = new HashSet<Integer>();
+        ArrayList<RankingItem<Integer>> docRankLabels = MiscUtils.getRankingList(scores);
+        int maxNum = 10;
+        double minSimScore = 0.25;
+        int ii = 0;
+        while (true) {
+            RankingItem<Integer> item = docRankLabels.get(ii++);
+            if (item.getPrimaryValue() < minSimScore) {
+                break;
+            }
+            cands.add(item.getObject());
+            if (cands.size() == maxNum) {
+                break;
+            }
+        }
+        return cands;
+    }
+
+    public double[][] getTrainingExtendedLexiconFeatureVectors(int nTopWords) {
+        double[][] featVecs = null;
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+
+        double[][] thetas = new double[D][L - 1];
+        double[][] phis = new double[L - 1][V];
+        double[][] thetasSubtree = new double[D][L - 1];
+
+        int numModels = 0;
+        try {
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                numModels++;
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+
+                for (int d = 0; d < D; d++) {
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        double val = (double) docLabelCounts[d].getCount(ll) / words[d].length;
+                        if (val < 0.01) {
+                            val = 0.0;
+                        }
+                        thetas[d][ll] += val;
+                    }
+                }
+
+                for (int ll = 0; ll < L - 1; ll++) {
+                    for (int v = 0; v < V; v++) {
+                        phis[ll][v] += nodes[ll].topic[v];
+                    }
+                }
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int ll = 0; ll < thetas[d].length; ll++) {
+                    thetas[d][ll] /= numModels;
+                }
+            }
+
+            for (int ll = 0; ll < phis.length; ll++) {
+                for (int v = 0; v < V; v++) {
+                    phis[ll][v] /= numModels;
+                }
+            }
+
+            ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[phis.length];
+            Set<Integer>[] labelTopWords = new Set[phis.length];
+            for (int ll = 0; ll < phis.length; ll++) {
+                labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
+
+                labelTopWords[ll] = new HashSet<Integer>();
+                for (int ii = 0; ii < nTopWords; ii++) {
+                    labelTopWords[ll].add(labelRankWords[ll].get(ii).getObject());
+                }
+            }
+
+            Set<Integer> labelSet = new HashSet<Integer>();
+            for (int ll = 0; ll < L - 1; ll++) {
+                labelSet.add(ll);
+            }
+
+//            featVecs = new double[thetas.length][V + thetas[0].length];
+            featVecs = new double[thetas.length][thetas[0].length * 2];
+            for (int dd = 0; dd < featVecs.length; dd++) {
+                int count = 0;
+//                double[] extFeatVec = getFeature(thetas[dd], labelRankWords, nTopWords, labelSet);
+//                for (int ii = 0; ii < extFeatVec.length; ii++) {
+//                    featVecs[dd][count++] = extFeatVec[ii];
+//                }
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                    featVecs[dd][count++] = thetas[dd][ll];
+                }
+
+                SparseCount sc = new SparseCount();
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                    for (int n = 0; n < words[dd].length; n++) {
+                        if (labelTopWords[ll].contains(words[dd][n])) {
+                            sc.increment(ll);
+                        }
+                    }
+                }
+                int sum = sc.getCountSum();
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                    int cc = sc.getCount(ll);
+                    if (cc == 0) {
+                        featVecs[dd][count] = 0.0;
+                    } else {
+                        featVecs[dd][count] = (double) sc.getCount(ll) / sum;
+                    }
+                    count++;
+                }
+
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting training feature vectors.");
+        }
+        return featVecs;
+    }
+
+    public double[][] getTestExtendedLexiconFeatureVectors(File iterPredFolder,
+            File reportFolder, int nTopWords) {
+        double[][] featVecs = null;
+        String[] filenames = iterPredFolder.list();
+        try {
+            double[][] thetas = new double[D][L - 1];
+            double[][] phis = new double[L - 1][V];
+            double[][] thetasSubtree = new double[D][L - 1];
+
+            int numModels = 0;
+            for (String filename : filenames) {
+                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
+                        new File(iterPredFolder, filename));
+                if (singlePreds[0].length != L - 1) {
+                    throw new RuntimeException("Mismatch");
+                }
+
+                numModels++;
+                inputModel(new File(reportFolder, filename.replaceAll("txt", "zip")).getAbsolutePath());
+
+                for (int d = 0; d < D; d++) {
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        double val = singlePreds[d][ll];
+                        if (val < 0.01) {
+                            val = 0.0;
+                        }
+                        thetas[d][ll] += val;
+                    }
+                }
+
+                for (int ll = 0; ll < L - 1; ll++) {
+                    for (int v = 0; v < V; v++) {
+                        phis[ll][v] += nodes[ll].topic[v];
+                    }
+                }
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int ll = 0; ll < thetas[d].length; ll++) {
+                    thetas[d][ll] /= numModels;
+                }
+            }
+
+            for (int ll = 0; ll < phis.length; ll++) {
+                for (int v = 0; v < V; v++) {
+                    phis[ll][v] /= numModels;
+                }
+            }
+
+            ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[phis.length];
+            Set<Integer>[] labelTopWords = new Set[phis.length];
+            for (int ll = 0; ll < phis.length; ll++) {
+                labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
+
+                labelTopWords[ll] = new HashSet<Integer>();
+                for (int ii = 0; ii < nTopWords; ii++) {
+                    labelTopWords[ll].add(labelRankWords[ll].get(ii).getObject());
+                }
+            }
+
+            Set<Integer> labelSet = new HashSet<Integer>();
+            for (int ll = 0; ll < L - 1; ll++) {
+                labelSet.add(ll);
+            }
+
+            Set<Node>[] subtrees = new Set[L - 1];
+            for (int ll = 0; ll < L - 1; ll++) {
+                subtrees[ll] = getSubtree(nodes[ll]);
+            }
+
+//            featVecs = new double[thetas.length][V + thetas[0].length];
+            featVecs = new double[thetas.length][thetas[0].length * 2];
+            for (int dd = 0; dd < featVecs.length; dd++) {
+                int count = 0;
+//                double[] extFeatVec = getFeature(thetas[dd], labelRankWords, nTopWords, labelSet);
+//                for (int ii = 0; ii < extFeatVec.length; ii++) {
+//                    featVecs[dd][count++] = extFeatVec[ii];
+//                }
+                for (int ii = 0; ii < thetas[dd].length; ii++) {
+                    featVecs[dd][count++] = thetas[dd][ii];
+                }
+
+                // appear in top words
+                SparseCount sc = new SparseCount();
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                    for (int n = 0; n < words[dd].length; n++) {
+                        if (labelTopWords[ll].contains(words[dd][n])) {
+                            sc.increment(ll);
+                        }
+                    }
+                }
+                int sum = sc.getCountSum();
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                    int cc = sc.getCount(ll);
+                    if (cc == 0) {
+                        featVecs[dd][count] = 0.0;
+                    } else {
+                        featVecs[dd][count] = (double) sc.getCount(ll) / sum;
+                    }
+                    count++;
+                }
+
+                // appear in subtree
+                SparseCount subtreeCount = new SparseCount();
+                for (int ll = 0; ll < thetas[dd].length; ll++) {
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting test feature vectors.");
+        }
+        return featVecs;
+    }
+
+//    private boolean isInSubtreeTopWords(Set<Integer> subtree, Set<Integer>[] labelTopWords, )
+    private double[] getFeature(double[] docThetas,
+            ArrayList<RankingItem<Integer>>[] labelRankWords,
+            int nTopWords,
+            Set<Integer> labelSet) {
+        int numWords = labelRankWords[0].size();
+
+        double[] vec = new double[numWords];
+        for (int ll : labelSet) {
+            for (int ii = 0; ii < nTopWords; ii++) {
+                RankingItem<Integer> item = labelRankWords[ll].get(ii);
+                int wid = item.getObject();
+                double val = item.getPrimaryValue() * docThetas[ll];
+                vec[wid] += val;
+            }
+        }
+        return vec;
+    }
+
+    private double[][] getFeatures(double[][] thetas,
+            double[][] phis,
+            int nTopWords,
+            Set<Integer> labelSet) {
+        int numDocs = thetas.length;
+        int numLabels = phis.length;
+        int numWords = phis[0].length;
+
+        ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[numLabels];
+        for (int ll = 0; ll < numLabels; ll++) {
+            labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
+        }
+
+        double[][] vec = new double[thetas.length][numWords];
+        for (int d = 0; d < numDocs; d++) {
+            for (int ll : labelSet) {
+                for (int ii = 0; ii < nTopWords; ii++) {
+                    RankingItem<Integer> item = labelRankWords[ll].get(ii);
+                    int wid = item.getObject();
+                    double val = item.getPrimaryValue() * thetas[d][ll];
+                    vec[d][wid] += val;
+                }
+            }
+        }
+        return vec;
+    }
+
+    public double[][] getTrainingHierarchicalFeatureVectors() {
+        double[][] featVecs = new double[D][L * 3 - 3];
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        double[][] phis = new double[L - 1][V];
+        try {
+            int numModels = 0;
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                numModels++;
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+
+
+                Set<Node>[] subtrees = new Set[L - 1];
+                for (int ll = 0; ll < L - 1; ll++) {
+                    subtrees[ll] = getSubtree(nodes[ll]);
+                }
+
+                for (int d = 0; d < D; d++) {
+                    double[] empDist = new double[L - 1];
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        empDist[ll] = (double) docLabelCounts[d].getCount(ll) / words[d].length;
+                        if (empDist[ll] < 0.05) {
+                            empDist[ll] = 0.0;
+                        }
+                    }
+
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        Node node = nodes[ll];
+                        // per node 
+                        featVecs[d][ll] += empDist[ll];
+
+                        // per edge 
+//                        for (Node child : node.getChildren()) {
+//                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
+//                        }
+
+                        // per subtree
+//                        for (Node desc : subtrees[ll]) {
+//                            if (desc.id == ll) {
+//                                continue;
+//                            }
+//                            featVecs[d][1 * (L - 1) + ll] += empDist[desc.id];
+//                        }
+                    }
+                }
+            }
+
+            for (int d = 0; d < D; d++) {
+                for (int ii = 0; ii < featVecs[d].length; ii++) {
+                    featVecs[d][ii] /= numModels;
+                }
+            }
+
+//            for (int d = 0; d < D; d++) {
+//                for (int ii = 0; ii < featVecs[d].length; ii++) {
+//                    featVecs[d][ii] = Math.log(featVecs[d][ii] * words[d].length / numModels + 1);
+//                }
+//                for (int xx = 0; xx < 3; xx++) {
+//                    for (int ll = 0; ll < L - 1; ll++) {
+//                        featVecs[d][xx * (L - 1) + ll] *= labelIDFs[ll];
+//                    }
+//                }
+//            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting training feature vectors.");
+        }
+        return featVecs;
+    }
+
+    public double[][] getTestHierarchicalFeatureVectors(File iterPredFolder,
+            File reportFolder) {
+        double[][] featVecs = new double[D][3 * L - 3];
+        String[] filenames = iterPredFolder.list();
+        try {
+            int numModels = 0;
+            for (String filename : filenames) {
+                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
+                        new File(iterPredFolder, filename));
+                if (singlePreds[0].length != L - 1) {
+                    throw new RuntimeException("Mismatch");
+                }
+
+                numModels++;
+                inputModel(new File(reportFolder, filename.replaceAll("txt", "zip")).getAbsolutePath());
+                Set<Node>[] subtrees = new Set[L - 1];
+                for (int ll = 0; ll < L - 1; ll++) {
+                    subtrees[ll] = getSubtree(nodes[ll]);
+                }
+
+                for (int d = 0; d < D; d++) {
+                    double[] empDist = singlePreds[d];
+                    for (int ll = 0; ll < empDist.length; ll++) {
+                        if (empDist[ll] < 0.05) {
+                            empDist[ll] = 0.0;
+                        }
+                    }
+
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        Node node = nodes[ll];
+                        // per node 
+                        featVecs[d][ll] += empDist[ll];
+
+                        // per edge 
+//                        for (Node child : node.getChildren()) {
+//                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
+//                        }
+
+                        // per subtree
+//                        for (Node desc : subtrees[ll]) {
+//                            if (desc.id == ll) {
+//                                continue;
+//                            }
+//                            featVecs[d][1 * (L - 1) + ll] += empDist[desc.id];
+//                        }
+                    }
+                }
+            }
+
+            for (int d = 0; d < D; d++) {
+                for (int ii = 0; ii < featVecs[d].length; ii++) {
+                    featVecs[d][ii] /= numModels;
+                }
+            }
+//            for (int d = 0; d < D; d++) {
+//                for (int ii = 0; ii < featVecs[d].length; ii++) {
+//                    featVecs[d][ii] = Math.log(featVecs[d][ii] * words[d].length / numModels + 1);
+//                }
+//                for (int xx = 0; xx < 3; xx++) {
+//                    for (int ll = 0; ll < L - 1; ll++) {
+//                        featVecs[d][xx * (L - 1) + ll] *= labelIDFs[ll];
+//                    }
+//                }
+//            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting test feature vectors.");
+        }
+        return featVecs;
+    }
+
+    private Set<Node> getSubtree(Node node) {
+        Set<Node> subtree = new HashSet<Node>();
+        Stack<Node> stack = new Stack<Node>();
+        stack.add(node);
+        while (!stack.isEmpty()) {
+            Node n = stack.pop();
+            subtree.add(n);
+            for (Node c : n.getChildren()) {
+                stack.add(c);
+            }
+        }
+        return subtree;
+    }
+
+    public SparseVector[] getTrainingFeatureVectors() {
+        SparseVector[] featVecs = new SparseVector[D];
+        for (int d = 0; d < D; d++) {
+            featVecs[d] = new SparseVector();
+        }
+
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            int numModels = 0;
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                inputState(new File(reportFolder, filename).getAbsolutePath());
+                for (int d = 0; d < D; d++) {
+                    for (int ll : docLabelCounts[d].getIndices()) {
+                        if (ll == L - 1) { // skip the root node
+                            continue;
+                        }
+                        int featIdx = ll + 1;
+                        featVecs[d].change(featIdx,
+                                (double) docLabelCounts[d].getCount(ll) / words[d].length);
+                    }
+                }
+                numModels++;
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int featIdx : featVecs[d].getIndices()) {
+                    double avgVal = featVecs[d].get(featIdx) / numModels;
+                    featVecs[d].set(featIdx, avgVal);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting training feature vectors.");
+        }
+        return featVecs;
+    }
+
+    public SparseVector[] getTestFeatureVectors(File iterPredFolder) {
+        SparseVector[] featVecs = new SparseVector[D];
+        for (int d = 0; d < D; d++) {
+            featVecs[d] = new SparseVector();
+        }
+        double[][] sumDists = new double[D][L - 1];
+
+        String[] filenames = iterPredFolder.list();
+        try {
+            for (String filename : filenames) {
+                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
+                        new File(iterPredFolder, filename));
+                if (singlePreds[0].length != L - 1) {
+                    throw new RuntimeException("Mismatch");
+                }
+                for (int d = 0; d < D; d++) {
+                    for (int ll = 0; ll < L - 1; ll++) {
+                        sumDists[d][ll] += singlePreds[d][ll];
+                    }
+                }
+            }
+
+            // average
+            for (int d = 0; d < D; d++) {
+                for (int ll = 0; ll < L - 1; ll++) {
+                    double val = sumDists[d][ll] / filenames.length;
+                    featVecs[d].set(ll + 1, val);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while getting test feature vectors.");
+        }
+
+        return featVecs;
+    }
+
+    // ================= Debug ================
+    public double[][] debugPrediction(String stateFile,
+            int[][] newWords,
+            int[][] newLabels,
+            String outputResultFile,
+            double[][] initPredictions, double scale) {
+        // input model
+        inputModel(stateFile);
+
+        // test data
+        this.words = newWords;
+        this.labels = newLabels;
+        this.D = this.words.length;
+
+        // normalize initial predicted scores
+        for (int d = 0; d < D; d++) {
+            double sum = StatUtils.sum(initPredictions[d]);
+            for (int ii = 0; ii < initPredictions[d].length; ii++) {
+                initPredictions[d][ii] /= sum;
+            }
+        }
+
+        double[][] predictedScores = new double[D][];
+        for (int d = 0; d < D; d++) {
+            predictedScores[d] = debugPredict(d, initPredictions[d], scale);
+        }
+        return predictedScores;
+    }
+
+    private double[] debugPredict(int d, double[] initPreds, double scale) {
+        double[] newPreds = new double[L - 1];
+        ArrayList<Node> leaves = new ArrayList<Node>();
+        Stack<Node> stack = new Stack<Node>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            if (node.getChildren().isEmpty()) {
+                leaves.add(node);
+            }
+            for (Node child : node.getChildren()) {
+                stack.add(child);
+            }
+        }
+
+        // bottom-up smoothing to compute pseudo-counts from children
+        Queue<Node> queue = new LinkedList<Node>();
+        for (Node leaf : leaves) {
+            queue.add(leaf);
+        }
+        while (!queue.isEmpty()) {
+            Node node = queue.poll();
+            Node parent = node.getParent();
+            if (!node.isRoot() && !queue.contains(parent)) {
+                queue.add(parent);
+            }
+
+            if (!node.isRoot()) {
+                double currentScore = initPreds[node.id];
+
+                double addedScore = 0.0;
+                // from parent
+                if (!node.getParent().isRoot()) {
+                    double scoreFromParent = inWeights[node.id].get(node.getParent().id);
+                    addedScore += scoreFromParent * initPreds[node.getParent().id];
+                }
+
+                // from children
+                double maxChildScore = -1;
+                Node maxChild = null;
+                for (Node child : node.getChildren()) {
+                    double childScore = initPreds[child.id];
+                    if (maxChildScore < childScore) {
+                        maxChildScore = childScore;
+                        maxChild = child;
+                    }
+                }
+                if (maxChild != null) {
+                    double weight = inWeights[maxChild.id].get(node.id);
+                    addedScore += maxChildScore * weight;
+                }
+
+                // current score
+                newPreds[node.id] = scale * currentScore + (1 - scale) * addedScore;
+            }
+        }
+
+        if (d < 50) {
+            System.out.println("d = " + d);
+            for (int ll : labels[d]) {
+                System.out.println("TRUE: " + ll
+                        + ". " + nodes[ll].getPathString()
+                        + ". " + labelVocab.get(ll));
+            }
+            System.out.println();
+
+            ArrayList<RankingItem<Integer>> rankTFIDF = MiscUtils.getRankingList(initPreds);
+            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
+                RankingItem<Integer> item = rankTFIDF.get(ii);
+                System.out.println("TFIDF: " + truth(labels[d], item.getObject())
+                        + ". " + item.getObject()
+                        + ". " + nodes[item.getObject()].getPathString()
+                        + ". " + labelVocab.get(item.getObject())
+                        + ". " + item.getPrimaryValue());
+            }
+            System.out.println();
+
+            ArrayList<RankingItem<Integer>> predList = MiscUtils.getRankingList(newPreds);
+            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
+                RankingItem<Integer> item = predList.get(ii);
+                System.out.println("Pred: " + truth(labels[d], item.getObject())
+                        + ". " + item.getObject()
+                        + ". " + nodes[item.getObject()].getPathString()
+                        + ". " + labelVocab.get(item.getObject())
+                        + ". " + item.getPrimaryValue());
+            }
+            System.out.println();
+            System.out.println();
+        }
+
+        return newPreds;
+    }
+
+    public void sampleNewDocumentsDebug(String stateFile,
+            int[][] newWords, int[][] newLabels,
+            String outputResultFile,
+            double[][] initPredictions) {
+        if (verbose) {
+            System.out.println();
+            logln("Perform prediction using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        // test data
+        this.words = newWords;
+        this.labels = newLabels;
+        this.D = this.words.length;
+
+        // initialize data structure
+        this.z = new int[D][];
+        this.x = new int[D][];
+        this.docSwitches = new DirMult[D];
+        this.docLabelCounts = new SparseCount[D];
+        this.docMaskes = new Set[D];
+
+        for (int d = 0; d < D; d++) {
+            this.z[d] = new int[words[d].length];
+            this.x[d] = new int[words[d].length];
+            this.docSwitches[d] = new DirMult(
+                    new double[]{hyperparams.get(A_0), hyperparams.get(B_0)});
+            this.docLabelCounts[d] = new SparseCount();
+            this.docMaskes[d] = new HashSet<Integer>();
+
+            Set<Integer> cands = getCandidatesNew(initPredictions[d]);
+            for (int label : cands) {
+                Node node = nodes[label];
+                while (node != null) {
+                    docMaskes[d].add(node.id);
+                    node = node.getParent();
+                }
+            }
+        }
+
+        // debug
+        for (int d = 0; d < 20; d++) {
+            System.out.println("\n\nd = " + d);
+            for (int ll : labels[d]) {
+                System.out.println("TRUE: " + ll
+                        + ". " + nodes[ll].getPathString()
+                        + ". " + labelVocab.get(ll));
+            }
+            System.out.println();
+
+            ArrayList<RankingItem<Integer>> rankTFIDF = MiscUtils.getRankingList(initPredictions[d]);
+            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
+                RankingItem<Integer> item = rankTFIDF.get(ii);
+                System.out.println("TFIDF: " + truth(labels[d], item.getObject())
+                        + ". " + item.getObject()
+                        + ". " + nodes[item.getObject()].getPathString()
+                        + ". " + labelVocab.get(item.getObject())
+                        + ". " + item.getPrimaryValue());
+            }
+            System.out.println();
+
+//        for (int ll : docMaskes[d]) {
+//            System.out.println("Mask: " + ll
+//                    + ". " + nodes[ll].getPathString()
+//                    + ". " + labelVocab.get(ll));
+//        }
+//        System.out.println();
+
+            double[] predictedScores = new double[L - 1]; // exclude root
+            int count = 0;
+            for (iter = 0; iter < 5; iter++) {
+                for (int n = 0; n < words[d].length; n++) {
+                    if (iter == 0) {
+                        sampleXZMH(d, n, !REMOVE, !ADD, !REMOVE, ADD);
+                    } else {
+                        sampleXZMH(d, n, !REMOVE, !ADD, REMOVE, ADD);
+                    }
+                }
+                for (int ll = 0; ll < L - 1; ll++) {
+                    predictedScores[ll] +=
+                            (double) docLabelCounts[d].getCount(ll) / words[d].length;
+                }
+                count++;
+
+//            System.out.println();
+//            System.out.println("iter = " + iter
+//                    + ". " + docSwitches[d].getCount(INSIDE)
+//                    + ". " + docSwitches[d].getCount(OUTSIDE));
+//            for (int k = 0; k < L; k++) {
+//                if (docLabelCounts[d].getCount(k) > 0) {
+//                    System.out.println("--- " + k
+//                            + ". " + nodes[k].getPathString()
+//                            + ". " + labelVocab.get(k)
+//                            + ". " + docLabelCounts[d].getCount(k));
+//                }
+//            }
+            }
+
+            for (int ll = 0; ll < L - 1; ll++) {
+                predictedScores[ll] /= count;
+            }
+            ArrayList<RankingItem<Integer>> predList = MiscUtils.getRankingList(predictedScores);
+            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
+                RankingItem<Integer> item = predList.get(ii);
+                System.out.println("Pred: " + truth(labels[d], item.getObject())
+                        + ". " + item.getObject()
+                        + ". " + nodes[item.getObject()].getPathString()
+                        + ". " + labelVocab.get(item.getObject())
+                        + ". " + item.getPrimaryValue());
+            }
+        }
+    }
+
+    private boolean truth(int[] ls, int l) {
+        for (int ii = 0; ii < ls.length; ii++) {
+            if (ls[ii] == l) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // ******************* End prediction **************************************
+
+    // ******************* Start perplexity ************************************
+    private long sampleXZsExact_test(
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData,
+            ArrayList<Integer>[] trainIndices) {
+        numTokensChange = 0;
+        long sTime = System.currentTimeMillis();
+        for (int d = 0; d < D; d++) {
+            for (int ii = 0; ii < trainIndices[d].size(); ii++) {
+                int n = trainIndices[d].get(ii);
+                sampleXZExact_test(d, ii, n, removeFromModel, addToModel, removeFromData, addToData);
+            }
+        }
+        return System.currentTimeMillis() - sTime;
+    }
+
+    /**
+     * Sample x and z together for a token.
+     *
+     * @param d
+     * @param n
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     */
+    private void sampleXZExact_test(int d, int ii, int n,
+            boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData) {
+        if (removeFromModel) {
+            nodes[z[d][ii]].getContent().decrement(words[d][n]);
+            nodes[z[d][ii]].removeToken(d, n);
+        }
+        if (removeFromData) {
+            docSwitches[d].decrement(x[d][ii]);
+            docLabelCounts[d].decrement(z[d][ii]);
+        }
+
+        double[] logprobs = new double[L];
+        for (int ll = 0; ll < L; ll++) {
+            boolean inside = docMaskes[d].contains(ll);
+            double xLlh;
+            double zLlh;
+            double wLlh = Math.log(nodes[ll].topic[words[d][n]]);
+
+            if (inside) {
+                xLlh = Math.log(docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0));
+                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size()));
+            } else {
+                xLlh = Math.log(docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0));
+                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                        / (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size())));
+            }
+            logprobs[ll] = xLlh + zLlh + wLlh;
+        }
+        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+
+        if (sampledZ != z[d][ii]) {
+            numTokensChange++;
+        }
+        z[d][ii] = sampledZ;
+        if (docMaskes[d].contains(z[d][ii])) {
+            x[d][ii] = INSIDE;
+        } else {
+            x[d][ii] = OUTSIDE;
+        }
+
+        if (addToModel) {
+            nodes[z[d][ii]].getContent().increment(words[d][n]);
+            nodes[z[d][ii]].addToken(d, n);
+        }
+
+        if (addToData) {
+            docSwitches[d].increment(x[d][ii]);
+            docLabelCounts[d].increment(z[d][ii]);
+        }
+    }
+
+    /**
+     * Perform sampling for test documents to compute perplexity.
+     *
+     * @param stateFile File storing the state of a learned model
+     * @param newWords Words of test documents
+     * @param newLabels Labels of test documents
+     */
+    public double computePerplexity(String stateFile,
+            int[][] newWords, int[][] newLabels,
+            ArrayList<Integer>[] trainIndices,
+            ArrayList<Integer>[] testIndices) {
+        if (verbose) {
+            System.out.println();
+            logln("Computing perplexity using model from " + stateFile);
+            logln("--- Test burn-in: " + this.testBurnIn);
+            logln("--- Test max-iter: " + this.testMaxIter);
+            logln("--- Test sample-lag: " + this.testSampleLag);
+        }
+
+        // input model
+        inputModel(stateFile);
+
+        words = newWords;
+        labels = newLabels;
+        D = words.length;
+        docLabelCounts = new SparseCount[D];
+        int numTrainTokens = 0;
+        int numTestTokens = 0;
+
+        for (int d = 0; d < D; d++) {
+            numTokens += words[d].length;
+            numTrainTokens += trainIndices[d].size();
+            numTestTokens += testIndices[d].size();
+        }
+
+        if (verbose) {
+            logln("Test data:");
+            logln("--- D = " + D);
+            logln("--- # tokens = " + numTokens);
+            logln("--- # train tokens = " + numTrainTokens);
+            logln("--- # test tokens = " + numTestTokens);
+        }
+
+        this.z = new int[D][];
+        this.x = new int[D][];
+        this.docSwitches = new DirMult[D];
+        this.docLabelCounts = new SparseCount[D];
+        this.docMaskes = new Set[D];
+        for (int d = 0; d < D; d++) {
+            this.z[d] = new int[trainIndices[d].size()];
+            this.x[d] = new int[trainIndices[d].size()];
+            this.docSwitches[d] = new DirMult(new double[]{hyperparams.get(A_0),
+                        hyperparams.get(B_0)});
+            this.docLabelCounts[d] = new SparseCount();
+            this.docMaskes[d] = new HashSet<Integer>();
+            if (labels != null) { // if labels are given during training time
+                updateMaskes(d);
+            }
+        }
+
+        ArrayList<Double> perplexities = new ArrayList<Double>();
+        if (verbose) {
+            logln("--- Sampling on test data ...");
+        }
+        for (iter = 0; iter < testMaxIter; iter++) {
+            if (iter % testSampleLag == 0) {
+                logln("--- --- iter " + iter + "/" + testMaxIter
+                        + " @ thread " + Thread.currentThread().getId());
+            }
+            if (iter == 0) {
+                sampleXZsExact_test(!REMOVE, !ADD, !REMOVE, ADD, trainIndices);
+            } else {
+                sampleXZsExact_test(!REMOVE, !ADD, REMOVE, ADD, trainIndices);
+            }
+
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                perplexities.add(computePerplexity(testIndices, stateFile + ".perp"));
+            }
+        }
+        double avgPerplexity = StatUtils.mean(perplexities);
+        return avgPerplexity;
+    }
+
+    /**
+     * Compute the perplexity of the current assignments.
+     */
+    private double computePerplexity(ArrayList<Integer>[] testIndices, String outFile) {
+        double totalLogprob = 0.0;
+        int numTestTokens = 0;
+        for (int d = 0; d < D; d++) {
+            numTestTokens += testIndices[d].size();
+        }
+
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outFile);
+            for (int d = 0; d < D; d++) {
+                double docLogProb = 0.0;
+                for (int n : testIndices[d]) {
+                    double val = 0.0;
+                    for (int ll = 0; ll < L; ll++) {
+                        boolean inside = docMaskes[d].contains(ll);
+                        double pw = nodes[ll].topic[words[d][n]];
+                        double pz;
+                        double px;
+                        if (inside) {
+                            px = (docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0))
+                                    / (docSwitches[d].getCountSum() + hyperparams.get(A_0) + hyperparams.get(B_0));
+                            pz = (docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                                    / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size());
+                        } else {
+                            px = (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0))
+                                    / (docSwitches[d].getCountSum() + hyperparams.get(A_0) + hyperparams.get(B_0));
+                            pz = (docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
+                                    / (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size()));
+                        }
+                        val += pw * pz * px;
+                    }
+                    docLogProb += Math.log(val);
+                }
+                totalLogprob += docLogProb;
+                writer.write(d
+                        + "\t" + words[d].length
+                        + "\t" + testIndices[d].size()
+                        + "\t" + docLogProb + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
+        double perplexity = Math.exp(-totalLogprob / numTestTokens);
+        return perplexity;
+    }
+
+    /**
+     * Static method to compute perplexity using multiple chains, each
+     * corresponds to using a learned model during training.
+     *
+     * @param newWords Words of test documents
+     * @param newLabels Labels of test documents
+     * @param iterPerplexityFolder Perplexity folder
+     * @param sampler The sample to propagate its configurations to multiple
+     * parallel samplers
+     */
+    public static void parallelPerplexity(int[][] newWords,
+            int[][] newLabels,
+            ArrayList<Integer>[] trainIndices,
+            ArrayList<Integer>[] testIndices,
+            File iterPerplexityFolder,
+            File resultFolder,
+            L2H sampler) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPerplexityFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPerplexityFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                L2HPerplexityRunner runner = new L2HPerplexityRunner(sampler,
+                        newWords, newLabels, trainIndices, testIndices,
+                        stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath());
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+
+            // run MAX_NUM_PARALLEL_THREADS threads at a time
+            runThreads(threads);
+
+            // summarize multiple perplexities
+            String[] ppxFiles = iterPerplexityFolder.list();
+            ArrayList<Double> ppxs = new ArrayList<Double>();
+            for (String ppxFile : ppxFiles) {
+                double ppx = IOUtils.inputPerplexity(new File(iterPerplexityFolder, ppxFile));
+                ppxs.add(ppx);
+            }
+
+            // averaging
+            File ppxResultFile = new File(resultFolder, PerplexityFile);
+            IOUtils.outputPerplexities(ppxResultFile, ppxs);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while computing perplexity parallel test.");
+        }
+    }
+    // ******************* End perplexity **************************************
+
+    /**
+     * Compute topic coherence.
+     */
+    public double[][] computeAvgTopicCoherence(File file,
+            MimnoTopicCoherence topicCoherence) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int kk = 0; kk < L; kk++) {
-            double[] distribution = nodeList[kk].topic;
-            int[] topic = SamplerUtils.getSortedTopic(distribution);
-            double score = topicCoherence.getCoherenceScore(topic);
-            writer.write(kk
-                    + "\t" + nodeList[kk].getPathString()
-                    + "\t" + nodeList[kk].getTotalNumStays()
-                    + "\t" + nodeList[kk].getTotalNumPasses()
-                    + "\t" + score);
-            for (int i = 0; i < topicCoherence.getNumTokens(); i++) {
-                writer.write("\t" + this.wordVocab.get(topic[i]));
+        if (verbose) {
+            logln("Outputing averaged topic coherence to file " + file);
+        }
+
+        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder does not exist. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        double[][] avgTopics = new double[L][V];
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file.getAbsolutePath() + ".iter");
+            writer.write("Iteration");
+            for (int k = 0; k < L; k++) {
+                writer.write("\tTopic_" + k);
             }
             writer.write("\n");
+
+            // partial score
+            ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
+            for (int i = 0; i < filenames.length; i++) {
+                String filename = filenames[i];
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+                inputModel(new File(reportFolder, filename).getAbsolutePath());
+                double[][] pointTopics = new double[L][V];
+
+                writer.write(filename);
+                for (int k = 0; k < L; k++) {
+                    pointTopics[k] = nodes[k].topic;
+                    int[] topic = SamplerUtils.getSortedTopic(pointTopics[k]);
+                    double score = topicCoherence.getCoherenceScore(topic);
+
+                    writer.write("\t" + score);
+                }
+                writer.write("\n");
+                aggTopics.add(pointTopics);
+            }
+
+            // averaging
+            writer.write("Average");
+            ArrayList<Double> scores = new ArrayList<Double>();
+            for (int k = 0; k < L; k++) {
+                double[] avgTopic = new double[V];
+                for (int v = 0; v < V; v++) {
+                    for (int ii = 0; ii < aggTopics.size(); ii++) {
+                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
+                    }
+                }
+                int[] topic = SamplerUtils.getSortedTopic(avgTopic);
+                double score = topicCoherence.getCoherenceScore(topic);
+                writer.write("\t" + score);
+                if (!nodes[k].isRoot()) {
+                    scores.add(score);
+                }
+                avgTopics[k] = avgTopic;
+            }
+            writer.write("\n");
+            writer.close();
+
+            // output aggregated topic coherence scores
+            IOUtils.outputTopicCoherences(file, scores);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during test time.");
         }
-        writer.close();
+        return avgTopics;
     }
 
-//    public double[] predictNewDocument(int[] newDoc) {
-//        int[] newZ = new int[newDoc.length];
-//        // sample
-//        for (iter = 0; iter < MAX_ITER; iter++) {
-//            for(int n=0; n<newZ.length; n++) {
-//                // decrement
-//                docTopic.decrement(newZ[n]);
-//                
-//                // sample
-//                double[] logprobs = new double[L];
-//                for(int l=0; l<L; l++) {
-//                    logprobs[l] = docTopic.getLogLikelihood(l)
-//                            + label_words[l].getLogLikelihood(newDoc[n]);
-//                }
-//                newZ[n] = SamplerUtils.logMaxRescaleSample(logprobs);
-//                
-//                // increment
-//                docTopic.increment(newZ[n]);
-//            }
-//        }
-//        throw new RuntimeException("Not supported");
-//    }
+    class Node extends TreeNode<Node, SparseCount> {
 
-    class Node extends TreeNode<Node, Integer> {
+        final int id;
+        double[] topic;
+        SparseCount pseudoCounts;
+        HashMap<Integer, ArrayList<Integer>> assignedTokens;
 
-        private final int born;
-        private TIntIntHashMap numStays; // N_{d, j} per document
-        private TIntIntHashMap numPasses; // N_{d, >j} per document
-        private TIntIntHashMap pseudoCounts; // pseudo-counts from children
-        private TIntIntHashMap observations; // actual counts
-        private double[] topic; // explicitly store and sample topic
-        private TIntDoubleHashMap weights;
-
-        Node(int iter,
-                int index,
-                int level,
-                int labelId,
+        Node(int id, int index, int level,
+                SparseCount content,
                 Node parent) {
-            super(index, level, labelId, parent);
-            this.born = iter;
-            this.numStays = new TIntIntHashMap();
-            this.numPasses = new TIntIntHashMap();
-            this.observations = new TIntIntHashMap();
-            this.pseudoCounts = new TIntIntHashMap();
-            this.weights = new TIntDoubleHashMap();
+            super(index, level, content, parent);
+            this.id = id;
+            this.pseudoCounts = new SparseCount();
+            this.assignedTokens = new HashMap<Integer, ArrayList<Integer>>();
         }
 
-        public void sampleTopic() {
-            double[] meanVector = new double[V];
-            Arrays.fill(meanVector, hyperparams.get(BETA));
-            for (int obs : this.observations.keys()) {
-                meanVector[obs] += this.observations.get(obs);
-            }
-            for (int obs : this.pseudoCounts.keys()) {
-                meanVector[obs] += this.pseudoCounts.get(obs);
-            }
-            if (this.parent != null) {
-                for (int v = 0; v < V; v++) {
-                    meanVector[v] += this.parent.topic[v] * hyperparams.get(GAMMA);
+        public Set<Integer> getSubtree() {
+            Set<Integer> subtree = new HashSet<Integer>();
+            Stack<Node> stack = new Stack<Node>();
+            stack.add(this);
+            while (!stack.isEmpty()) {
+                Node n = stack.pop();
+                for (Node c : n.getChildren()) {
+                    stack.add(c);
                 }
+                subtree.add(n.id);
             }
-            Dirichlet dir = new Dirichlet(meanVector);
-            this.topic = dir.nextDistribution();
+            return subtree;
         }
 
-        public void getPseudoCountsFromChildrenMin() {
-            this.pseudoCounts = new TIntIntHashMap();
-            for (Node child : this.getChildren()) {
-                TIntIntHashMap childObs = child.getObservations();
-                for (int o : childObs.keys()) {
-                    this.pseudoCounts.adjustOrPutValue(o, 1, 1);
-                }
+        public Set<Integer> getAssignedDocuments() {
+            return this.assignedTokens.keySet();
+        }
+
+        public HashMap<Integer, ArrayList<Integer>> getAssignedTokens() {
+            return this.assignedTokens;
+        }
+
+        public void addToken(int d, int n) {
+            ArrayList<Integer> docAssignedTokens = this.assignedTokens.get(d);
+            if (docAssignedTokens == null) {
+                docAssignedTokens = new ArrayList<Integer>();
             }
+            docAssignedTokens.add(n);
+            this.assignedTokens.put(d, docAssignedTokens);
         }
 
-        public void getPseudoCountsFromChildrenMax() {
-            this.pseudoCounts = new TIntIntHashMap();
-            for (Node child : this.getChildren()) {
-                TIntIntHashMap childObs = child.getObservations();
-                for (int o : childObs.keys()) {
-                    int v = childObs.get(o);
-                    this.pseudoCounts.adjustOrPutValue(o, v, v);
-                }
+        public void removeToken(int d, int n) {
+            this.assignedTokens.get(d).remove(Integer.valueOf(n));
+            if (this.assignedTokens.get(d).isEmpty()) {
+                this.assignedTokens.remove(d);
             }
-        }
-
-        public boolean containWeight(int nodeId) {
-            return this.weights.containsKey(nodeId);
-        }
-
-        public double getWeight(int target) {
-            return this.weights.get(target);
-        }
-
-        public TIntDoubleHashMap getWeight() {
-            return this.weights;
-        }
-
-        public void putWeight(int nodeId, double mi) {
-            this.weights.put(nodeId, mi);
-        }
-
-        public double getMutualInformation(int nodeId) {
-            return this.weights.get(nodeId);
-        }
-
-        public double getLogLikelihood() {
-            double llh = 0.0;
-            for (int obs : this.observations.keys()) {
-                llh += this.observations.get(obs) * Math.log(topic[obs]);
-            }
-            return llh;
-        }
-
-        public void setTopic(double[] t) {
-            this.topic = t;
         }
 
         public double[] getTopic() {
             return this.topic;
         }
 
-        public TIntIntHashMap getPseudoCounts() {
-            return this.pseudoCounts;
+        public void setTopic(double[] t) {
+            this.topic = t;
         }
 
-        public TIntIntHashMap getObservations() {
-            return this.observations;
-        }
-
-        public int getTotalNumStays() {
-            return StatUtils.sum(numStays.getValues());
-        }
-
-        public int getTotalNumPasses() {
-            return StatUtils.sum(numPasses.getValues());
-        }
-
-        public int getTotalObservationCount() {
-            return StatUtils.sum(observations.getValues());
-        }
-
-        public void incrementPseudoCount(int obs) {
-            this.pseudoCounts.adjustOrPutValue(obs, 1, 1);
-        }
-
-        public void decrementPseudoCount(int obs) {
-            boolean found = this.pseudoCounts.adjustValue(obs, -1);
-            if (!found) {
-                throw new RuntimeException("Removing non-existing key in pseudo-counts.");
+        /**
+         * Return true if the given node is in the subtree rooted at this node
+         *
+         * @param node The given node to check
+         */
+        public boolean isDescendent(Node node) {
+            Node temp = node;
+            while (temp != null) {
+                if (temp.equals(this)) {
+                    return true;
+                }
+                temp = temp.parent;
             }
-            if (this.pseudoCounts.get(obs) == 0) {
-                this.pseudoCounts.remove(obs);
+            return false;
+        }
+
+        public void getPseudoCountsFromChildren() {
+            if (pathAssumption == PathAssumption.MINIMAL) {
+                this.getPseudoCountsFromChildrenMin();
+            } else if (pathAssumption == PathAssumption.MAXIMAL) {
+                this.getPseudoCountsFromChildrenMax();
+            } else {
+                throw new RuntimeException("Path assumption " + pathAssumption
+                        + " is not supported.");
             }
         }
 
-        public void incrementObservation(int obs) {
-            this.observations.adjustOrPutValue(obs, 1, 1);
-        }
-
-        public void decrementObservation(int obs) {
-            boolean found = this.observations.adjustValue(obs, -1);
-            if (!found) {
-                throw new RuntimeException("Removing non-existing key in observations");
-            }
-            if (this.observations.get(obs) == 0) {
-                this.observations.remove(obs);
-            }
-        }
-
-        public void setLevel(int level) {
-            this.level = level;
-        }
-
-        public void setIndex(int index) {
-            this.index = index;
-        }
-
-        public int getIterationCreated() {
-            return this.born;
-        }
-
-        public void adjustNumStays(int d, int delta) {
-            this.numStays.adjustOrPutValue(d, delta, delta);
-            if (this.numStays.get(d) == 0) {
-                this.numStays.remove(d);
+        /**
+         * Propagate the observations from all children nodes to this node using
+         * minimal path assumption, which means for each observation type v, a
+         * child node will propagate a value of 1 if it contains v, and 0
+         * otherwise.
+         */
+        public void getPseudoCountsFromChildrenMin() {
+            this.pseudoCounts = new SparseCount();
+            for (Node child : this.getChildren()) {
+                SparseCount childObs = child.getContent();
+                for (int obs : childObs.getIndices()) {
+                    this.pseudoCounts.increment(obs);
+                }
             }
         }
 
-        public void adjustNumPasses(int d, int delta) {
-            this.numPasses.adjustOrPutValue(d, delta, delta);
-            if (this.numPasses.get(d) == 0) {
-                this.numPasses.remove(d);
+        /**
+         * Propagate the observations from all children nodes to this node using
+         * maximal path assumption, which means that each child node will
+         * propagate its full observation vector.
+         */
+        public void getPseudoCountsFromChildrenMax() {
+            this.pseudoCounts = new SparseCount();
+            for (Node child : this.getChildren()) {
+                SparseCount childObs = child.getContent();
+                for (int obs : childObs.getIndices()) {
+                    this.pseudoCounts.changeCount(obs, childObs.getCount(obs));
+                }
             }
         }
 
-        public int getNumStays(int d) {
-            return this.numStays.get(d);
+        /**
+         * Sample topic. This applies since the topic of a node is modeled as a
+         * drawn from a Dirichlet distribution with the mean vector is the topic
+         * of the node's parent and scaling factor gamma.
+         *
+         * @param beta Topic smoothing parameter
+         * @param gamma Dirichlet-Multinomial chain parameter
+         */
+        public void sampleTopic() {
+            double[] meanVector = new double[V];
+            Arrays.fill(meanVector, hyperparams.get(BETA) / V); // to prevent zero count
+
+            // from parent
+            if (!this.isRoot()) {
+                double[] parentTopic = parent.topic;
+                for (int v = 0; v < V; v++) {
+                    meanVector[v] += parentTopic[v] * hyperparams.get(BETA);
+                }
+            } else {
+                for (int v = 0; v < V; v++) {
+                    meanVector[v] += hyperparams.get(BETA) / V;
+                }
+            }
+
+            // current observations
+            SparseCount observations = this.content;
+            for (int obs : observations.getIndices()) {
+                meanVector[obs] += observations.getCount(obs);
+            }
+
+            // from children
+            for (int obs : this.pseudoCounts.getIndices()) {
+                meanVector[obs] += this.pseudoCounts.getCount(obs);
+            }
+
+            Dirichlet dir = new Dirichlet(meanVector);
+            double[] ts = dir.nextDistribution();
+
+            if (debug) {
+                for (int v = 0; v < V; v++) {
+                    if (ts[v] == 0) {
+                        throw new RuntimeException("Zero probability");
+                    }
+                }
+            }
+            this.setTopic(ts);
         }
 
-        public int getNumPasses(int d) {
-            return this.numPasses.get(d);
+        public double getWordLogLikelihood() {
+            double llh = 0.0;
+            for (int w : getContent().getIndices()) {
+                llh += getContent().getCount(w) * Math.log(topic[w]);
+            }
+            return llh;
+        }
+
+        public void validate(String msg) {
+            int numTokens = 0;
+            for (int dd : this.assignedTokens.keySet()) {
+                numTokens += this.assignedTokens.get(dd).size();
+            }
+
+            if (numTokens != this.getContent().getCountSum()) {
+                throw new RuntimeException(msg + ". Mismatch: " + numTokens
+                        + " vs. " + this.getContent().getCountSum());
+            }
         }
 
         @Override
         public String toString() {
             StringBuilder str = new StringBuilder();
-            str.append(getPathString())
-                    .append(", ").append(content.toString());
+            str.append("[")
+                    .append(id).append(", ")
+                    .append(getPathString())
+                    .append(", #c = ").append(getChildren().size())
+                    .append(", #o = ").append(getContent().getCountSum())
+                    .append("]");
             return str.toString();
         }
+    }
+}
+class L2HPerplexityRunner implements Runnable {
 
-        public void validate(String msg) {
-            for (int obs : this.observations.keys()) {
-                int obsCount = this.observations.get(obs);
-                if (obsCount <= 0) {
-                    throw new RuntimeException(msg + ". Non-positive count in observations. "
-                            + "obs = " + obs + ". count = " + obsCount);
-                }
-            }
+    L2H sampler;
+    int[][] newWords;
+    int[][] newLabels;
+    ArrayList<Integer>[] trainIndices;
+    ArrayList<Integer>[] testIndices;
+    String stateFile;
+    String outputFile;
 
-            for (int obs : this.pseudoCounts.keys()) {
-                int obsPCount = this.pseudoCounts.get(obs);
-                if (obsPCount <= 0) {
-                    throw new RuntimeException(msg + ". Non-positive count in pseudo-counts. "
-                            + "obs = " + obs + ". count = " + obsPCount);
-                }
-            }
-
-            for (int d : this.numStays.keys()) {
-                int num = this.numStays.get(d);
-                if (num <= 0) {
-                    throw new RuntimeException(msg + ". Non-positive count in numStays. "
-                            + "d = " + d + ". count = " + num);
-                }
-            }
-
-            for (int d : this.numPasses.keys()) {
-                int num = this.numPasses.get(d);
-                if (num <= 0) {
-                    throw new RuntimeException(msg + ". Non-positive count in numPasses. "
-                            + "d = " + d + ". count = " + num);
-                }
-            }
-        }
-
-        public double getHeightLogLikelihood(double mean, double scale) {
-            double heightLlh = 0.0;
-
-            double[] betaPrior = new double[2];
-            betaPrior[STAY] = mean * scale; // staying
-            betaPrior[PASS] = (1 - mean) * scale; // passing
-
-            Set<Integer> stayAndPassDocs = new HashSet<Integer>();
-            for (int d : numStays.keys()) {
-                stayAndPassDocs.add(d);
-            }
-            for (int d : numPasses.keys()) {
-                stayAndPassDocs.add(d);
-            }
-
-            for (int d : stayAndPassDocs) {
-                int[] obs = new int[2];
-                obs[STAY] = numStays.get(d);
-                obs[PASS] = numPasses.get(d);
-                heightLlh += SamplerUtils.computeLogLhood(obs, obs[STAY] + obs[PASS], betaPrior);
-            }
-            return heightLlh;
-        }
+    public L2HPerplexityRunner(L2H sampler,
+            int[][] newWords,
+            int[][] newLabels,
+            ArrayList<Integer>[] trainIndices,
+            ArrayList<Integer>[] testIndices,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.newLabels = newLabels;
+        this.trainIndices = trainIndices;
+        this.testIndices = testIndices;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
     }
 
-    class TreeInitializer {
-        // inputs
+    @Override
+    public void run() {
+        L2H testSampler = new L2H();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
 
-        private int[] labelFreqs;
-        private HashMap<String, Integer> pairFreqs;
-        // output
-        private DirectedGraph<Integer> tree;
-        private GraphNode<Integer> graphRoot;
-        // internal
-        private GraphNode<Integer>[] nodes;
-        private ArrayList<RankingItem<String>> rankPairs;
-
-        public TreeInitializer(int[] lFreqs,
-                HashMap<String, Integer> pFreqs) {
-            this.labelFreqs = lFreqs;
-            this.pairFreqs = pFreqs;
-
-            // initialize label nodes
-            nodes = new GraphNode[L + 1];
-            for (int ll = 0; ll < L; ll++) {
-                nodes[ll] = new GraphNode<Integer>(ll);
-            }
-            nodes[L] = new GraphNode<Integer>(L);
-
-            // rank edges
-            rankPairs = new ArrayList<RankingItem<String>>();
-            for (String pair : pairFreqs.keySet()) {
-                rankPairs.add(new RankingItem<String>(pair, pairFreqs.get(pair)));
-            }
-            Collections.sort(rankPairs);
-        }
-
-        public GraphNode<Integer> getGraphRoot() {
-            return this.graphRoot;
-        }
-
-        public DirectedGraph<Integer> getTree() {
-            return this.tree;
-        }
-
-        public DirectedGraph<Integer> initializeUsingEntropies(int minPairFreq) {
-            if (verbose) {
-                logln("--- --- Creating label graph using entropies ...");
-            }
-
-            DirectedGraph<Integer> labelGraph = new DirectedGraph<Integer>();
-            int E = rankPairs.size();
-            for (int e = 0; e < E; e++) {
-                RankingItem<String> pair = rankPairs.get(e);
-                int source = Integer.parseInt(pair.getObject().split("-")[0]);
-                int target = Integer.parseInt(pair.getObject().split("-")[1]);
-                double pairFreq = pair.getPrimaryValue();
-                if (pairFreq < minPairFreq) {
-                    logln("--- --- --- # raw edges: " + e);
-                    break;
-                }
-                int sourceFreq = labelFreqs[source];
-                int targetFreq = labelFreqs[target];
-
-                // create edge
-                GraphNode<Integer> sourceNode = nodes[source];
-                GraphNode<Integer> targetNode = nodes[target];
-                double weight = -getConditionalEntropy(
-                        targetFreq,
-                        sourceFreq,
-                        (int) pairFreq, D);
-                GraphEdge edge = new GraphEdge(sourceNode, targetNode, weight);
-                labelGraph.addEdge(edge);
-            }
-
-            // create pseudo-edges from root to all nodes
-            graphRoot = nodes[L];
-            for (int ll = 0; ll < L; ll++) {
-                double weight = -getEntropy(labelFreqs[ll], D);
-                GraphEdge edge = new GraphEdge(graphRoot, nodes[ll], weight);
-                labelGraph.addEdge(edge);
-            }
-
-            if (verbose) {
-                logln("--- --- Running directed minimum spanning tree ...");
-            }
-
-            EdmondsMST<Integer> dmst = new EdmondsMST<Integer>(graphRoot, labelGraph);
-            tree = dmst.getMinimumSpanningTree();
-            return labelGraph;
-        }
-
-        /**
-         * Initialize the tree by generating the label graph using document
-         * co-occurrences and extracting minimum spanning tree from the graph.
-         */
-        public DirectedGraph<Integer> initializeUsingConditionalProbabilities(int minPFreq) {
-            if (verbose) {
-                logln("--- --- Creating label graph using conditional probabilities ...");
-            }
-
-            // create raw label graph
-            DirectedGraph<Integer> labelGraph = new DirectedGraph<Integer>();
-            int E = rankPairs.size();
-            for (int e = 0; e < E; e++) {
-                RankingItem<String> pair = rankPairs.get(e);
-                int source = Integer.parseInt(pair.getObject().split("-")[0]);
-                int target = Integer.parseInt(pair.getObject().split("-")[1]);
-                double pairFreq = pair.getPrimaryValue();
-                if (pairFreq < minPFreq) {
-                    continue;
-                }
-
-                // create edge
-                GraphNode<Integer> sourceNode = nodes[source];
-                GraphNode<Integer> targetNode = nodes[target];
-                double weight = Math.log(1.0 - (pairFreq / labelFreqs[target]));
-                labelGraph.addEdge(sourceNode, targetNode, weight);
-            }
-
-            // create pseudo-edges from root to all nodes
-            graphRoot = nodes[L];
-            for (int ll = 0; ll < L; ll++) {
-                double weight = Math.log(1.0 - (double) labelFreqs[ll] / D);
-                labelGraph.addEdge(graphRoot, nodes[ll], weight);
-            }
-
-            if (verbose) {
-                logln("--- --- Running Edmonds' directed minimum spanning tree ...");
-            }
-            EdmondsMST<Integer> dmst = new EdmondsMST<Integer>(graphRoot, labelGraph);
-            tree = dmst.getMinimumSpanningTree();
-            return labelGraph;
-        }
-
-        public void initializeUsingMutualInformation() {
-            if (verbose) {
-                logln("--- --- Creating label graph using mutual information ...");
-            }
-
-            int E = rankPairs.size();
-            Set<String> processedEdges = new HashSet<String>();
-            UndirectedGraph<Integer> graph = new UndirectedGraph<Integer>();
-            for (int e = 0; e < E; e++) {
-                RankingItem<String> pair = rankPairs.get(e);
-                String[] splitPair = pair.getObject().split("-");
-                String reverse = splitPair[1] + "-" + splitPair[0];
-                if (processedEdges.contains(reverse)) {
-                    continue;
-                }
-                processedEdges.add(pair.getObject());
-
-                int source = Integer.parseInt(splitPair[0]);
-                int target = Integer.parseInt(splitPair[1]);
-                double pairFreq = pair.getPrimaryValue();
-                int sourceFreq = labelFreqs[source];
-                int targetFreq = labelFreqs[target];
-
-                // create edge
-                GraphNode<Integer> sourceNode = nodes[source];
-                GraphNode<Integer> targetNode = nodes[target];
-                double weight = getMutualInformation(sourceFreq, targetFreq, (int) pairFreq, D);
-
-                System.out.println(
-                        ">>> " + pair
-                        + ". " + sourceFreq
-                        + ". " + targetFreq
-                        + ". " + pairFreq
-                        + ". " + weight);
-                graph.addEdge(new GraphEdge(sourceNode, targetNode, -weight));
-            }
-            graphRoot = nodes[L];
-            for (int ll = 0; ll < L; ll++) {
-                double weight = getMutualInformation(D, labelFreqs[ll], labelFreqs[ll], D);
-//                double weight = labelFreqs[ll];
-//                double weight = getEntropy(labelFreqs[ll], D);
-
-                // debug
-                System.out.println("<<< root-" + ll
-                        + ". " + labelFreqs[ll]
-                        + ". " + weight);
-
-                graph.addEdge(new GraphEdge(graphRoot, nodes[ll], -weight));
-            }
-
-            PrimMST<Integer> prim = new PrimMST<Integer>(graphRoot, graph);
-            tree = prim.getMinimumSpanningTree();
-        }
-    }
-
-    private static double getEntropy(int nx0, int nx) {
-        double entropy = 0.0;
-        double px0 = (double) nx0 / nx;
-        entropy += px0 * Math.log(px0) / Math.log(2);
-        double px1 = 1.0 - px0;
-        entropy += px1 * Math.log(px1) / Math.log(2);
-        return -entropy;
-    }
-
-    // H(Y | X)
-    private static double getConditionalEntropy(int nx, int ny, int nxy, int n) {
-        double[] px = new double[2];
-        px[0] = (double) nx / n;
-        px[1] = 1 - px[0];
-
-        double[][] pxy = new double[2][2];
-        pxy[0][0] = (double) nxy / n;
-        pxy[0][1] = (double) (nx - nxy) / n;
-        pxy[1][0] = (double) (ny - nxy) / n;
-        pxy[1][1] = 1.0 - pxy[0][0] - pxy[0][1] - pxy[1][0];
-
-        double condEnt = 0.0;
-        for (int ii = 0; ii < 2; ii++) {
-            for (int jj = 0; jj < 2; jj++) {
-                if (pxy[ii][jj] != 0) {
-                    condEnt += pxy[ii][jj]
-                            * Math.log(pxy[ii][jj] / (px[ii])) / Math.log(2);
-                }
-            }
-        }
-        return -condEnt;
-    }
-
-    private static double getMutualInformation(int nx, int ny, int nxy, int n) {
-        double[] px = new double[2];
-        px[0] = (double) nx / n;
-        px[1] = 1 - px[0];
-
-        double[] py = new double[2];
-        py[0] = (double) ny / n;
-        py[1] = 1 - py[0];
-
-        double[][] pxy = new double[2][2];
-        pxy[0][0] = (double) nxy / n;
-        pxy[0][1] = (double) (nx - nxy) / n;
-        pxy[1][0] = (double) (ny - nxy) / n;
-        pxy[1][1] = 1.0 - pxy[0][0] - pxy[0][1] - pxy[1][0];
-
-        double mi = 0.0;
-        for (int ii = 0; ii < 2; ii++) {
-            for (int jj = 0; jj < 2; jj++) {
-                if (pxy[ii][jj] != 0) {
-                    mi += pxy[ii][jj] * Math.log(pxy[ii][jj] / (px[ii] * py[jj])) / Math.log(2);
-                }
-            }
-        }
-        return mi;
-    }
-
-    public static void run(String[] args) {
         try {
-            // create the command line parser
-            parser = new BasicParser();
-
-            // create the Options
-            options = new Options();
-
-            // directories
-            addOption("dataset", "Dataset");
-            addOption("data-folder", "Processed data folder");
-            addOption("format-folder", "Folder holding formatted data");
-            addOption("format-file", "Formatted file name");
-            addOption("output", "Output folder");
-
-            // sampling configurations
-            addOption("burnIn", "Burn-in");
-            addOption("maxIter", "Maximum number of iterations");
-            addOption("sampleLag", "Sample lag");
-            addOption("report", "Report interval");
-
-            // model parameters
-            addOption("numTopwords", "Number of top words per topic");
-            addOption("min-label-freq", "Minimum label frequency");
-            addOption("min-pair-freq", "Minimum label-pair frequency");
-            addOption("path-assumption", "Path assumption");
-            addOption("subtree-type", "Subtree type");
-
-            addOption("run-mode", "Run mode");
-
-            options.addOption("paramOpt", false, "Whether hyperparameter "
-                    + "optimization using slice sampling is performed");
-            options.addOption("v", false, "verbose");
-            options.addOption("d", false, "debug");
-            options.addOption("s", false, "standardize (z-score normalization)");
-            options.addOption("help", false, "Help");
-
-            cmd = parser.parse(options, args);
-            if (cmd.hasOption("help")) {
-                CLIUtils.printHelp("java -cp dist/segan.jar sampler.labeled.hierarchy.L2H -help", options);
-                return;
-            }
-
-            System.out.println(Arrays.toString(args));
-
-//            boolean verbose = cmd.hasOption("verbose");
-//            boolean debug = cmd.hasOption("debug");
-            boolean verbose = true;
-            boolean debug = true;
-
-            if (verbose) {
-                System.out.println("\nRunning model");
-            }
-            String datasetName = CLIUtils.getStringArgument(cmd, "dataset", "112");
-            String datasetFolder = CLIUtils.getStringArgument(cmd, "data-folder", "../data");
-            String outputFolder = CLIUtils.getStringArgument(cmd, "output", "../data/112/hllda");
-            String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
-            String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
-            int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 100);
-            int minPairFreq = CLIUtils.getIntegerArgument(cmd, "min-pair-freq", 500);
-            int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
-            double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-            double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-            double gamma = CLIUtils.getDoubleArgument(cmd, "gamma", 0.5);
-            double mean = CLIUtils.getDoubleArgument(cmd, "mean", 0.3);
-            double scale = CLIUtils.getDoubleArgument(cmd, "scale", 50);
-
-            int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
-            int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
-            int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
-            int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
-            boolean paramOpt = cmd.hasOption("paramOpt");
-
-            PathAssumption pathAssumption = PathAssumption.MINIMAL;
-            if (cmd.hasOption("path-assumption")) {
-                String path = cmd.getOptionValue("path-assumption");
-                if (path.equals("min")) {
-                    pathAssumption = PathAssumption.MINIMAL;
-                } else if (path.equals("max")) {
-                    pathAssumption = PathAssumption.MAXIMAL;
-                } else {
-                    throw new RuntimeException(path + " path assumption is not"
-                            + " supported. Use min or max.");
-                }
-            }
-
-            SubtreeType subtreeType = SubtreeType.OUTSIDE_INSIDE;
-            if (cmd.hasOption("subtree-type")) {
-                String subtree = cmd.getOptionValue("subtree-type");
-                if (subtree.equals("path")) {
-                    subtreeType = SubtreeType.PATH;
-                } else if (subtree.equals("path-inside")) {
-                    subtreeType = SubtreeType.PATH_INSIDE;
-                } else if (subtree.equals("inside-outside")) {
-                    subtreeType = SubtreeType.OUTSIDE_INSIDE;
-                } else {
-                    throw new RuntimeException("Subtree type " + subtree + " is"
-                            + " not supported. Use path, path-inside or "
-                            + "inside-outside instead.");
-                }
-            }
-
-            if (verbose) {
-                System.out.println("--- Loading data from " + datasetFolder);
-            }
-            LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
-            data.setFormatFilename(formatFile);
-            data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
-            data.filterLabelsByFrequency(minLabelFreq);
-//            data.filterDocumentWithoutLabels();
-            data.prepareTopicCoherence(numTopWords);
-            if (verbose) {
-                System.out.println("--- Data loaded.");
-                System.out.println("--- --- min-label-freq: " + minLabelFreq);
-                System.out.println("--- --- label vocab size: " + data.getLabelVocab().size());
-                System.out.println("--- --- # documents: " + data.getWords().length
-                        + ". " + data.getLabels().length);
-            }
-
-            if (verbose) {
-                System.out.println("\nSampling hierarchical labeled LDA ...");
-            }
-
-            L2H sampler = new L2H();
-            sampler.setReport(true);
-            sampler.setVerbose(verbose);
-            sampler.setDebug(debug);
-            sampler.setWordVocab(data.getWordVocab());
-            sampler.setLabelVocab(data.getLabelVocab());
-
-            sampler.configure(outputFolder, data.getWords(), data.getLabels(),
-                    data.getWordVocab().size(),
-                    data.getLabelVocab().size(),
-                    minPairFreq,
-                    alpha, beta, gamma, mean, scale,
-                    InitialState.RANDOM,
-                    pathAssumption,
-                    subtreeType,
-                    paramOpt,
-                    burnIn, maxIters, sampleLag, repInterval);
-
-            File samplerFolder = new File(outputFolder, sampler.getSamplerFolder());
-            IOUtils.createFolder(samplerFolder);
-
-            int minNum = Integer.MAX_VALUE;
-            for (int d = 0; d < data.getDocIds().length; d++) {
-                int Nd = data.getWords()[d].length;
-                if (minNum > Nd) {
-                    minNum = Nd;
-                }
-            }
-            System.out.println("kkk " + minNum);
-//            sampler.initialize();
-//            sampler.outputGlobalTree(new File(samplerFolder, "init-global-tree.txt"));
-//            sampler.outputTopicCoherence(new File(samplerFolder, "init-topic-coherence.txt"),
-//                    data.getTopicCoherence());
-//
-//            sampler.iterate();
-//            sampler.outputGlobalTree(new File(samplerFolder, "final-global-tree.txt"));
-//            sampler.outputTopicCoherence(new File(samplerFolder, "final-topic-coherence.txt"),
-//                    data.getTopicCoherence());
+            double perplexity = testSampler.computePerplexity(stateFile,
+                    newWords, newLabels, trainIndices, testIndices);
+            IOUtils.outputPerplexity(outputFile, perplexity);
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while running in " + Class.class.getName());
+            throw new RuntimeException();
         }
     }
+}
 
-    public static void main(String[] args) {
-        run(args);
+class L2HTestRunner implements Runnable {
+
+    L2H sampler;
+    int[][] newWords;
+    String stateFile;
+    String outputFile;
+    double[][] initPredidctions;
+    int topK;
+
+    public L2HTestRunner(L2H sampler,
+            int[][] newWords,
+            String stateFile,
+            String outputFile,
+            double[][] initPreds,
+            int topK) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+        this.initPredidctions = initPreds;
+        this.topK = topK;
     }
 
-    private static String outputIntIntHashMap(TIntIntHashMap map) {
-        StringBuilder str = new StringBuilder();
-        for (int key : map.keys()) {
-            str.append(key).append(":").append(map.get(key)).append("\t");
-        }
-        return str.toString().trim();
-    }
+    @Override
+    public void run() {
+        L2H testSampler = new L2H();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
 
-    private static TIntIntHashMap inputIntIntHashMap(String str) {
-        TIntIntHashMap map = new TIntIntHashMap();
-        String[] sstr = str.split("\t");
-        for (int ii = 0; ii < sstr.length; ii++) {
-            int key = Integer.parseInt(sstr[ii]);
-            int value = Integer.parseInt(sstr[ii]);
-            map.put(key, value);
+        try {
+            testSampler.sampleNewDocuments(stateFile, newWords, outputFile,
+                    initPredidctions, topK);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
         }
-        return map;
-    }
-
-    private static String outputDoubleArray(double[] arr) {
-        StringBuilder str = new StringBuilder();
-        for (int ii = 0; ii < arr.length; ii++) {
-            str.append(arr[ii]).append("\t");
-        }
-        return str.toString().trim();
-    }
-
-    private static double[] inputDoubleArray(String str) {
-        String[] sstr = str.split("\t");
-        double[] arr = new double[sstr.length];
-        for (int ii = 0; ii < sstr.length; ii++) {
-            arr[ii] = Double.parseDouble(sstr[ii]);
-        }
-        return arr;
     }
 }
