@@ -5,6 +5,16 @@
 
 Take a look at the `build.xml` for more options.
 
+# LDA
+```
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.LDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta>
+```
+
+# HDP
+```
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.HDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <initial-num-topics> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --init <initialization>
+```
+
 # SLDA
 This provides an implementation of Supervised Latent Dirichlet allocation (Blei and McAuliffe, NIPS'07). SLDA's input is a set of documents, each of which is associated with a continuous response variable.
 
