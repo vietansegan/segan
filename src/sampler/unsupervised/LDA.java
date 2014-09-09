@@ -126,8 +126,8 @@ public class LDA extends AbstractSampler {
      * Set training data.
      *
      * @param docWords All documents
-     * @param docIndices Indices of documents under consideration. If this is
-     * null, all documents are considered.
+     * @param docIndices Indices of selected documents. If this is null, all
+     * documents are considered.
      */
     public void train(int[][] docWords, ArrayList<Integer> docIndices) {
         this.words = docWords;
@@ -146,7 +146,8 @@ public class LDA extends AbstractSampler {
         }
 
         if (verbose) {
-            logln("--- # documents:\t" + D);
+            logln("--- # all docs:\t" + words.length);
+            logln("--- # selected docs:\t" + D);
             logln("--- # tokens:\t" + numTokens);
         }
     }

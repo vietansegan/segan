@@ -184,16 +184,10 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     public void outputState(File file) {
-        if (verbose) {
-            logln("Outputing model state to " + file);
-        }
         this.outputState(file.getAbsolutePath());
     }
 
     public void inputState(File file) {
-        if (verbose) {
-            logln("Inputing model state from " + file);
-        }
         this.inputState(file.getAbsolutePath());
     }
 

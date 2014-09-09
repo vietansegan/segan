@@ -316,7 +316,7 @@ public class SLDA extends AbstractSampler {
 
         int[][] ldaZ = null;
         try {
-            File ldaZFile = new File(lda.getSamplerFolderPath(), "model.zip");
+            File ldaZFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
             lda.train(words, docIndices);
             if (ldaZFile.exists()) {
                 lda.inputState(ldaZFile);
