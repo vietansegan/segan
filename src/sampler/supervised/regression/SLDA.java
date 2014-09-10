@@ -41,8 +41,8 @@ public class SLDA extends AbstractSampler {
     protected double sigma;
     // inputs
     protected int[][] words; // original documents
-    protected double[] responses; // 
-    protected ArrayList<Integer> docIndices; // [D]: indices of considered docs
+    protected double[] responses; // [D]: responses of selected documents
+    protected ArrayList<Integer> docIndices; // [D]: indices of selected documents
     protected int K;
     protected int V;
     // derive
@@ -59,7 +59,6 @@ public class SLDA extends AbstractSampler {
     protected int numTokensChanged;
     protected int numTokens;
     protected double sqrtRho;
-    protected boolean zNorm;
 
     public SLDA() {
         this.basename = "SLDA";
@@ -144,10 +143,6 @@ public class SLDA extends AbstractSampler {
                 + "_opt-" + this.paramOptimized;
     }
 
-    public void setZNormalizer(boolean zNorm) {
-        this.zNorm = zNorm;
-    }
-
     public DirMult[] getTopicWords() {
         return this.topicWords;
     }
@@ -197,11 +192,6 @@ public class SLDA extends AbstractSampler {
             int dd = this.docIndices.get(ii);
             this.numTokens += this.words[dd].length;
             this.responses[ii] = docResponses[dd];
-        }
-
-        if (zNorm) {
-            ZNormalizer zNormalizer = new ZNormalizer(responses);
-            this.responses = zNormalizer.normalize(responses);
         }
 
         if (verbose) {
@@ -411,7 +401,7 @@ public class SLDA extends AbstractSampler {
                 }
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
+            if (isReporting()) {
                 evaluateRegressPrediction(responses, docRegressMeans);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged

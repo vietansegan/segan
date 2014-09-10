@@ -1,8 +1,9 @@
-package sampler.unsupervised;
+package sampler.supervised.regression;
 
+import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.types.Dirichlet;
 import core.AbstractSampler;
-import data.TextDataset;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -15,8 +16,10 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import optimization.RidgeRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampler.unsupervised.LDA;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import util.CLIUtils;
@@ -25,19 +28,31 @@ import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
+import util.StatUtils;
+import util.evaluation.Measurement;
+import util.evaluation.RegressionEvaluation;
+import util.normalizer.ZNormalizer;
 
 /**
+ * Implementation of supervised hierarchical Dirichlet process using direct
+ * assignment Gibbs sampler.
  *
  * @author vietan
  */
-public class HDP extends AbstractSampler {
+public class SHDP extends AbstractSampler {
 
     public static final int NEW_COMPONENT_INDEX = -1;
     public static final int ALPHA_GLOBAL = 0;
     public static final int ALPHA_LOCAL = 1;
     public static final int BETA = 2;
+    public double mu;
+    public double sigma;
+    public double rho;
+    private double rhoSqrt;
+    private double sigmaSqrt;
     // inputs
     protected int[][] words; // original documents
+    protected double[] responses; // [D]: responses of selected documents
     protected ArrayList<Integer> docIndices; // [D]: indices of considered docs
     protected int K; // initial number of topics
     protected int V;
@@ -48,21 +63,26 @@ public class HDP extends AbstractSampler {
     private SparseCount[] docTopics;
     private Topics topicWords;
     private int[][] z;
+    // optimization
+    protected double[] docRegressMeans;
+    protected SparseVector[] designMatrix;
     // internal
     private int numTokens;
     private int numTokensChange;
     private double uniform;
 
-    public HDP() {
-        this.basename = "HDP";
+    public SHDP() {
+        this.basename = "SHDP";
     }
 
-    public HDP(String basename) {
-        this.basename = basename;
+    public SHDP(String bname) {
+        this.basename = bname;
     }
 
-    public void configure(String folder, int V,
+    public void configure(String folder,
+            int V,
             double alpha_global, double alpha_local, double beta,
+            double rho, double mu, double sigma,
             InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
@@ -72,12 +92,17 @@ public class HDP extends AbstractSampler {
         this.folder = folder;
 
         this.V = V;
-        this.uniform = 1.0 / V;
+        this.uniform = 1.0 / this.V;
 
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha_global);
         this.hyperparams.add(alpha_local);
         this.hyperparams.add(beta);
+        this.mu = mu;
+        this.sigma = sigma;
+        this.rho = rho;
+        this.rhoSqrt = Math.sqrt(rho);
+        this.sigmaSqrt = Math.sqrt(sigma);
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
@@ -95,10 +120,12 @@ public class HDP extends AbstractSampler {
 
         if (verbose) {
             logln("--- folder\t" + folder);
-            logln("--- vocab size:\t" + V);
             logln("--- alpha-global:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA_GLOBAL)));
             logln("--- alpha-local:\t" + MiscUtils.formatDouble(hyperparams.get(ALPHA_LOCAL)));
             logln("--- beta:\t" + MiscUtils.formatDouble(hyperparams.get(BETA)));
+            logln("--- reg mu:\t" + MiscUtils.formatDouble(mu));
+            logln("--- reg sigma:\t" + MiscUtils.formatDouble(sigma));
+            logln("--- response rho:\t" + MiscUtils.formatDouble(rho));
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
             logln("--- sample lag:\t" + LAG);
@@ -119,25 +146,46 @@ public class HDP extends AbstractSampler {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_").append(this.basename)
+                .append("_").append(basename)
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
                 .append("_ag-").append(formatter.format(hyperparams.get(ALPHA_GLOBAL)))
                 .append("_al-").append(formatter.format(hyperparams.get(ALPHA_LOCAL)))
-                .append("_b-").append(formatter.format(hyperparams.get(BETA)));
+                .append("_b-").append(formatter.format(hyperparams.get(BETA)))
+                .append("_m-").append(formatter.format(mu))
+                .append("_s-").append(formatter.format(sigma))
+                .append("_r-").append(formatter.format(rho));
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
+    }
+
+    public double[] getPredictedResponses() {
+        return this.docRegressMeans;
+    }
+
+    protected void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
+        RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
+        eval.computeCorrelationCoefficient();
+        eval.computeMeanSquareError();
+        eval.computeMeanAbsoluteError();
+        eval.computeRSquared();
+        eval.computePredictiveRSquared();
+        ArrayList<Measurement> measurements = eval.getMeasurements();
+        for (Measurement measurement : measurements) {
+            logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+        }
     }
 
     /**
      * Set training data.
      *
      * @param docWords All documents
-     * @param docIndices Indices of selected documents. If this is null, all
-     * documents are considered.
+     * @param docIndices Indices of documents under consideration
+     * @param docResponses Responses of all documents
      */
-    public void train(int[][] docWords, ArrayList<Integer> docIndices) {
+    public void train(int[][] docWords, ArrayList<Integer> docIndices,
+            double[] docResponses) {
         this.words = docWords;
         this.docIndices = docIndices;
         if (this.docIndices == null) { // add all documents
@@ -147,16 +195,24 @@ public class HDP extends AbstractSampler {
             }
         }
         this.D = this.docIndices.size();
-
+        this.responses = new double[D]; // responses of considered documents
         this.numTokens = 0;
-        for (int dd : this.docIndices) {
+        for (int ii = 0; ii < D; ii++) {
+            int dd = this.docIndices.get(ii);
             this.numTokens += this.words[dd].length;
+            this.responses[ii] = docResponses[dd];
         }
 
         if (verbose) {
-            logln("--- # all docs:\t" + words.length);
-            logln("--- # selected docs:\t" + D);
+            logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
         }
     }
 
@@ -174,19 +230,21 @@ public class HDP extends AbstractSampler {
 
         initializeAssignments();
 
+        optimizeRegressionParameters();
+
         if (debug) {
             validate("Initialized");
         }
 
         if (verbose) {
-            logln("--- Done initializing. \t" + getCurrentState());
+            logln("--- --- Done initializing. \n" + getCurrentState());
             getLogLikelihood();
+            evaluateRegressPrediction(responses, docRegressMeans);
         }
     }
 
     protected void initializeModelStructure() {
         this.topicWords = new Topics();
-
         this.globalWeights = new SparseVector();
         this.globalWeights.set(NEW_COMPONENT_INDEX, 1.0);
     }
@@ -199,6 +257,7 @@ public class HDP extends AbstractSampler {
             z[ii] = new int[words[dd].length];
             docTopics[ii] = new SparseCount();
         }
+        docRegressMeans = new double[D];
     }
 
     protected void initializeAssignments() {
@@ -219,7 +278,7 @@ public class HDP extends AbstractSampler {
             logln("--- Initializing random assignments ...");
         }
 
-        sampleZs(!REMOVE, ADD, !REMOVE, ADD);
+        sampleZs(!REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
     }
 
     private void initializePresetAssignments() {
@@ -273,8 +332,10 @@ public class HDP extends AbstractSampler {
         }
 
         for (int kk = 0; kk < K; kk++) {
-            DirMult topicWord = new DirMult(V, hyperparams.get(BETA) * V, uniform);
-            topicWords.createNewComponent(kk, new Topic(iter, topicWord));
+            DirMult topicWord = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            double regParam = SamplerUtils.getGaussian(mu, sigma);
+            Topic topic = new Topic(iter, topicWord, regParam);
+            topicWords.createNewComponent(kk, topic);
         }
 
         for (int dd = 0; dd < D; dd++) {
@@ -323,18 +384,19 @@ public class HDP extends AbstractSampler {
 
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChange = 0;
-            
-            sampleZs(REMOVE, ADD, REMOVE, ADD); // sample topic assignments
-            
-            sampleGlobalWeights(); // sample global stick breaking weights
 
-            if (verbose && iter % REP_INTERVAL == 0) {
+            long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
+            long weightTime = sampleGlobalWeights();
+            long paramTime = optimizeRegressionParameters();
+
+            if (isReporting()) {
                 double loglikelihood = this.getLogLikelihood();
                 logLikelihoods.add(loglikelihood);
-
-                String str = "Iter " + iter + "\t llh = " + loglikelihood
-                        + ". # token changed: " + numTokensChange
-                        + ". change ratio: " + (double) numTokensChange / numTokens
+                String str = "Iter " + iter + "/" + MAX_ITER
+                        + "\t llh = " + loglikelihood
+                        + "\nTime: topic: " + topicTime
+                        + ". weight: " + weightTime
+                        + ". param: " + paramTime
                         + "\n" + getCurrentState();
                 if (iter <= BURN_IN) {
                     logln("--- Burning in. " + str);
@@ -359,6 +421,15 @@ public class HDP extends AbstractSampler {
                         }
                     }
                 }
+            }
+
+            if (isReporting()) {
+                evaluateRegressPrediction(responses, docRegressMeans);
+                logln("--- --- # tokens: " + numTokens
+                        + ". # token changed: " + numTokensChange
+                        + ". change ratio: " + (double) numTokensChange / numTokens
+                        + "\n");
+                System.out.println();
             }
 
             // store model
@@ -393,8 +464,19 @@ public class HDP extends AbstractSampler {
         }
     }
 
-    private void sampleZs(boolean removeFromModel, boolean addToModel,
-            boolean removeFromData, boolean addToData) {
+    /**
+     * Sample topic assignment for each token.
+     *
+     * @param removeFromModel
+     * @param addToModel
+     * @param removeFromData
+     * @param addToData
+     * @param observed
+     * @return Elapsed time
+     */
+    private long sampleZs(boolean removeFromModel, boolean addToModel,
+            boolean removeFromData, boolean addToData, boolean observed) {
+        long sTime = System.currentTimeMillis();
         double totalBeta = hyperparams.get(BETA) * V;
         for (int ii = 0; ii < D; ii++) {
             int dd = docIndices.get(ii);
@@ -402,6 +484,7 @@ public class HDP extends AbstractSampler {
                 int curZ = z[ii][nn];
                 if (removeFromData) {
                     this.docTopics[ii].decrement(curZ);
+                    this.docRegressMeans[ii] -= topicWords.getComponent(curZ).param / words[dd].length;
                 }
 
                 if (removeFromModel) {
@@ -413,7 +496,7 @@ public class HDP extends AbstractSampler {
                 }
 
                 ArrayList<Integer> indices = new ArrayList<Integer>();
-                ArrayList<Double> probs = new ArrayList<Double>();
+                ArrayList<Double> logprobs = new ArrayList<Double>();
                 for (int k : topicWords.getIndices()) {
                     indices.add(k);
                     double docTopicProb = docTopics[ii].getCount(k)
@@ -422,7 +505,13 @@ public class HDP extends AbstractSampler {
                             (topicWords.getComponent(k).phi.getCount(words[dd][nn])
                             + hyperparams.get(BETA))
                             / (topicWords.getComponent(k).phi.getCountSum() + totalBeta);
-                    probs.add(docTopicProb * topicWordProb);
+                    double logprob = Math.log(docTopicProb * topicWordProb);
+                    if (observed) {
+                        double mean = docRegressMeans[ii]
+                                + topicWords.getComponent(k).param / words[dd].length;
+                        logprob += StatUtils.logNormalProbability(responses[ii], mean, rhoSqrt);
+                    }
+                    logprobs.add(logprob);
                 }
 
                 if (addToModel) {
@@ -430,10 +519,28 @@ public class HDP extends AbstractSampler {
                     double docTopicProb = hyperparams.get(ALPHA_LOCAL)
                             * globalWeights.get(NEW_COMPONENT_INDEX);
                     double topicWordProb = uniform;
-                    probs.add(docTopicProb * topicWordProb);
+                    double logprob = Math.log(docTopicProb * topicWordProb);
+
+                    if (observed) {
+                        double mean = docRegressMeans[ii] + mu / words[dd].length;
+                        double var = rho + sigma / (words[dd].length * words[dd].length);
+                        double resLlh = StatUtils.logNormalProbability(responses[ii], mean, Math.sqrt(var));
+                        logprob += resLlh;
+                    }
+                    logprobs.add(logprob);
                 }
 
-                int sampledIdx = SamplerUtils.scaleSample(probs);
+                int sampledIdx = SamplerUtils.logMaxRescaleSample(logprobs);
+                if (sampledIdx == logprobs.size()) {
+                    for (int jj = 0; jj < indices.size(); jj++) {
+                        System.out.println(jj
+                                + "\t" + indices.get(jj)
+                                + "\t" + logprobs.get(jj)
+                                + "\t" + globalWeights.get(indices.get(jj)));
+                    }
+                    throw new RuntimeException("Out-of-bound sampling. Size = "
+                            + logprobs.size());
+                }
                 int newZ = indices.get(sampledIdx);
 
                 if (curZ != newZ) {
@@ -444,18 +551,20 @@ public class HDP extends AbstractSampler {
                 if (newZ == NEW_COMPONENT_INDEX) {
                     newZ = topicWords.getNextIndex();
                     DirMult topicWord = new DirMult(V, totalBeta, uniform);
-                    topicWords.createNewComponent(newZ, new Topic(iter, topicWord));
+                    double regParam = SamplerUtils.getGaussian(mu, sigma);
+                    topicWords.createNewComponent(newZ, new Topic(iter, topicWord, regParam));
                     globalWeights.set(newZ, 0.0); // temporarily assigned
                     newTopic = true;
                 }
                 z[ii][nn] = newZ;
 
                 if (addToData) {
-                    this.docTopics[ii].increment(newZ);
+                    docTopics[ii].increment(z[ii][nn]);
+                    docRegressMeans[ii] += topicWords.getComponent(z[ii][nn]).param / words[dd].length;
                 }
 
                 if (addToModel) {
-                    this.topicWords.getComponent(newZ).phi.increment(words[dd][nn]);
+                    topicWords.getComponent(z[ii][nn]).phi.increment(words[dd][nn]);
                 }
 
                 if (newTopic) { // if new topic is created, update SBP weights
@@ -463,12 +572,16 @@ public class HDP extends AbstractSampler {
                 }
             }
         }
+        return System.currentTimeMillis() - sTime;
     }
 
     /**
-     * Sample global distribution over topics.
+     * Sample the global stick breaking weights.
+     *
+     * @return Elapsed time
      */
-    private void sampleGlobalWeights() {
+    private long sampleGlobalWeights() {
+        long sTime = System.currentTimeMillis();
         if (globalWeights.size() != topicWords.getNumComponents() + 1) {
             throw new RuntimeException("Mismatch: " + globalWeights.size()
                     + " vs. " + topicWords.getNumComponents());
@@ -476,8 +589,8 @@ public class HDP extends AbstractSampler {
 
         SparseCount counts = new SparseCount();
         for (int k : topicWords.getIndices()) {
-            for (int ii = 0; ii < D; ii++) {
-                int count = docTopics[ii].getCount(k);
+            for (int dd = 0; dd < D; dd++) {
+                int count = docTopics[dd].getCount(k);
                 if (count > 1) {
                     int c = SamplerUtils.randAntoniak(
                             hyperparams.get(ALPHA_LOCAL) * globalWeights.get(k),
@@ -506,6 +619,68 @@ public class HDP extends AbstractSampler {
         for (int ii = 0; ii < wts.length; ii++) {
             this.globalWeights.set(indices.get(ii), wts[ii]);
         }
+        return System.currentTimeMillis() - sTime;
+    }
+
+    /**
+     * Update topic regression parameters using L-BFGS.
+     *
+     * @return Elapsed time
+     */
+    private long optimizeRegressionParameters() {
+        long sTime = System.currentTimeMillis();
+
+        ArrayList<Integer> sortedTopicIndices = topicWords.getSortedIndices();
+        int numTopics = sortedTopicIndices.size();
+        double[] curParams = new double[numTopics];
+        for (int jj = 0; jj < numTopics; jj++) {
+            int kk = sortedTopicIndices.get(jj);
+            curParams[jj] = topicWords.getComponent(kk).param;
+        }
+
+        designMatrix = new SparseVector[D];
+        for (int ii = 0; ii < D; ii++) {
+            designMatrix[ii] = new SparseVector(numTopics);
+            for (int kk : docTopics[ii].getIndices()) {
+                double val = (double) docTopics[ii].getCount(kk) / z[ii].length;
+                int topicIdx = Collections.binarySearch(sortedTopicIndices, kk);
+                if (topicIdx < 0) {
+                    throw new RuntimeException("Topic index: " + topicIdx);
+                }
+                designMatrix[ii].change(topicIdx, val);
+            }
+        }
+
+        RidgeRegressionLBFGS optimizable = new RidgeRegressionLBFGS(
+                responses, curParams, designMatrix, rhoSqrt, mu, sigmaSqrt);
+
+        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+        boolean converged = false;
+        try {
+            converged = optimizer.optimize();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        if (isReporting()) {
+            logln("--- converged? " + converged);
+        }
+
+        // update regression parameters
+        for (int jj = 0; jj < numTopics; jj++) {
+            int kk = sortedTopicIndices.get(jj);
+            topicWords.getComponent(kk).param = optimizable.getParameter(jj);
+        }
+
+        // update current predictions
+        this.docRegressMeans = new double[D];
+        for (int ii = 0; ii < D; ii++) {
+            for (int jj : designMatrix[ii].getIndices()) {
+                this.docRegressMeans[ii] += designMatrix[ii].get(jj)
+                        * topicWords.getComponent(sortedTopicIndices.get(jj)).param;
+            }
+        }
+        return System.currentTimeMillis() - sTime;
     }
 
     @Override
@@ -556,6 +731,7 @@ public class HDP extends AbstractSampler {
                 modelStr.append(k).append("\n");
                 modelStr.append(globalWeights.get(k)).append("\n");
                 modelStr.append(topic.born).append("\n");
+                modelStr.append(topic.param).append("\n");
                 modelStr.append(DirMult.output(topic.phi)).append("\n");
             }
 
@@ -614,8 +790,9 @@ public class HDP extends AbstractSampler {
                 this.globalWeights.set(k, weight);
 
                 int born = Integer.parseInt(reader.readLine());
+                double param = Double.parseDouble(reader.readLine());
                 DirMult topicWord = DirMult.input(reader.readLine());
-                topicWords.createNewComponent(k, new Topic(born, topicWord));
+                topicWords.createNewComponent(k, new Topic(born, topicWord, param));
             }
             this.topicWords.fillInactives();
             reader.close();
@@ -667,8 +844,7 @@ public class HDP extends AbstractSampler {
 
         ArrayList<RankingItem<Integer>> sortedTopics = new ArrayList<RankingItem<Integer>>();
         for (int k : topicWords.getIndices()) {
-            DirMult topic = topicWords.getComponent(k).phi;
-            sortedTopics.add(new RankingItem<Integer>(k, topic.getCountSum()));
+            sortedTopics.add(new RankingItem<Integer>(k, topicWords.getComponent(k).param));
         }
         Collections.sort(sortedTopics);
 
@@ -678,7 +854,9 @@ public class HDP extends AbstractSampler {
             Topic topic = topicWords.getComponent(k);
             double[] distrs = topic.phi.getDistribution();
             String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k + ", " + topic.born
+            writer.write("[" + k
+                    + ", " + topic.born
+                    + ", " + MiscUtils.formatDouble(topic.param)
                     + ", " + topic.phi.getCountSum() + "]");
             for (String topWord : topWords) {
                 writer.write("\t" + topWord);
@@ -692,10 +870,12 @@ public class HDP extends AbstractSampler {
 
         private final int born;
         private DirMult phi;
+        private double param;
 
-        public Topic(int born, DirMult phi) {
+        public Topic(int born, DirMult phi, double param) {
             this.born = born;
             this.phi = phi;
+            this.param = param;
         }
     }
 
@@ -780,7 +960,7 @@ public class HDP extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar' " + HDP.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + SHDP.class.getName() + " -help";
     }
 
     private static void addOpitions() throws Exception {
@@ -804,6 +984,9 @@ public class HDP extends AbstractSampler {
         addOption("global-alpha", "Global alpha");
         addOption("local-alpha", "Local alpha");
         addOption("beta", "Beta");
+        addOption("rho", "Rho");
+        addOption("mu", "Mu");
+        addOption("sigma", "Sigma");
         addOption("K", "Initial number of topics");
         addOption("num-top-words", "Number of top words per topic");
 
@@ -812,6 +995,7 @@ public class HDP extends AbstractSampler {
 
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
+        options.addOption("z", false, "z-normalize");
         options.addOption("help", false, "Help");
     }
 
@@ -840,6 +1024,9 @@ public class HDP extends AbstractSampler {
         double globalAlpha = CLIUtils.getDoubleArgument(cmd, "global-alpha", 1);
         double localAlpha = CLIUtils.getDoubleArgument(cmd, "local-alpha", 0.5);
         double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
+        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
         int K = CLIUtils.getIntegerArgument(cmd, "K", 50);
 
         // data input
@@ -851,14 +1038,20 @@ public class HDP extends AbstractSampler {
         // data output
         String outputFolder = cmd.getOptionValue("output-folder");
 
-        TextDataset data = new TextDataset(datasetName);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName);
         data.loadFormattedData(new File(wordVocFile),
                 new File(docWordFile),
                 new File(docInfoFile),
                 null);
         int V = data.getWordVocab().size();
 
-        HDP sampler = new HDP();
+        double[] docResponses = data.getResponses();
+        if (cmd.hasOption("z")) { // z-normalization
+            ZNormalizer zNorm = new ZNormalizer(docResponses);
+            docResponses = zNorm.normalize(docResponses);
+        }
+
+        SHDP sampler = new SHDP();
         sampler.setVerbose(cmd.hasOption("v"));
         sampler.setDebug(cmd.hasOption("d"));
         sampler.setLog(true);
@@ -869,7 +1062,7 @@ public class HDP extends AbstractSampler {
             sampler.setK(K);
         }
         sampler.configure(outputFolder, V,
-                globalAlpha, localAlpha, beta,
+                globalAlpha, localAlpha, beta, rho, mu, sigma,
                 initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
         File samplerFolder = new File(sampler.getSamplerFolderPath());
@@ -891,7 +1084,7 @@ public class HDP extends AbstractSampler {
             reader.close();
         }
 
-        sampler.train(data.getWords(), selectedDocIndices);
+        sampler.train(data.getWords(), selectedDocIndices, docResponses);
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
