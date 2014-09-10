@@ -91,3 +91,8 @@ Notes:
 - To avoid the Java Heap Space Errors, increase `-Xmx` and `-Xms`. For example, `-Xmx10000M -Xms10000M`.
 - For other input arguments, use `-help`. For example, `java -cp dist/segan.jar data.ResponseTextData -help`.
 - For each document in the input folder, the filename is used as its ID. If the filename has `txt` as the file extension, `txt` will be discarded. For example, a document stored in file `doc-1.txt` will have `doc-1` as its ID, whereas a document stored in file `doc-2.dat` will have `doc-2.dat` as its ID.
+
+# SHDP
+```
+ java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SHDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization>
+```
