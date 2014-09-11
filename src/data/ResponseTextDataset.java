@@ -268,7 +268,7 @@ public class ResponseTextDataset extends TextDataset {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + ResponseTextDataset.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + ResponseTextDataset.class.getName() + " -help";
     }
 
     public static void main(String[] args) {

@@ -518,8 +518,7 @@ public class LabelTextDataset extends TextDataset {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' "
-                + LabelTextDataset.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + LabelTextDataset.class.getName() + " -help";
     }
 
     public static void main(String[] args) {
@@ -555,14 +554,18 @@ public class LabelTextDataset extends TextDataset {
             debug = cmd.hasOption("d");
 
             String runMode = cmd.getOptionValue("run-mode");
-            if (runMode.equals("process")) {
-                process();
-            } else if (runMode.equals("load")) {
-                load();
-            } else if (runMode.equals("cross-validate")) {
-                crossValidate();
-            } else {
-                throw new RuntimeException("Run mode " + runMode + " is not supported");
+            switch (runMode) {
+                case "process":
+                    process();
+                    break;
+                case "load":
+                    load();
+                    break;
+                case "cross-validate":
+                    crossValidate();
+                    break;
+                default:
+                    throw new RuntimeException("Run mode " + runMode + " is not supported");
             }
         } catch (Exception e) {
             e.printStackTrace();

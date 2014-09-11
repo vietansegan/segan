@@ -1,4 +1,4 @@
-package sampler.labeled;
+package sampler.labeled.baselines;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;

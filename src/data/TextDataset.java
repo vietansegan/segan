@@ -790,7 +790,7 @@ public class TextDataset extends AbstractTokenizeDataset {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + TextDataset.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + TextDataset.class.getName() + " -help";
     }
 
     public static void main(String[] args) {

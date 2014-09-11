@@ -1,4 +1,4 @@
-package sampler.labeled;
+package sampler.labeled.baselines;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -120,32 +120,8 @@ public class TFIDFNN {
                     || words[d].length < minWordTypeCount) {
                 continue;
             }
-
-//            SparseCount typeCount = new SparseCount();
-//            for (int n = 0; n < words[d].length; n++) {
-//                typeCount.increment(words[d][n]);
-//            }
-
-            // max tf
-//            int maxTf = -1;
-//            for (int idx : typeCount.getIndices()) {
-//                int tf = typeCount.getCount(idx);
-//                if (maxTf < tf) {
-//                    maxTf = tf;
-//                }
-//            }
-
-//            SparseVector docVector = new SparseVector();
-//            for (int idx : typeCount.getIndices()) {
-////                double tf = 0.5 + 0.5 * typeCount.getCount(idx) / maxTf;
-//                double tf = typeCount.getCount(idx);
-//                double idf = idfs[idx];
-//                double tfidf = tf * idf;
-//                docVector.set(idx, tfidf);
-//            }
-
+            
             SparseVector docVector = getFeatureVector(words[d]);
-
             for (int ll : docTopics) {
                 labelDocCounts[ll]++;
                 this.labelVectors[ll].add(docVector);
