@@ -1,7 +1,6 @@
 package data;
 
 import core.AbstractDataset;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -10,7 +9,6 @@ import main.GlobalConstants;
 import opennlp.tools.tokenize.Tokenizer;
 import opennlp.tools.tokenize.TokenizerME;
 import opennlp.tools.tokenize.TokenizerModel;
-import util.IOUtils;
 
 /**
  *

@@ -20,7 +20,7 @@ import util.MiscUtils;
 import util.evaluation.MimnoTopicCoherence;
 
 /**
- * A set of documents
+ * A dataset consists of a set of documents.
  *
  * @author vietan
  */
@@ -687,15 +687,6 @@ public class TextDataset extends AbstractTokenizeDataset {
                     }
                 }
             }
-
-//            if (debug && verbose && filteredDocWords.isEmpty()) {
-//                System.out.println();
-//                logln("[WARNING] Empty document. d = " + d
-//                        + ". original count = " + words[d].length);
-//                for (int s = 0; s < sentRawWords[d].length; s++) {
-//                    logln(">>> " + s + "\t" + sentRawWords[d][s]);
-//                }
-//            }
             words[d] = new int[filteredDocWords.size()];
             for (int n = 0; n < words[d].length; n++) {
                 words[d][n] = filteredDocWords.get(n);

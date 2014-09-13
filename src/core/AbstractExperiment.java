@@ -205,7 +205,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
 
             results[f] = new HashMap<String, ArrayList<Measurement>>();
 
-            File foldSummary = new File(foldModelFolder, phase + "summary.txt");
+            File foldSummary = new File(foldModelFolder, phase + SUMMARY_FILE);
             BufferedWriter writer = IOUtils.getBufferedWriter(foldSummary);
             if (verbose) {
                 System.out.println("--- Summarizing fold " + f + ". Writing to " + foldSummary);
@@ -239,7 +239,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 if (ndcgFile.exists()) {
                     double[] ndcgs = RankingPerformance.inputNDCG(
                             new File(new File(teResultFolder, phase + RANKING_FOLDER),
-                                    RankingPerformance.NDCGFile));
+                            RankingPerformance.NDCGFile));
                     measurements.add(new Measurement("NDCG@1", ndcgs[0]));
                     measurements.add(new Measurement("NDCG@5", ndcgs[4]));
                     measurements.add(new Measurement("NDCG@10", ndcgs[9]));
@@ -271,13 +271,17 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
         Collections.sort(modelNames);
 
         // summarize across folds
-        File metaSumFile = new File(resultFolder, phase + "meta-summary.txt");
+        File mergeFile = new File(resultFolder, phase + "merged-" + SUMMARY_FILE);
+        File metaSumFile = new File(resultFolder, phase + "meta-" + SUMMARY_FILE);
         if (verbose) {
             System.out.println("--- Meta summarizing " + metaSumFile);
+            System.out.println("--- Merge summarizing " + mergeFile);
         }
         ArrayList<String> measureNames = null;
 
         BufferedWriter writer = IOUtils.getBufferedWriter(metaSumFile);
+        BufferedWriter mergeWriter = IOUtils.getBufferedWriter(mergeFile);
+        mergeWriter.write("Model\tMetric\tValue\tFold\n");
         for (int f = 0; f < results.length; f++) {
             if (results[f] == null) {
                 continue;
@@ -289,6 +293,11 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                     writer.write(modelName);
                     for (Measurement m : modelFoldMeasurements) {
                         writer.write("\t" + m.getValue());
+                        mergeWriter.write(modelName
+                                + "\t" + m.getName()
+                                + "\t" + m.getValue()
+                                + "\t" + f
+                                + "\n");
                     }
 
                     if (measureNames == null) {
@@ -335,7 +344,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 writer.write("\n\n");
             }
         }
-
         writer.close();
+        mergeWriter.close();
     }
 }

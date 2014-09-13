@@ -9,6 +9,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.util.SparseCount;
@@ -31,7 +33,8 @@ public class LabelTextDataset extends TextDataset {
     public static final String xmlExt = ".xml";
     protected ArrayList<ArrayList<String>> labelList;
     protected ArrayList<String> labelVocab;
-    protected int[][] labels;
+    protected int[][] labels; // list of labels for each document (maybe duplicate)
+    protected int[][] uniqueLabels;
     protected int maxLabelVocSize = Integer.MAX_VALUE;
     protected int minLabelDocFreq = 1;
 
@@ -58,6 +61,24 @@ public class LabelTextDataset extends TextDataset {
 
     public int[][] getLabels() {
         return this.labels;
+    }
+
+    public int[][] getUniqueLabels() {
+        if (uniqueLabels == null) {
+            uniqueLabels = new int[labels.length][];
+        }
+        for (int dd = 0; dd < labels.length; dd++) {
+            Set<Integer> labelSet = new HashSet<>();
+            for (int ll : labels[dd]) {
+                labelSet.add(ll);
+            }
+            uniqueLabels[dd] = new int[labelSet.size()];
+            int count = 0;
+            for (int ll : labelSet) {
+                uniqueLabels[dd][count++] = ll;
+            }
+        }
+        return uniqueLabels;
     }
 
     public ArrayList<String> getLabelVocab() {
