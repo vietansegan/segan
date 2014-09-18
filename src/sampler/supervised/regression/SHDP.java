@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import optimization.RidgeRegressionLBFGS;
+import optimization.RidgeLinearRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.LDA;
@@ -651,7 +651,7 @@ public class SHDP extends AbstractSampler {
             }
         }
 
-        RidgeRegressionLBFGS optimizable = new RidgeRegressionLBFGS(
+        RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
                 responses, curParams, designMatrix, rhoSqrt, mu, sigmaSqrt);
 
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);

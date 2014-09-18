@@ -18,11 +18,11 @@ import util.RankingItem;
 public class RankingEvaluation {
 
     public static final String AUCCalculatorPath = "lib/auc.jar";
-    private double[] scores;
-    private Set<Integer> relevants;
+    private final double[] scores;
+    private final Set<Integer> relevants;
     // internal
-    private ArrayList<Measurement> measurements;
-    private ArrayList<RankingItem<Integer>> ranking;
+    private final ArrayList<Measurement> measurements;
+    private final ArrayList<RankingItem<Integer>> ranking;
     private String aucListFile;
 
     public RankingEvaluation(double[] scores, Set<Integer> relevants) {
@@ -93,9 +93,9 @@ public class RankingEvaluation {
             }
             // output temporary results
             BufferedWriter writer = IOUtils.getBufferedWriter(aucListFile);
-            for (int i = 0; i < this.ranking.size(); i++) {
-                int item = this.ranking.get(i).getObject();
-                double value = this.ranking.get(i).getPrimaryValue();
+            for (RankingItem<Integer> rankingItem : this.ranking) {
+                int item = rankingItem.getObject();
+                double value = rankingItem.getPrimaryValue();
                 int cls;
                 if (this.relevants.contains(item)) {
                     cls = 1;

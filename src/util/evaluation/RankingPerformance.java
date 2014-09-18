@@ -16,6 +16,7 @@ import util.RankingItemList;
 
 /**
  * This is to replace the class Evaluation
+ * @param <A>
  */
 public class RankingPerformance<A> {
 

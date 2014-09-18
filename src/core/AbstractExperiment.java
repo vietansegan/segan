@@ -16,7 +16,7 @@ import util.evaluation.Measurement;
 import util.evaluation.RankingPerformance;
 
 /**
- *
+ * @param <D> dataset
  * @author vietan
  */
 public abstract class AbstractExperiment<D extends AbstractDataset>
@@ -37,13 +37,10 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static final String RESULT_FOLDER = "result";
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";
+    public static final String MODEL_FILE = "model";
     public static final String PERPLEXITY_FILE = "perplexity.txt";
     public static final int UNOBSERVED = -1;
 
-    public static enum RunType {
-
-        SUPERFAST, FAST, FASTMOD, MODERATE, MODLONG, LONG, EXTENSIVE
-    };
     public static int burn_in = 100;
     public static int max_iters = 1000;
     public static int sample_lag = 50;
@@ -60,51 +57,6 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public abstract void run() throws Exception;
 
     public abstract void evaluate() throws Exception;
-
-    protected void setRun(RunType type) {
-        switch (type) {
-            case SUPERFAST:
-                burn_in = 1;
-                max_iters = 2;
-                sample_lag = 1;
-                break;
-            case FAST:
-                burn_in = 2;
-                max_iters = 10;
-                sample_lag = 3;
-                break;
-            case FASTMOD:
-                burn_in = 10;
-                max_iters = 50;
-                sample_lag = 10;
-                break;
-            case MODERATE:
-                burn_in = 20;
-                max_iters = 100;
-                sample_lag = 20;
-                break;
-            case MODLONG:
-                burn_in = 250;
-                max_iters = 500;
-                sample_lag = 25;
-                break;
-            case LONG:
-                burn_in = 500;
-                max_iters = 1000;
-                sample_lag = 50;
-                break;
-            case EXTENSIVE:
-                burn_in = 2000;
-                max_iters = 5000;
-                sample_lag = 50;
-                break;
-            default:
-                burn_in = 200;
-                max_iters = 1000;
-                sample_lag = 20;
-                break;
-        }
-    }
 
     public String getDatasetFolder() {
         return data.getFolder();
@@ -239,7 +191,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 if (ndcgFile.exists()) {
                     double[] ndcgs = RankingPerformance.inputNDCG(
                             new File(new File(teResultFolder, phase + RANKING_FOLDER),
-                            RankingPerformance.NDCGFile));
+                                    RankingPerformance.NDCGFile));
                     measurements.add(new Measurement("NDCG@1", ndcgs[0]));
                     measurements.add(new Measurement("NDCG@5", ndcgs[4]));
                     measurements.add(new Measurement("NDCG@10", ndcgs[9]));

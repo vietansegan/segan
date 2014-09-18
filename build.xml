@@ -33,4 +33,11 @@
   </target>
 
   <target name="clean-build" depends="clean,jar"/>
+
+  <target name="packjar" depends="compile">
+    <mkdir dir="${dist.dir}"/>
+    <jar destfile="${dist.dir}/${ant.project.name}-packed.jar" basedir="${classes.dir}">
+      <zipfileset excludes="META-INF/*.SF" src="${lib.dir}/commons-cli-1.2.jar"/>
+    </jar>  
+  </target>
 </project>

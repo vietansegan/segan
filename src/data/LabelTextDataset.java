@@ -63,6 +63,14 @@ public class LabelTextDataset extends TextDataset {
         return this.labels;
     }
 
+    public int[] getSingleLabels() {
+        int[] singleLabels = new int[labels.length];
+        for (int dd = 0; dd < singleLabels.length; dd++) {
+            singleLabels[dd] = labels[dd][0];
+        }
+        return singleLabels;
+    }
+
     public int[][] getUniqueLabels() {
         if (uniqueLabels == null) {
             uniqueLabels = new int[labels.length][];
@@ -225,8 +233,8 @@ public class LabelTextDataset extends TextDataset {
         reader.close();
 
         this.labelList = new ArrayList<ArrayList<String>>();
-        for (int ii = 0; ii < docIdList.size(); ii++) {
-            ArrayList<String> docLabels = docLabelMap.get(docIdList.get(ii));
+        for (String docId : docIdList) {
+            ArrayList<String> docLabels = docLabelMap.get(docId);
             this.labelList.add(docLabels);
         }
         logln("--- --- Loaded " + labelList.size() + " label instances");
@@ -275,6 +283,7 @@ public class LabelTextDataset extends TextDataset {
      * Output the list of unique labels
      *
      * @param outputFolder Output folder
+     * @throws java.lang.Exception
      */
     protected void outputLabelVocab(String outputFolder) throws Exception {
         File labelVocFile = new File(outputFolder, formatFilename + labelVocabExt);
@@ -285,6 +294,8 @@ public class LabelTextDataset extends TextDataset {
 
     /**
      * Create label vocabulary
+     *
+     * @throws java.lang.Exception
      */
     public void createLabelVocab() throws Exception {
         logln("--- Creating label vocab ...");
@@ -293,13 +304,13 @@ public class LabelTextDataset extends TextDataset {
 
     protected void createLabelVocabByFrequency() throws Exception {
         HashMap<String, Integer> labelFreqs = new HashMap<String, Integer>();
-        for (int ii = 0; ii < this.labelList.size(); ii++) {
-            for (String label : this.labelList.get(ii)) {
-                Integer count = labelFreqs.get(label);
+        for (ArrayList<String> ls : this.labelList) {
+            for (String l : ls) {
+                Integer count = labelFreqs.get(l);
                 if (count == null) {
-                    labelFreqs.put(label, 1);
+                    labelFreqs.put(l, 1);
                 } else {
-                    labelFreqs.put(label, count + 1);
+                    labelFreqs.put(l, count + 1);
                 }
             }
         }
@@ -325,17 +336,17 @@ public class LabelTextDataset extends TextDataset {
             double trToDevRatio) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = new ArrayList<Integer>();
-        for (int d = 0; d < this.docIdList.size(); d++) {
-            instanceList.add(new Instance<String>(docIdList.get(d)));
+        for (String docId : this.docIdList) {
+            instanceList.add(new Instance<String>(docId));
             groupIdList.add(0); // random, no stratified
         }
 
         String cvName = "";
-        CrossValidation<String, Instance<String>> cv =
-                new CrossValidation<String, Instance<String>>(
-                cvFolder,
-                cvName,
-                instanceList);
+        CrossValidation<String, Instance<String>> cv
+                = new CrossValidation<String, Instance<String>>(
+                        cvFolder,
+                        cvName,
+                        instanceList);
 
         cv.stratify(groupIdList, numFolds, trToDevRatio);
         cv.outputFolds();
@@ -448,14 +459,14 @@ public class LabelTextDataset extends TextDataset {
         }
 
         ArrayList<Attribute> attributes = new ArrayList<Attribute>();
-        for (int ii = 0; ii < wordVocab.size(); ii++) {
-            attributes.add(new Attribute("voc_" + wordVocab.get(ii)));
+        for (String word : wordVocab) {
+            attributes.add(new Attribute("voc_" + word));
         }
-        for (int ii = 0; ii < labelVocab.size(); ii++) {
+        for (String label : labelVocab) {
             ArrayList<String> attVals = new ArrayList<String>();
             attVals.add("0");
             attVals.add("1");
-            attributes.add(new Attribute("label_" + labelVocab.get(ii), attVals));
+            attributes.add(new Attribute("label_" + label, attVals));
         }
 
         Instances data = new Instances(name, attributes, 0);
@@ -513,6 +524,8 @@ public class LabelTextDataset extends TextDataset {
      * Load train/development/test data in a cross validation fold.
      *
      * @param fold The given fold
+     * @return
+     * @throws java.lang.Exception
      */
     public static LabelTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
         LabelTextDataset[] foldData = new LabelTextDataset[3];

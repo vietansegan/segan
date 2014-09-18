@@ -45,7 +45,6 @@ public class AbstractRunner {
     }
 
     public static String getHelpString(String className) {
-        return "java -cp 'dist/segan.jar:dist/lib/*' "
-                + className + " -help";
+        return "java -cp 'dist/segan.jar' " + className + " -help";
     }
 }

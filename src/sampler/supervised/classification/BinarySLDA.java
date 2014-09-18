@@ -3,20 +3,30 @@ package sampler.supervised.classification;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizable;
 import core.AbstractSampler;
+import static core.AbstractSampler.addSamplingOptions;
+import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
+import optimization.RidgeLogisticRegressionLBFGS;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import sampler.LDA;
 import sampling.likelihood.DirMult;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
+import util.SparseVector;
 import util.StatUtils;
 import util.evaluation.ClassificationEvaluation;
 import util.evaluation.Measurement;
@@ -41,6 +51,7 @@ public class BinarySLDA extends AbstractSampler {
     // inputs
     protected int[][] words; // [D] x [N_d]
     protected int[] labels; // [D] binary labels
+    protected ArrayList<Integer> docIndices; // [D]: indices of selected documents
     // latent variables
     protected int[][] z;
     protected DirMult[] docTopics;
@@ -50,8 +61,15 @@ public class BinarySLDA extends AbstractSampler {
     // internal
     private int numTokensChanged = 0;
     private int numTokens = 0;
-    private ArrayList<double[]> lambdasOverTime;
     private Set<Integer> positives;
+
+    public BinarySLDA() {
+        this.basename = "binary-SLDA";
+    }
+
+    public BinarySLDA(String bname) {
+        this.basename = bname;
+    }
 
     public void configure(BinarySLDA sampler) {
         this.configure(sampler.folder,
@@ -104,7 +122,6 @@ public class BinarySLDA extends AbstractSampler {
         this.initState = initState;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
-        this.lambdasOverTime = new ArrayList<double[]>();
         this.setName();
 
         if (!debug) {
@@ -143,7 +160,7 @@ public class BinarySLDA extends AbstractSampler {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_binary-sLDA")
+                .append("_").append(basename)
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
                 .append("_L-").append(LAG)
@@ -156,21 +173,35 @@ public class BinarySLDA extends AbstractSampler {
         this.name = str.toString();
     }
 
-    public void train(int[][] ws, int[] ls) {
-        this.words = ws;
-        this.labels = ls;
-        this.D = this.words.length;
-
-        this.positives = new HashSet<Integer>();
-        for (int d = 0; d < D; d++) {
-            if (labels[d] == POSITVE) {
-                this.positives.add(d);
+    /**
+     * Set training data.
+     *
+     * @param docWords All documents
+     * @param docIndices Indices of documents under consideration
+     * @param docLabels Responses of all documents
+     */
+    public void train(int[][] docWords,
+            ArrayList<Integer> docIndices,
+            int[] docLabels) {
+        this.words = docWords;
+        this.docIndices = docIndices;
+        if (this.docIndices == null) { // add all documents
+            this.docIndices = new ArrayList<>();
+            for (int dd = 0; dd < docWords.length; dd++) {
+                this.docIndices.add(dd);
             }
         }
-
         this.numTokens = 0;
-        for (int d = 0; d < D; d++) {
-            this.numTokens += words[d].length;
+        this.D = this.docIndices.size();
+        this.labels = new int[this.D];
+        this.positives = new HashSet<Integer>();
+        for (int ii = 0; ii < D; ii++) {
+            int dd = this.docIndices.get(ii);
+            this.numTokens += this.words[dd].length;
+            this.labels[ii] = docLabels[dd];
+            if (this.labels[ii] == POSITVE) {
+                this.positives.add(ii);
+            }
         }
 
         if (verbose) {
@@ -208,12 +239,6 @@ public class BinarySLDA extends AbstractSampler {
         }
     }
 
-    @Override
-    public void sample() {
-        this.initialize();
-        this.iterate();
-    }
-
     private void initializeModelStructure() {
         topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
@@ -228,14 +253,16 @@ public class BinarySLDA extends AbstractSampler {
 
     protected void initializeDataStructure() {
         z = new int[D][];
-        for (int d = 0; d < D; d++) {
-            z[d] = new int[words[d].length];
+        for (int ii = 0; ii < D; ii++) {
+            z[ii] = new int[words[docIndices.get(ii)].length];
         }
 
         docTopics = new DirMult[D];
-        for (int d = 0; d < D; d++) {
-            docTopics[d] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
+        for (int ii = 0; ii < D; ii++) {
+            docTopics[ii] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
         }
+
+        docLabelDotProds = new double[D];
     }
 
     protected void initializeAssignments() {
@@ -252,11 +279,12 @@ public class BinarySLDA extends AbstractSampler {
     }
 
     private void initializeRandomAssignments() {
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                z[d][n] = rand.nextInt(K);
-                docTopics[d].increment(z[d][n]);
-                topicWords[z[d][n]].increment(words[d][n]);
+        for (int ii = 0; ii < D; ii++) {
+            int dd = docIndices.get(ii);
+            for (int nn = 0; nn < words[ii].length; nn++) {
+                z[ii][nn] = rand.nextInt(K);
+                docTopics[ii].increment(z[ii][nn]);
+                topicWords[z[ii][nn]].increment(words[dd][nn]);
             }
         }
     }
@@ -274,15 +302,15 @@ public class BinarySLDA extends AbstractSampler {
         lda.setDebug(debug);
         lda.setVerbose(verbose);
         lda.setLog(false);
-        double lda_alpha = 0.1;
-        double lda_beta = 0.1;
+        double lda_alpha = hyperparams.get(ALPHA);
+        double lda_beta = hyperparams.get(BETA);
 
         lda.configure(folder, words, V, K, lda_alpha, lda_beta, initState,
                 paramOptimized, lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
 
         int[][] ldaZ = null;
         try {
-            File ldaZFile = new File(lda.getSamplerFolderPath(), "model.zip");
+            File ldaZFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
             if (ldaZFile.exists()) {
                 lda.inputState(ldaZFile);
             } else {
@@ -297,16 +325,17 @@ public class BinarySLDA extends AbstractSampler {
             ldaZ = lda.getZ();
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while running LDA for initialization");
         }
-        setLog(true);
+        setLog(log);
 
         // initialize assignments
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                z[d][n] = ldaZ[d][n];
-                docTopics[d].increment(z[d][n]);
-                topicWords[z[d][n]].increment(words[d][n]);
+        for (int ii = 0; ii < D; ii++) {
+            int dd = docIndices.get(ii);
+            for (int n = 0; n < words[ii].length; n++) {
+                z[ii][n] = ldaZ[ii][n];
+                docTopics[ii].increment(z[ii][n]);
+                topicWords[z[ii][n]].increment(words[dd][n]);
             }
         }
     }
@@ -339,15 +368,9 @@ public class BinarySLDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
 
-            // store llh after every iteration
-            double loglikelihood = this.getLogLikelihood();
-            logLikelihoods.add(loglikelihood);
-
-            double[] snapLambdas = new double[K];
-            System.arraycopy(lambdas, 0, snapLambdas, 0, K);
-            this.lambdasOverTime.add(snapLambdas);
-
-            if (verbose && iter % REP_INTERVAL == 0) {
+            if (isReporting()) {
+                double loglikelihood = this.getLogLikelihood();
+                logLikelihoods.add(loglikelihood);
                 String str = "Iter " + iter
                         + "\t llh = " + loglikelihood
                         + "\n" + getCurrentState();
@@ -358,14 +381,8 @@ public class BinarySLDA extends AbstractSampler {
                 }
             }
 
-            // sample topic assignments
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    sampleZ(d, n, REMOVE, ADD, REMOVE, ADD, OBSERVED);
-                }
-            }
+            sampleZ(REMOVE, ADD, REMOVE, ADD, OBSERVED);
 
-            // update the label parameters
             updateLambdas();
 
             // parameter optimization
@@ -386,7 +403,7 @@ public class BinarySLDA extends AbstractSampler {
                 }
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
+            if (isReporting()) {
                 logln("--- label prediction");
                 evaluatePerformances();
 
@@ -398,10 +415,6 @@ public class BinarySLDA extends AbstractSampler {
 
             if (debug) {
                 validate("iter " + iter);
-            }
-
-            if (verbose && iter % REP_INTERVAL == 0) {
-                System.out.println();
             }
 
             // store model
@@ -435,54 +448,62 @@ public class BinarySLDA extends AbstractSampler {
     /**
      * Sample topic assignment for a token
      *
-     * @param d Document index
-     * @param n Token index
      * @param removeFromModel
      * @param addToModel
      * @param removeFromData
      * @param addToData
      * @param observe Whether the response variable of this document is observed
+     * @return Elapsed time
      */
-    private void sampleZ(int d, int n,
-            boolean removeFromModel, boolean addToModel,
+    private long sampleZ(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData,
             boolean observe) {
-        if (removeFromModel) {
-            topicWords[z[d][n]].decrement(words[d][n]);
-        }
-        if (removeFromData) {
-            docTopics[d].decrement(z[d][n]);
-            docLabelDotProds[d] -= lambdas[z[d][n]] / words[d].length;
-        }
+        long sTime = System.currentTimeMillis();
+        double totalBeta = V * hyperparams.get(BETA);
+        for (int ii = 0; ii < D; ii++) {
+            int dd = docIndices.get(ii);
+            for (int nn = 0; nn < words[dd].length; nn++) {
+                if (removeFromModel) {
+                    topicWords[z[ii][nn]].decrement(words[dd][nn]);
+                }
+                if (removeFromData) {
+                    docTopics[ii].decrement(z[ii][nn]);
+                    docLabelDotProds[ii] -= lambdas[z[ii][nn]] / words[dd].length;
+                }
 
-        double[] logprobs = new double[K];
-        for (int k = 0; k < K; k++) {
-            logprobs[k] =
-                    docTopics[d].getLogLikelihood(k)
-                    + topicWords[k].getLogLikelihood(words[d][n]);
-            if (observe) {
-                double dotProd = docLabelDotProds[d] + lambdas[z[d][n]] / words[d].length;
-                logprobs[k] += getLabelLogLikelihood(labels[d], dotProd);
+                double[] logprobs = new double[K];
+                for (int k = 0; k < K; k++) {
+                    logprobs[k] = Math.log(docTopics[ii].getCount(k) + hyperparams.get(ALPHA))
+                            + Math.log((topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
+                                    / (topicWords[k].getCountSum() + totalBeta));
+                    if (observe) {
+                        double dotProd = docLabelDotProds[ii]
+                                + lambdas[z[ii][nn]] / words[dd].length;
+                        logprobs[k] += getLabelLogLikelihood(labels[ii], dotProd);
+                    }
+                }
+                int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
+
+                if (z[ii][nn] != sampledZ) {
+                    numTokensChanged++; // for debugging
+                }
+                // update
+                z[ii][nn] = sampledZ;
+
+                if (addToModel) {
+                    topicWords[z[ii][nn]].increment(words[dd][nn]);
+                }
+                if (addToData) {
+                    docTopics[ii].increment(z[ii][nn]);
+                    docLabelDotProds[ii] += lambdas[z[ii][nn]] / words[dd].length;
+                }
             }
         }
-        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
-
-        if (z[d][n] != sampledZ) {
-            numTokensChanged++; // for debugging
-        }
-        // update
-        z[d][n] = sampledZ;
-
-        if (addToModel) {
-            topicWords[z[d][n]].increment(words[d][n]);
-        }
-        if (addToData) {
-            docTopics[d].increment(z[d][n]);
-            docLabelDotProds[d] += lambdas[z[d][n]] / words[d].length;
-        }
+        return System.currentTimeMillis() - sTime;
     }
 
-    private void updateLambdas() {
+    private long updateLambdas() {
+        long sTime = System.currentTimeMillis();
         if (lambdas == null) {
             this.lambdas = new double[K];
             for (int k = 0; k < K; k++) {
@@ -490,14 +511,17 @@ public class BinarySLDA extends AbstractSampler {
             }
         }
 
-        double[][] designMatrix = new double[D][K];
-        for (int d = 0; d < D; d++) {
-            designMatrix[d] = docTopics[d].getEmpiricalDistribution();
+        SparseVector[] designMatrix = new SparseVector[D];
+        for (int ii = 0; ii < D; ii++) {
+            designMatrix[ii] = new SparseVector(K);
+            for (int k : docTopics[ii].getSparseCounts().getIndices()) {
+                double val = (double) docTopics[ii].getCount(k) / z[ii].length;
+                designMatrix[ii].change(k, val);
+            }
         }
 
-        L2NormLogLinearObjective optimizable = new L2NormLogLinearObjective(
-                lambdas, designMatrix, labels, mean, sigma);
-
+        RidgeLogisticRegressionLBFGS optimizable = new RidgeLogisticRegressionLBFGS(
+                labels, lambdas, designMatrix, mean, sigma);
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
         boolean converged = false;
         try {
@@ -506,8 +530,8 @@ public class BinarySLDA extends AbstractSampler {
             ex.printStackTrace();
         }
 
-        if (verbose) {
-            logln("--- converged: " + converged);
+        if (isReporting()) {
+            logln("--- converged? " + converged);
         }
 
         // update regression parameters
@@ -516,20 +540,12 @@ public class BinarySLDA extends AbstractSampler {
         }
 
         // update current predictions
-        updateCurrentDotProducts();
-    }
-
-    /**
-     * Compute the current prediction.
-     */
-    private void updateCurrentDotProducts() {
         this.docLabelDotProds = new double[D];
-        for (int d = 0; d < D; d++) {
-            double[] empDist = docTopics[d].getEmpiricalDistribution();
-            for (int k = 0; k < K; k++) {
-                this.docLabelDotProds[d] += lambdas[k] * empDist[k];
-            }
+        for (int ii = 0; ii < D; ii++) {
+            docLabelDotProds[ii] = designMatrix[ii].dotProduct(lambdas);
         }
+
+        return System.currentTimeMillis() - sTime;
     }
 
     /**
@@ -801,8 +817,7 @@ public class BinarySLDA extends AbstractSampler {
 
         try {
             IOUtils.createFolder(iterPredFolder);
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -827,6 +842,7 @@ public class BinarySLDA extends AbstractSampler {
      * @param stateFile The state file of the trained model
      * @param newWords Test documents
      * @param outputResultFile Prediction file
+     * @throws java.lang.Exception
      */
     protected void sampleNewDocuments(
             String stateFile,
@@ -860,8 +876,8 @@ public class BinarySLDA extends AbstractSampler {
             }
 
             int topicWordCount = 0;
-            for (int k = 0; k < topicWords.length; k++) {
-                topicWordCount += topicWords[k].getCountSum();
+            for (DirMult topicWord : topicWords) {
+                topicWordCount += topicWord.getCountSum();
             }
 
             logln("--- docTopics: " + docTopics.length + ". " + docTopicCount);
@@ -869,11 +885,7 @@ public class BinarySLDA extends AbstractSampler {
         }
 
         // initialize assignments
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                sampleZ(d, n, !REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
-            }
-        }
+        sampleZ(!REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
 
         if (verbose) {
             logln("After initialization");
@@ -883,8 +895,8 @@ public class BinarySLDA extends AbstractSampler {
             }
 
             int topicWordCount = 0;
-            for (int k = 0; k < topicWords.length; k++) {
-                topicWordCount += topicWords[k].getCountSum();
+            for (DirMult topicWord : topicWords) {
+                topicWordCount += topicWord.getCountSum();
             }
 
             logln("--- docTopics: " + docTopics.length + ". " + docTopicCount);
@@ -894,11 +906,7 @@ public class BinarySLDA extends AbstractSampler {
         // iterate
         ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
         for (iter = 0; iter < this.testMaxIter; iter++) {
-            for (int d = 0; d < D; d++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    sampleZ(d, n, !REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
-                }
-            }
+            sampleZ(!REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
 
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 if (verbose) {
@@ -906,7 +914,13 @@ public class BinarySLDA extends AbstractSampler {
                 }
 
                 // update current dot products
-                this.updateCurrentDotProducts();
+                this.docLabelDotProds = new double[D];
+                for (int d = 0; d < D; d++) {
+                    double[] empDist = docTopics[d].getEmpiricalDistribution();
+                    for (int k = 0; k < K; k++) {
+                        this.docLabelDotProds[d] += lambdas[k] * empDist[k];
+                    }
+                }
 
                 // compute prediction values
                 double[] predResponses = computePredictionValues();
@@ -922,8 +936,8 @@ public class BinarySLDA extends AbstractSampler {
             }
 
             int topicWordCount = 0;
-            for (int k = 0; k < topicWords.length; k++) {
-                topicWordCount += topicWords[k].getCountSum();
+            for (DirMult topicWord : topicWords) {
+                topicWordCount += topicWord.getCountSum();
             }
 
             logln("\t--- docTopics: " + docTopics.length + ". " + docTopicCount);
@@ -942,6 +956,153 @@ public class BinarySLDA extends AbstractSampler {
 
     public static String getHelpString() {
         return "java -cp dist/segan.jar " + BinarySLDA.class.getName() + " -help";
+    }
+    
+    private static void addOpitions() throws Exception {
+        parser = new BasicParser();
+        options = new Options();
+
+        // data input
+        addOption("dataset", "Dataset");
+        addOption("word-voc-file", "Word vocabulary file");
+        addOption("word-file", "Document word file");
+        addOption("info-file", "Document info file");
+        addOption("selected-docs-file", "(Optional) Indices of selected documents");
+
+        // data output
+        addOption("output-folder", "Output folder");
+
+        // sampling
+        addSamplingOptions();
+
+        // parameters
+        addOption("alpha", "Alpha");
+        addOption("beta", "Beta");
+        addOption("mu", "Mu");
+        addOption("sigma", "Sigma");
+        addOption("K", "Number of topics");
+        addOption("num-top-words", "Number of top words per topic");
+
+        // configurations
+        addOption("init", "Initialization");
+
+        options.addOption("v", false, "verbose");
+        options.addOption("d", false, "debug");
+        options.addOption("z", false, "z-normalize");
+        options.addOption("help", false, "Help");
+    }
+    
+    private static void runModel() throws Exception {
+        // sampling configurations
+//        int numTopWords = CLIUtils.getIntegerArgument(cmd, "num-top-words", 20);
+//        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 500);
+//        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 1000);
+//        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
+//        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 25);
+//        boolean paramOpt = cmd.hasOption("paramOpt");
+//        String init = CLIUtils.getStringArgument(cmd, "init", "random");
+//        InitialState initState;
+//        switch (init) {
+//            case "random":
+//                initState = InitialState.RANDOM;
+//                break;
+//            case "preset":
+//                initState = InitialState.PRESET;
+//                break;
+//            default:
+//                throw new RuntimeException("Initialization " + init + " not supported");
+//        }
+//
+//        // model parameters
+//        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+//        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+//        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+//        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
+//        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
+//        int K = CLIUtils.getIntegerArgument(cmd, "K", 50);
+//
+//        // data input
+//        String datasetName = cmd.getOptionValue("dataset");
+//        String wordVocFile = cmd.getOptionValue("word-voc-file");
+//        String docWordFile = cmd.getOptionValue("word-file");
+//        String docInfoFile = cmd.getOptionValue("info-file");
+//
+//        // data output
+//        String outputFolder = cmd.getOptionValue("output-folder");
+//
+//        LabelTextDataset data = new LabelTextDataset(datasetName);
+//        data.loadFormattedData(new File(wordVocFile),
+//                new File(docWordFile),
+//                new File(docInfoFile),
+//                null);
+//        int V = data.getWordVocab().size();
+//
+//        SLDA sampler = new SLDA();
+//        sampler.setVerbose(cmd.hasOption("v"));
+//        sampler.setDebug(cmd.hasOption("d"));
+//        sampler.setLog(true);
+//        sampler.setReport(true);
+//        sampler.setWordVocab(data.getWordVocab());
+//
+//        sampler.configure(outputFolder, V, K,
+//                alpha, beta, rho, mu, sigma,
+//                initState, paramOpt,
+//                burnIn, maxIters, sampleLag, repInterval);
+//        File samplerFolder = new File(sampler.getSamplerFolderPath());
+//        IOUtils.createFolder(samplerFolder);
+//
+//        double[] docResponses = data.getResponses();
+//        if (cmd.hasOption("z")) { // z-normalization
+//            ZNormalizer zNorm = new ZNormalizer(docResponses);
+//            docResponses = zNorm.normalize(docResponses);
+//        }
+//
+//        ArrayList<Integer> selectedDocIndices = null;
+//        if (cmd.hasOption("selected-docs-file")) {
+//            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
+//            selectedDocIndices = new ArrayList<>();
+//            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
+//            String line;
+//            while ((line = reader.readLine()) != null) {
+//                int docIdx = Integer.parseInt(line);
+//                if (docIdx >= data.getDocIds().length) {
+//                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
+//                }
+//                selectedDocIndices.add(Integer.parseInt(line));
+//            }
+//            reader.close();
+//        }
+//
+//        sampler.train(data.getWords(), selectedDocIndices, docResponses);
+//        sampler.initialize();
+//        sampler.iterate();
+//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+    }
+    
+    public static void main(String[] args) {
+        try {
+            long sTime = System.currentTimeMillis();
+
+            addOpitions();
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp(getHelpString(), options);
+                return;
+            }
+
+            runModel();
+
+            // date and time
+            DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
+            Date dateobj = new Date();
+            long eTime = (System.currentTimeMillis() - sTime) / 1000;
+            System.out.println("Elapsed time: " + eTime + "s");
+            System.out.println("End time: " + df.format(dateobj));
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
     }
 }
 

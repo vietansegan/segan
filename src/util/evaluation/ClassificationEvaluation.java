@@ -10,9 +10,9 @@ import java.util.Set;
  */
 public class ClassificationEvaluation {
 
-    private int[] trueClasses;
-    private int[] predClasses;
-    private ArrayList<Measurement> measurements;
+    private final int[] trueClasses;
+    private final int[] predClasses;
+    private final ArrayList<Measurement> measurements;
 
     public ClassificationEvaluation(int[] trueClasses, int[] predClasses) {
         this.trueClasses = trueClasses;

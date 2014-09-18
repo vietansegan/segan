@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import optimization.RidgeRegressionLBFGS;
+import optimization.RidgeLinearRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.LDA;
@@ -219,9 +219,8 @@ public class SLDA extends AbstractSampler {
         initializeDataStructure();
 
         initializeAssignments();
-
-        // optimize regression parameters
-        updateTopicRegressionParameters();
+        
+        updateTopicRegressionParameters(); // optimize regression parameters
 
         if (debug) {
             validate("Initialized");
@@ -500,7 +499,7 @@ public class SLDA extends AbstractSampler {
             }
         }
 
-        RidgeRegressionLBFGS optimizable = new RidgeRegressionLBFGS(
+        RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
                 responses, regParams, designMatrix, rho, mu, sigma);
 
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
