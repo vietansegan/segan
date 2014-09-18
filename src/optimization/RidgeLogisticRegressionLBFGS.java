@@ -50,17 +50,15 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         double llh = 0.0;
         for (int nn = 0; nn < N; nn++) {
             double dotProb = designMatrix[nn].dotProduct(params);
-            llh -= labels[nn] * dotProb - Math.log(Math.exp(dotProb) + 1);
+            llh += labels[nn] * dotProb - Math.log(Math.exp(dotProb) + 1);
         }
-        llh /= N;
 
         double lprior = 0.0;
         for (int kk = 0; kk < K; kk++) {
             double diff = params[kk] - getMean(kk);
-            lprior += diff * diff / (-2 * getVariance(kk));
+            lprior -= diff * diff / (2 * getVariance(kk));
         }
-        lprior /= N;
-        return llh + lprior;
+        return (llh + lprior) / N;
     }
 
     @Override
@@ -71,17 +69,17 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
             double expDotprod = Math.exp(dotprod);
             double pred = expDotprod / (expDotprod + 1);
             for (int kk = 0; kk < K; kk++) {
-                llhGrad[kk] -= (labels[nn] - pred) * designMatrix[nn].get(kk) / N;
+                llhGrad[kk] += (labels[nn] - pred) * designMatrix[nn].get(kk);
             }
         }
 
         double[] lpGrad = new double[K];
         for (int kk = 0; kk < K; kk++) {
-            lpGrad[kk] -= (params[kk] - getMean(kk)) / (N * getVariance(kk));
+            lpGrad[kk] -= (params[kk] - getMean(kk)) / (getVariance(kk));
         }
 
         for (int k = 0; k < K; k++) {
-            gradient[k] = llhGrad[k] + lpGrad[k];
+            gradient[k] = (llhGrad[k] + lpGrad[k]) / N;
         }
     }
     

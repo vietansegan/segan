@@ -53,11 +53,7 @@ public class ClassificationEvaluation {
             }
 
             double recall = (double) truePos / (truePos + falseNeg);
-            this.measurements.add(new Measurement("recall-" + c, recall));
-
             double precision = (double) truePos / (truePos + falsePos);
-            this.measurements.add(new Measurement("precision-" + c, precision));
-
             double f1 = (2 * precision * recall) / (precision + recall);
             this.measurements.add(new Measurement("f1-" + c, f1));
 

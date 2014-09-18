@@ -2,7 +2,6 @@ package sampler.supervised.classification;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
-import static core.AbstractSampler.addSamplingOptions;
 import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -107,8 +106,8 @@ public class BinarySLDA extends AbstractSampler {
         this.hyperparams = new ArrayList<Double>();
         this.hyperparams.add(alpha);
         this.hyperparams.add(beta);
-        this.hyperparams.add(lambdaMean);
-        this.hyperparams.add(lambdaSigma);
+        this.mean = lambdaMean;
+        this.sigma = lambdaSigma;
 
         this.sampledParams = new ArrayList<ArrayList<Double>>();
         this.sampledParams.add(cloneHyperparameters());
@@ -359,7 +358,7 @@ public class BinarySLDA extends AbstractSampler {
             if (isReporting()) {
                 double loglikelihood = this.getLogLikelihood();
                 logLikelihoods.add(loglikelihood);
-                String str = "Iter " + iter
+                String str = "Iter " + iter + " / " + MAX_ITER
                         + "\t llh = " + loglikelihood
                         + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
@@ -369,9 +368,9 @@ public class BinarySLDA extends AbstractSampler {
                 }
             }
 
-            sampleZ(REMOVE, ADD, REMOVE, ADD, OBSERVED);
+            long topicTime = sampleZ(REMOVE, ADD, REMOVE, ADD, OBSERVED);
 
-            updateLambdas();
+            long lambdaTime = updateLambdas();
 
             // parameter optimization
             if (iter % LAG == 0 && iter >= BURN_IN) {
@@ -392,9 +391,9 @@ public class BinarySLDA extends AbstractSampler {
             }
 
             if (isReporting()) {
-                logln("--- label prediction");
+                logln("--- training label prediction");
                 evaluatePerformances();
-
+                logln("--- --- Time. topic: " + topicTime + ". lambda: " + lambdaTime);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
                         + ". change ratio: " + (double) numTokensChanged / numTokens
@@ -490,6 +489,11 @@ public class BinarySLDA extends AbstractSampler {
         return System.currentTimeMillis() - sTime;
     }
 
+    /**
+     * Update parameters using L-BFGS.
+     *
+     * @return Elapsed time
+     */
     private long updateLambdas() {
         long sTime = System.currentTimeMillis();
         if (lambdas == null) {
@@ -587,7 +591,6 @@ public class BinarySLDA extends AbstractSampler {
             topicLlh += docTopics[d].getLogLikelihood();
         }
 
-        double responseLlh = 0.0;
         double labelLlh = 0.0;
         for (int d = 0; d < D; d++) {
             double[] empDist = docTopics[d].getEmpiricalDistribution();
@@ -603,19 +606,15 @@ public class BinarySLDA extends AbstractSampler {
                     lambdas[k], mean, Math.sqrt(sigma));
         }
 
+        double llh = wordLlh + topicLlh + labelLlh + lambdaLlh;
         if (verbose && iter % REP_INTERVAL == 0) {
             logln("*** word: " + MiscUtils.formatDouble(wordLlh)
                     + ". topic: " + MiscUtils.formatDouble(topicLlh)
-                    + ". response: " + MiscUtils.formatDouble(responseLlh)
                     + ". label: " + MiscUtils.formatDouble(labelLlh)
-                    + ". lambdaLlh: " + MiscUtils.formatDouble(labelLlh));
+                    + ". lambdaLlh: " + MiscUtils.formatDouble(labelLlh)
+                    + ". llh = " + MiscUtils.formatDouble(llh));
         }
 
-        double llh = wordLlh
-                + topicLlh
-                + responseLlh
-                + labelLlh
-                + lambdaLlh;
         return llh;
     }
 
