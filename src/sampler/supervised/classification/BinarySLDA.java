@@ -1,7 +1,6 @@
 package sampler.supervised.classification;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
-import cc.mallet.optimize.Optimizable;
 import core.AbstractSampler;
 import static core.AbstractSampler.addSamplingOptions;
 import data.LabelTextDataset;
@@ -143,17 +142,6 @@ public class BinarySLDA extends AbstractSampler {
             logln("--- sample lag:\t" + LAG);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + initState);
-            logln("--- # tokens:\t" + numTokens);
-
-            logln("--- labels:");
-            int numPositives = 0;
-            for (int ii = 0; ii < labels.length; ii++) {
-                if (labels[ii] == POSITVE) {
-                    numPositives++;
-                }
-            }
-            logln("--- --- # positives\t" + numPositives);
-            logln("--- --- # negatives\t" + (D - numPositives));
         }
     }
 
@@ -581,7 +569,6 @@ public class BinarySLDA extends AbstractSampler {
         }
 
         RankingEvaluation rankEval = new RankingEvaluation(predVals, positives);
-        rankEval.computePRF();
         rankEval.computeAUCs();
         for (Measurement measurement : rankEval.getMeasurements()) {
             logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
@@ -957,7 +944,7 @@ public class BinarySLDA extends AbstractSampler {
     public static String getHelpString() {
         return "java -cp dist/segan.jar " + BinarySLDA.class.getName() + " -help";
     }
-    
+
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -988,97 +975,89 @@ public class BinarySLDA extends AbstractSampler {
 
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
-        options.addOption("z", false, "z-normalize");
         options.addOption("help", false, "Help");
     }
-    
+
     private static void runModel() throws Exception {
         // sampling configurations
-//        int numTopWords = CLIUtils.getIntegerArgument(cmd, "num-top-words", 20);
-//        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 500);
-//        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 1000);
-//        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
-//        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 25);
-//        boolean paramOpt = cmd.hasOption("paramOpt");
-//        String init = CLIUtils.getStringArgument(cmd, "init", "random");
-//        InitialState initState;
-//        switch (init) {
-//            case "random":
-//                initState = InitialState.RANDOM;
-//                break;
-//            case "preset":
-//                initState = InitialState.PRESET;
-//                break;
-//            default:
-//                throw new RuntimeException("Initialization " + init + " not supported");
-//        }
-//
-//        // model parameters
-//        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
-//        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
-//        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
-//        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
-//        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
-//        int K = CLIUtils.getIntegerArgument(cmd, "K", 50);
-//
-//        // data input
-//        String datasetName = cmd.getOptionValue("dataset");
-//        String wordVocFile = cmd.getOptionValue("word-voc-file");
-//        String docWordFile = cmd.getOptionValue("word-file");
-//        String docInfoFile = cmd.getOptionValue("info-file");
-//
-//        // data output
-//        String outputFolder = cmd.getOptionValue("output-folder");
-//
-//        LabelTextDataset data = new LabelTextDataset(datasetName);
-//        data.loadFormattedData(new File(wordVocFile),
-//                new File(docWordFile),
-//                new File(docInfoFile),
-//                null);
-//        int V = data.getWordVocab().size();
-//
-//        SLDA sampler = new SLDA();
-//        sampler.setVerbose(cmd.hasOption("v"));
-//        sampler.setDebug(cmd.hasOption("d"));
-//        sampler.setLog(true);
-//        sampler.setReport(true);
-//        sampler.setWordVocab(data.getWordVocab());
-//
-//        sampler.configure(outputFolder, V, K,
-//                alpha, beta, rho, mu, sigma,
-//                initState, paramOpt,
-//                burnIn, maxIters, sampleLag, repInterval);
-//        File samplerFolder = new File(sampler.getSamplerFolderPath());
-//        IOUtils.createFolder(samplerFolder);
-//
-//        double[] docResponses = data.getResponses();
-//        if (cmd.hasOption("z")) { // z-normalization
-//            ZNormalizer zNorm = new ZNormalizer(docResponses);
-//            docResponses = zNorm.normalize(docResponses);
-//        }
-//
-//        ArrayList<Integer> selectedDocIndices = null;
-//        if (cmd.hasOption("selected-docs-file")) {
-//            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
-//            selectedDocIndices = new ArrayList<>();
-//            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
-//            String line;
-//            while ((line = reader.readLine()) != null) {
-//                int docIdx = Integer.parseInt(line);
-//                if (docIdx >= data.getDocIds().length) {
-//                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
-//                }
-//                selectedDocIndices.add(Integer.parseInt(line));
-//            }
-//            reader.close();
-//        }
-//
-//        sampler.train(data.getWords(), selectedDocIndices, docResponses);
-//        sampler.initialize();
-//        sampler.iterate();
-//        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "num-top-words", 20);
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 500);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 1000);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 50);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 25);
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        String init = CLIUtils.getStringArgument(cmd, "init", "random");
+        InitialState initState;
+        switch (init) {
+            case "random":
+                initState = InitialState.RANDOM;
+                break;
+            case "preset":
+                initState = InitialState.PRESET;
+                break;
+            default:
+                throw new RuntimeException("Initialization " + init + " not supported");
+        }
+
+        // model parameters
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 0.1);
+        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 0.1);
+        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
+        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
+        int K = CLIUtils.getIntegerArgument(cmd, "K", 50);
+
+        // data input
+        String datasetName = cmd.getOptionValue("dataset");
+        String wordVocFile = cmd.getOptionValue("word-voc-file");
+        String docWordFile = cmd.getOptionValue("word-file");
+        String docInfoFile = cmd.getOptionValue("info-file");
+
+        // data output
+        String outputFolder = cmd.getOptionValue("output-folder");
+
+        LabelTextDataset data = new LabelTextDataset(datasetName);
+        data.loadFormattedData(new File(wordVocFile),
+                new File(docWordFile),
+                new File(docInfoFile),
+                null);
+        int V = data.getWordVocab().size();
+
+        BinarySLDA sampler = new BinarySLDA();
+        sampler.setVerbose(cmd.hasOption("v"));
+        sampler.setDebug(cmd.hasOption("d"));
+        sampler.setLog(true);
+        sampler.setReport(true);
+        sampler.setWordVocab(data.getWordVocab());
+
+        sampler.configure(outputFolder, V, K,
+                alpha, beta, mu, sigma,
+                initState, paramOpt,
+                burnIn, maxIters, sampleLag, repInterval);
+        File samplerFolder = new File(sampler.getSamplerFolderPath());
+        IOUtils.createFolder(samplerFolder);
+
+        ArrayList<Integer> selectedDocIndices = null;
+        if (cmd.hasOption("selected-docs-file")) {
+            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
+            selectedDocIndices = new ArrayList<>();
+            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int docIdx = Integer.parseInt(line);
+                if (docIdx >= data.getDocIds().length) {
+                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
+                }
+                selectedDocIndices.add(Integer.parseInt(line));
+            }
+            reader.close();
+        }
+
+        sampler.train(data.getWords(), selectedDocIndices, data.getSingleLabels());
+        sampler.initialize();
+        sampler.iterate();
+        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
     }
-    
+
     public static void main(String[] args) {
         try {
             long sTime = System.currentTimeMillis();
@@ -1143,102 +1122,102 @@ class SLDATestRunner implements Runnable {
     }
 }
 
-class L2NormLogLinearObjective implements Optimizable.ByGradientValue {
-
-    private double[] parameters;
-    private double[][] designMatrix;
-    private int[] labels; // 1 or 0
-    private double paramMean;
-    private double paramVar;
-    private int D;
-
-    public L2NormLogLinearObjective(
-            double[] curParams,
-            double[][] designMatrix,
-            int[] labels,
-            double paramMean, double paramVar) {
-        this.parameters = new double[curParams.length];
-        System.arraycopy(curParams, 0, this.parameters, 0, curParams.length);
-
-        this.designMatrix = designMatrix;
-        this.labels = labels;
-        this.paramMean = paramMean;
-        this.paramVar = paramVar;
-
-        this.D = designMatrix.length;
-    }
-
-    @Override
-    public double getValue() {
-        double value = 0;
-        // log likelihood
-        for (int d = 0; d < D; d++) {
-            double dotProb = 0.0;
-            for (int k = 0; k < getNumParameters(); k++) {
-                dotProb += this.parameters[k] * this.designMatrix[d][k];
-            }
-
-            value += labels[d] * dotProb;
-            value -= Math.log(Math.exp(dotProb) + 1);
-        }
-
-        // regularizer
-        for (int k = 0; k < getNumParameters(); k++) {
-            double diff = this.parameters[k] - this.paramMean;
-            value -= (diff * diff) / (2 * this.paramVar);
-        }
-        return value;
-    }
-
-    @Override
-    public void getValueGradient(double[] gradient) {
-        double[] tempGrad = new double[getNumParameters()];
-
-        // likelihood
-        for (int d = 0; d < D; d++) {
-            double dotprod = 0.0;
-            for (int k = 0; k < getNumParameters(); k++) {
-                dotprod += parameters[k] * designMatrix[d][k];
-            }
-            double expDotprod = Math.exp(dotprod);
-            double pred = expDotprod / (expDotprod + 1);
-
-            for (int k = 0; k < getNumParameters(); k++) {
-                tempGrad[k] += (labels[d] - pred) * designMatrix[d][k];
-            }
-        }
-
-        // regularizer
-        for (int k = 0; k < getNumParameters(); k++) {
-            tempGrad[k] -= (parameters[k] - paramMean) / paramVar;
-        }
-        System.arraycopy(tempGrad, 0, gradient, 0, getNumParameters());
-    }
-
-    @Override
-    public int getNumParameters() {
-        return this.parameters.length;
-    }
-
-    @Override
-    public double getParameter(int i) {
-        return parameters[i];
-    }
-
-    @Override
-    public void getParameters(double[] buffer) {
-        assert (buffer.length == parameters.length);
-        System.arraycopy(parameters, 0, buffer, 0, buffer.length);
-    }
-
-    @Override
-    public void setParameter(int i, double r) {
-        this.parameters[i] = r;
-    }
-
-    @Override
-    public void setParameters(double[] newParameters) {
-        assert (newParameters.length == parameters.length);
-        System.arraycopy(newParameters, 0, parameters, 0, parameters.length);
-    }
-}
+//class L2NormLogLinearObjective implements Optimizable.ByGradientValue {
+//
+//    private double[] parameters;
+//    private double[][] designMatrix;
+//    private int[] labels; // 1 or 0
+//    private double paramMean;
+//    private double paramVar;
+//    private int D;
+//
+//    public L2NormLogLinearObjective(
+//            double[] curParams,
+//            double[][] designMatrix,
+//            int[] labels,
+//            double paramMean, double paramVar) {
+//        this.parameters = new double[curParams.length];
+//        System.arraycopy(curParams, 0, this.parameters, 0, curParams.length);
+//
+//        this.designMatrix = designMatrix;
+//        this.labels = labels;
+//        this.paramMean = paramMean;
+//        this.paramVar = paramVar;
+//
+//        this.D = designMatrix.length;
+//    }
+//
+//    @Override
+//    public double getValue() {
+//        double value = 0;
+//        // log likelihood
+//        for (int d = 0; d < D; d++) {
+//            double dotProb = 0.0;
+//            for (int k = 0; k < getNumParameters(); k++) {
+//                dotProb += this.parameters[k] * this.designMatrix[d][k];
+//            }
+//
+//            value += labels[d] * dotProb;
+//            value -= Math.log(Math.exp(dotProb) + 1);
+//        }
+//
+//        // regularizer
+//        for (int k = 0; k < getNumParameters(); k++) {
+//            double diff = this.parameters[k] - this.paramMean;
+//            value -= (diff * diff) / (2 * this.paramVar);
+//        }
+//        return value;
+//    }
+//
+//    @Override
+//    public void getValueGradient(double[] gradient) {
+//        double[] tempGrad = new double[getNumParameters()];
+//
+//        // likelihood
+//        for (int d = 0; d < D; d++) {
+//            double dotprod = 0.0;
+//            for (int k = 0; k < getNumParameters(); k++) {
+//                dotprod += parameters[k] * designMatrix[d][k];
+//            }
+//            double expDotprod = Math.exp(dotprod);
+//            double pred = expDotprod / (expDotprod + 1);
+//
+//            for (int k = 0; k < getNumParameters(); k++) {
+//                tempGrad[k] += (labels[d] - pred) * designMatrix[d][k];
+//            }
+//        }
+//
+//        // regularizer
+//        for (int k = 0; k < getNumParameters(); k++) {
+//            tempGrad[k] -= (parameters[k] - paramMean) / paramVar;
+//        }
+//        System.arraycopy(tempGrad, 0, gradient, 0, getNumParameters());
+//    }
+//
+//    @Override
+//    public int getNumParameters() {
+//        return this.parameters.length;
+//    }
+//
+//    @Override
+//    public double getParameter(int i) {
+//        return parameters[i];
+//    }
+//
+//    @Override
+//    public void getParameters(double[] buffer) {
+//        assert (buffer.length == parameters.length);
+//        System.arraycopy(parameters, 0, buffer, 0, buffer.length);
+//    }
+//
+//    @Override
+//    public void setParameter(int i, double r) {
+//        this.parameters[i] = r;
+//    }
+//
+//    @Override
+//    public void setParameters(double[] newParameters) {
+//        assert (newParameters.length == parameters.length);
+//        System.arraycopy(newParameters, 0, parameters, 0, parameters.length);
+//    }
+//}

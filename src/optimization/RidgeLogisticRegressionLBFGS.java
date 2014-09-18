@@ -50,7 +50,7 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         double llh = 0.0;
         for (int nn = 0; nn < N; nn++) {
             double dotProb = designMatrix[nn].dotProduct(params);
-            llh += labels[nn] * dotProb - Math.log(Math.exp(dotProb) + 1);
+            llh -= labels[nn] * dotProb - Math.log(Math.exp(dotProb) + 1);
         }
         llh /= N;
 
@@ -71,7 +71,7 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
             double expDotprod = Math.exp(dotprod);
             double pred = expDotprod / (expDotprod + 1);
             for (int kk = 0; kk < K; kk++) {
-                llhGrad[kk] += (labels[nn] - pred) * designMatrix[nn].get(kk) / N;
+                llhGrad[kk] -= (labels[nn] - pred) * designMatrix[nn].get(kk) / N;
             }
         }
 
