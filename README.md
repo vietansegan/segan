@@ -1,11 +1,13 @@
 # Build
 
-A `jar` file for a "stable" version is accompanied in folder `dist`. To build the latest code:
+To build the latest code:
 
 - `ant jar`: to build jar file 
 - `ant clean-build`: to make a clean build
 
 Take a look at the `build.xml` for more options.
+
+A `segan-YYYYMMDD.jar` file for a "stable" version is provided in folder `dist`. If you use this existing `jar` file, replace `segan.jar` with `segan-YYYYMMDD.jar` in all command lines below.
 
 # LDA
 ```
