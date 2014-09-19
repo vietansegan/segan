@@ -1,8 +1,13 @@
-# Build
+# Setup
+## Check out
+```
+git clone git@github.com:vietansegan/segan.git
+```
 
+## Build
 To build the latest code:
 
-- `ant jar`: to build jar file 
+- `ant jar`: to build `dist/segan.jar`
 - `ant clean-build`: to make a clean build
 
 Take a look at the `build.xml` for more options.
