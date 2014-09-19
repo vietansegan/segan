@@ -1,7 +1,9 @@
-# Compile
-1. To compile `ant compile`
-2. To build jar file `ant jar`
-3. To make a clean build `ant clean-build`
+# Build
+
+A `jar` file for a "stable" version is accompanied in folder `dist`. To build the latest code:
+
+- `ant jar`: to build jar file 
+- `ant clean-build`: to make a clean build
 
 Take a look at the `build.xml` for more options.
 
@@ -124,6 +126,7 @@ In addition, here are optional inputs and their default values:
  - `preset`: run LDA for 100 iterations and use LDA's assignments for SLDA's initialization.
 - `-v`: Verbose
 - `-d`: Debug
+
 ### Processing data for BinarySLDA
 Example of input data for BinarySLDA is provided in folder `demo/amazon-data/format-binary`. You can either process your raw data into the same format as provided in `demo/amazon-data/format-binary`, or use `segan`'s processing tool.
 ```
