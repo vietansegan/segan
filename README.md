@@ -149,11 +149,11 @@ Other important input arguments:
 - `-d`: Debug 
 
 ### Running example
-- To process raw data 
+- To process raw data in `demo/amazon-data/raw` (`text.txt` and `binary-label.txt`) to formatted data in `demo/amazon-data/format-binary`:
 ```
 java -cp 'dist/segan.jar:dist/lib/*' data.LabelTextDataset --dataset amazon-data --text-data demo/amazon-data/raw/text.txt --data-folder demo --format-folder format-binary --run-mode process --label-file demo/amazon-data/raw/binary-label.txt -v -d --u 5 -s -l --bs 10 --b 5 --V 10000
 ```
-- To run BinarySLDA on formatted data
+- To run BinarySLDA on formatted data in `demo/amazon-data/format-binary`:
 ```
 java -cp "dist/segan.jar:lib/*" sampler.supervised.classification.BinarySLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc --word-file demo/amazon-data/format-binary/amazon-data.dat --info-file demo/amazon-data/format-binary/amazon-data.docinfo --output-folder demo/amazon-data/binary-supervised-models --burnIn 100 --maxIter 250 --sampleLag 30 --report 5 --K 50 --alpha 0.1 --beta 0.1 --sigma 1.0 --mu 0.0 --init random -v -d
 ```
