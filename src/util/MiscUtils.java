@@ -18,6 +18,38 @@ public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
 
+    public static String getTopObservations(ArrayList<String> wordVocab,
+            double[] probs, int numTopObs) {
+        ArrayList<RankingItem<Integer>> rankObs = new ArrayList<RankingItem<Integer>>();
+        for (int vv = 0; vv < probs.length; vv++) {
+            rankObs.add(new RankingItem<Integer>(vv, probs[vv]));
+        }
+        Collections.sort(rankObs);
+        StringBuilder str = new StringBuilder();
+        for (int ii = 0; ii < Math.min(numTopObs, rankObs.size()); ii++) {
+            RankingItem<Integer> obs = rankObs.get(ii);
+            str.append(wordVocab.get(obs.getObject())).append(":")
+                    .append(MiscUtils.formatDouble(obs.getPrimaryValue())).append(" ");
+        }
+        return str.toString();
+    }
+
+    public static String getTopObservations(ArrayList<String> wordVocab,
+            SparseCount counts, int numTopObs) {
+        ArrayList<RankingItem<Integer>> rankObs = new ArrayList<RankingItem<Integer>>();
+        for (int obs : counts.getIndices()) {
+            rankObs.add(new RankingItem<Integer>(obs, counts.getCount(obs)));
+        }
+        Collections.sort(rankObs);
+        StringBuilder str = new StringBuilder();
+        for (int ii = 0; ii < Math.min(numTopObs, rankObs.size()); ii++) {
+            RankingItem<Integer> obs = rankObs.get(ii);
+            str.append(wordVocab.get(obs.getObject())).append(":")
+                    .append(MiscUtils.formatDouble(obs.getPrimaryValue())).append(" ");
+        }
+        return str.toString();
+    }
+
     public static double[] getIDFs(int[][] words, int V) {
         int D = words.length;
         int[] dfs = new int[V];

@@ -75,6 +75,10 @@ public abstract class AbstractTokenizeDataset extends AbstractDataset {
         this.corpProc = cp;
     }
 
+    public CorpusProcessor getCorpusProcessor() {
+        return this.corpProc;
+    }
+
     public void setFormatFilename(String fn) {
         this.formatFilename = fn;
     }

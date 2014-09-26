@@ -71,8 +71,8 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         this.concentration = conc;
     }
 
-    public void setCenterElement(double ce) {
-        this.centerElement = ce;
+    public void getCenterVector(double[] ce) {
+        this.center = ce;
     }
 
     public double getConcentration() {
@@ -211,6 +211,11 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         return distr;
     }
 
+    public double getPhi(int w) {
+        return (getCount(w) + this.concentration * getCenterElement(w))
+                / (getCountSum() + this.concentration);
+    }
+
     public double[] getEmpiricalDistribution() {
         double[] empDist = new double[getDimension()];
         for (int k = 0; k < empDist.length; k++) {
@@ -302,9 +307,7 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
 //            testClone();
 
 //            testPrior();
-
 //            testLlh();
-
             testSerializable();
         } catch (Exception e) {
             e.printStackTrace();

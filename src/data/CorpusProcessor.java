@@ -384,9 +384,8 @@ public class CorpusProcessor {
             this.numericSentences[d] = new int[normTexts[d].length][];
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
-                for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm = Collections.binarySearch(this.vocabulary,
-                            normTexts[d][s][w]);
+                for (String normText : normTexts[d][s]) {
+                    int numericTerm = Collections.binarySearch(this.vocabulary, normText);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
@@ -515,19 +514,17 @@ public class CorpusProcessor {
         HashMap<String, Integer> finalTermFreq = new HashMap<String, Integer>();
         HashMap<String, Integer> finalDocFreq = new HashMap<String, Integer>();
 
-        for (int d = 0; d < normTexts.length; d++) {
+        for (String[][] normText : normTexts) {
             Set<String> docUniqueTerms = new HashSet<String>();
-            for (int s = 0; s < normTexts[d].length; s++) {
+            for (int s = 0; s < normText.length; s++) {
                 ArrayList<String> tokens = new ArrayList<String>();
-                for (int i = 0; i < normTexts[d][s].length; i++) {
-                    String curToken = normTexts[d][s][i];
+                for (int i = 0; i < normText[s].length; i++) {
+                    String curToken = normText[s][i];
                     if (curToken.isEmpty()) {
                         continue;
                     }
-
-                    if (i + 1 < normTexts[d][s].length
-                            && !normTexts[d][s][i + 1].isEmpty()) {
-                        String bigram = getBigramString(normTexts[d][s][i], normTexts[d][s][i + 1]);
+                    if (i + 1 < normText[s].length && !normText[s][i + 1].isEmpty()) {
+                        String bigram = getBigramString(normText[s][i], normText[s][i + 1]);
                         if (!vocab.contains(bigram)) {
                             // if the bigram is not in the vocab, add the current
                             // unigram and move on to the next unigram
@@ -551,12 +548,10 @@ public class CorpusProcessor {
                         MiscUtils.incrementMap(finalTermFreq, curToken);
                     }
                 }
-                normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
-
+                normText[s] = tokens.toArray(new String[tokens.size()]);
                 // union
-                docUniqueTerms.addAll(Arrays.asList(normTexts[d][s]));
+                docUniqueTerms.addAll(Arrays.asList(normText[s]));
             }
-
             // update document frequencies
             for (String ut : docUniqueTerms) {
                 MiscUtils.incrementMap(finalDocFreq, ut);
@@ -601,8 +596,8 @@ public class CorpusProcessor {
             this.numericSentences[d] = new int[normTexts[d].length][];
             for (int s = 0; s < normTexts[d].length; s++) { // for each sentence
                 ArrayList<Integer> numericSent = new ArrayList<Integer>();
-                for (int w = 0; w < normTexts[d][s].length; w++) {
-                    int numericTerm = Collections.binarySearch(this.vocabulary, normTexts[d][s][w]);
+                for (String normText : normTexts[d][s]) {
+                    int numericTerm = Collections.binarySearch(this.vocabulary, normText);
                     if (numericTerm < 0) { // this term is out-of-vocab
                         continue;
                     }
@@ -682,14 +677,13 @@ public class CorpusProcessor {
 
         HashMap<Integer, Integer> numericTermFreq = new HashMap<Integer, Integer>();
         HashMap<Integer, Integer> numericDocFreq = new HashMap<Integer, Integer>();
-        for (int d = 0; d < this.numericDocs.length; d++) {
+        for (int[] numericDoc : this.numericDocs) {
             Set<Integer> docTerms = new HashSet<Integer>();
-            for (int i = 0; i < this.numericDocs[d].length; i++) {
-                int term = this.numericDocs[d][i];
+            for (int i = 0; i < numericDoc.length; i++) {
+                int term = numericDoc[i];
                 docTerms.add(term);
                 MiscUtils.incrementMap(numericTermFreq, term);
             }
-
             for (int term : docTerms) {
                 MiscUtils.incrementMap(numericDocFreq, term);
             }

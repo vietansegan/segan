@@ -30,7 +30,6 @@ import util.SparseVector;
 import util.StatUtils;
 import util.evaluation.MimnoTopicCoherence;
 
-
 /**
  *
  * @author vietan
@@ -372,7 +371,7 @@ public class L2H extends AbstractSampler {
             this.z[d] = new int[words[d].length];
             this.x[d] = new int[words[d].length];
             this.docSwitches[d] = new DirMult(new double[]{hyperparams.get(A_0),
-                        hyperparams.get(B_0)});
+                hyperparams.get(B_0)});
             this.docLabelCounts[d] = new SparseCount();
             this.docMaskes[d] = new HashSet<Integer>();
             if (labels != null) { // if labels are given during training time
@@ -421,7 +420,7 @@ public class L2H extends AbstractSampler {
             System.arraycopy(labels[dd], 0, tempLabels[dd], 0, labels[dd].length);
             tempLabels[dd][labels[dd].length] = labelVocab.size() - 1;
         }
-        llda.train(words, tempLabels);
+        llda.train(null, words, tempLabels);
         try {
             File lldaZFile = new File(llda.getSamplerFolderPath(), "init.zip");
             if (lldaZFile.exists()) {
@@ -518,7 +517,6 @@ public class L2H extends AbstractSampler {
                         + "\tuTree: " + updateTreeTime);
                 System.out.println();
             }
-
 
             if (debug) {
                 validate("iter " + iter);
@@ -672,7 +670,6 @@ public class L2H extends AbstractSampler {
 //                            + ". " + MiscUtils.formatDouble(newLogprob));
 //                    System.out.println();
 //                }
-
                 // remove current switch assignments
                 for (int d : subtreeDocs) {
                     docMaskes[d] = proposedMasks.get(d);
@@ -723,7 +720,6 @@ public class L2H extends AbstractSampler {
         double insideLp = 0.0;
         insideLp += SamplerUtils.logGammaStirling(priorVal * docMask.size());
         insideLp -= docMask.size() * logGammaPriorVal;
-
 
         double outsideLp = 0.0;
         outsideLp += SamplerUtils.logGammaStirling(priorVal * (L - docMask.size()));
@@ -836,7 +832,6 @@ public class L2H extends AbstractSampler {
 //        for (int ii : ppMask) {
 //            System.out.println(">>> ppm node: " + nodes[ii].toString());
 //        }
-
         return ppMask;
     }
 
@@ -890,7 +885,6 @@ public class L2H extends AbstractSampler {
 //                + "\t" + labelVocab.get(sampledNode.id)
 //                + "\t" + candWeights.get(sampledIdx));
 //        System.out.println();
-
         return sampledNode;
     }
 
@@ -1440,7 +1434,6 @@ public class L2H extends AbstractSampler {
 //                this.inWeights[count] = SparseVector.input(sline[1]);
 //                count ++;
 //            }
-
 //            for (int k = 0; k < L; k++) {
 //                String[] sline = reader.readLine().split("\t");
 //                if (Integer.parseInt(sline[0]) != k) {
@@ -1448,7 +1441,6 @@ public class L2H extends AbstractSampler {
 //                }
 //                this.inWeights[k] = SparseVector.input(sline[1]);
 //            }
-
             reader.close();
         } catch (Exception e) {
             e.printStackTrace();
@@ -1532,7 +1524,7 @@ public class L2H extends AbstractSampler {
                     .append(". n: ").append(nodeCountPerLevel.getCount(level))
                     .append(". o: ").append(obsCountPerLevel.getCount(level))
                     .append(" (").append((double) obsCountPerLevel.getCount(level)
-                    / nodeCountPerLevel.getCount(level)).append(")")
+                            / nodeCountPerLevel.getCount(level)).append(")")
                     .append("\n");
         }
         str.append(">>> >>> # nodes: ").append(nodeCountPerLevel.getCountSum()).append("\n");
@@ -1843,8 +1835,8 @@ public class L2H extends AbstractSampler {
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 for (int dd = 0; dd < D; dd++) {
                     for (int ll = 0; ll < L - 1; ll++) {
-                        predictedScores[dd][ll] +=
-                                (double) docLabelCounts[dd].getCount(ll) / words[dd].length;
+                        predictedScores[dd][ll]
+                                += (double) docLabelCounts[dd].getCount(ll) / words[dd].length;
                     }
                 }
                 count++;
@@ -2181,7 +2173,6 @@ public class L2H extends AbstractSampler {
                 numModels++;
                 inputState(new File(reportFolder, filename).getAbsolutePath());
 
-
                 Set<Node>[] subtrees = new Set[L - 1];
                 for (int ll = 0; ll < L - 1; ll++) {
                     subtrees[ll] = getSubtree(nodes[ll]);
@@ -2205,7 +2196,6 @@ public class L2H extends AbstractSampler {
 //                        for (Node child : node.getChildren()) {
 //                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
 //                        }
-
                         // per subtree
 //                        for (Node desc : subtrees[ll]) {
 //                            if (desc.id == ll) {
@@ -2277,7 +2267,6 @@ public class L2H extends AbstractSampler {
 //                        for (Node child : node.getChildren()) {
 //                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
 //                        }
-
                         // per subtree
 //                        for (Node desc : subtrees[ll]) {
 //                            if (desc.id == ll) {
@@ -2603,7 +2592,6 @@ public class L2H extends AbstractSampler {
 //                    + ". " + labelVocab.get(ll));
 //        }
 //        System.out.println();
-
             double[] predictedScores = new double[L - 1]; // exclude root
             int count = 0;
             for (iter = 0; iter < 5; iter++) {
@@ -2615,8 +2603,8 @@ public class L2H extends AbstractSampler {
                     }
                 }
                 for (int ll = 0; ll < L - 1; ll++) {
-                    predictedScores[ll] +=
-                            (double) docLabelCounts[d].getCount(ll) / words[d].length;
+                    predictedScores[ll]
+                            += (double) docLabelCounts[d].getCount(ll) / words[d].length;
                 }
                 count++;
 
@@ -2790,7 +2778,7 @@ public class L2H extends AbstractSampler {
             this.z[d] = new int[trainIndices[d].size()];
             this.x[d] = new int[trainIndices[d].size()];
             this.docSwitches[d] = new DirMult(new double[]{hyperparams.get(A_0),
-                        hyperparams.get(B_0)});
+                hyperparams.get(B_0)});
             this.docLabelCounts[d] = new SparseCount();
             this.docMaskes[d] = new HashSet<Integer>();
             if (labels != null) { // if labels are given during training time
@@ -3215,6 +3203,7 @@ public class L2H extends AbstractSampler {
         }
     }
 }
+
 class L2HPerplexityRunner implements Runnable {
 
     L2H sampler;

@@ -33,6 +33,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     private static final long serialVersionUID = 1123581321L;
     public static final int ALPHA = 0;
     public static final int BETA = 1;
+    protected ArrayList<Integer> docIndices;
     protected int[][] words; // [D] x [N_d]
     protected int[][] labels; // [D] x [T_d] 
     protected int L;
@@ -135,10 +136,29 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         return this.label_words;
     }
 
-    public void train(int[][] ws, int[][] ls) {
-        this.words = ws;
-        this.labels = ls;
+    /**
+     * Set training data.
+     *
+     * @param docIndices Indices of selected documents
+     * @param words Document words
+     * @param labels Document labels
+     */
+    public void train(ArrayList<Integer> docIndices, int[][] words, int[][] labels) {
+        this.docIndices = docIndices;
+        if (this.docIndices == null) { // add all documents
+            this.docIndices = new ArrayList<>();
+            for (int dd = 0; dd < words.length; dd++) {
+                this.docIndices.add(dd);
+            }
+        }
         this.D = this.words.length;
+        this.words = new int[D][];
+        this.labels = new int[D][];
+        for (int ii = 0; ii < D; ii++) {
+            int dd = this.docIndices.get(ii);
+            this.words[ii] = words[dd];
+            this.labels[ii] = labels[dd];
+        }
 
         this.numTokens = 0;
         int numLabels = 0;
@@ -272,7 +292,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 //                    sampleZ(d, n, REMOVE, ADD, REMOVE, ADD);
 //                }
 //            }
-
             sampleZs(REMOVE, ADD, REMOVE, ADD);
 
             if (debug) {
@@ -733,8 +752,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         String[] filenames = reportFolder.list();
         try {
             int numModels = 0;
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -823,8 +841,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // partial score
             ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -849,8 +866,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             for (int k = 0; k < L; k++) {
                 double[] avgTopic = new double[V];
                 for (int v = 0; v < V; v++) {
-                    for (int ii = 0; ii < aggTopics.size(); ii++) {
-                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
+                    for (double[][] aggTopic : aggTopics) {
+                        avgTopic[v] += aggTopic[k][v] / aggTopics.size();
                     }
                 }
                 int[] topic = SamplerUtils.getSortedTopic(avgTopic);
@@ -882,8 +899,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         double[][] finalPredictions = new double[D][L];
         int count = 0;
         try {
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -952,8 +968,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
         try {
             IOUtils.createFolder(iterPredFolder);
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -988,8 +1003,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write("Iteration\tPerplexity\n");
             ArrayList<Double> pps = new ArrayList<Double>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1207,8 +1221,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 docTopicCount += doc_labels[d].getCountSum();
             }
             int topicWordCount = 0;
-            for (int k = 0; k < label_words.length; k++) {
-                topicWordCount += label_words[k].getCountSum();
+            for (DirMult label_word : label_words) {
+                topicWordCount += label_word.getCountSum();
             }
             logln("--- docTopics: " + doc_labels.length + ". " + docTopicCount);
             logln("--- topicWords: " + label_words.length + ". " + topicWordCount);
@@ -1269,8 +1283,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         try {
             IOUtils.createFolder(iterPerplexityFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.endsWith("zip")) {
                     continue;
                 }
@@ -1315,8 +1328,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         try {
             IOUtils.createFolder(iterPredFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1443,7 +1455,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         sampler.configure(outputFolder,
                 V, K, alpha, beta, initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
-        sampler.train(data.getWords(), data.getLabels());
+        sampler.train(null, data.getWords(), data.getLabels());
         File lldaFolder = new File(outputFolder, sampler.getSamplerFolder());
         IOUtils.createFolder(lldaFolder);
         sampler.sample();

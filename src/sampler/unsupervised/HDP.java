@@ -323,9 +323,9 @@ public class HDP extends AbstractSampler {
 
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChange = 0;
-            
+
             sampleZs(REMOVE, ADD, REMOVE, ADD); // sample topic assignments
-            
+
             sampleGlobalWeights(); // sample global stick breaking weights
 
             if (verbose && iter % REP_INTERVAL == 0) {
@@ -418,10 +418,7 @@ public class HDP extends AbstractSampler {
                     indices.add(k);
                     double docTopicProb = docTopics[ii].getCount(k)
                             + hyperparams.get(ALPHA_LOCAL) * globalWeights.get(k);
-                    double topicWordProb =
-                            (topicWords.getComponent(k).phi.getCount(words[dd][nn])
-                            + hyperparams.get(BETA))
-                            / (topicWords.getComponent(k).phi.getCountSum() + totalBeta);
+                    double topicWordProb = topicWords.getComponent(k).getPhi(words[dd][nn]);
                     probs.add(docTopicProb * topicWordProb);
                 }
 
@@ -673,8 +670,8 @@ public class HDP extends AbstractSampler {
         Collections.sort(sortedTopics);
 
         BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < sortedTopics.size(); ii++) {
-            int k = sortedTopics.get(ii).getObject();
+        for (RankingItem<Integer> sortedTopic : sortedTopics) {
+            int k = sortedTopic.getObject();
             Topic topic = topicWords.getComponent(k);
             double[] distrs = topic.phi.getDistribution();
             String[] topWords = getTopWords(distrs, numTopWords);
@@ -697,11 +694,16 @@ public class HDP extends AbstractSampler {
             this.born = born;
             this.phi = phi;
         }
+
+        public double getPhi(int w) {
+            return (phi.getCount(w) + hyperparams.get(BETA))
+                    / (phi.getCountSum() + hyperparams.get(BETA) * V);
+        }
     }
 
     class Topics {
 
-        private HashMap<Integer, Topic> actives;
+        private final HashMap<Integer, Topic> actives;
         private SortedSet<Integer> inactives;
 
         public Topics() {

@@ -491,6 +491,23 @@ public class TextDataset extends AbstractTokenizeDataset {
             logln("--- Reading text data from " + file);
         }
 
+        words = inputFormattedTextData(file);
+
+        if (verbose) {
+            logln("--- --- # docs: " + words.length);
+            int numTokens = 0;
+            for (int[] word : words) {
+                numTokens += word.length;
+            }
+            logln("--- --- # tokens: " + numTokens);
+        }
+    }
+
+    protected int[][] inputFormattedTextData(File file) throws Exception {
+        if (verbose) {
+            logln("--- Reading text data from " + file);
+        }
+
         BufferedReader reader = IOUtils.getBufferedReader(file);
 
         ArrayList<int[]> wordList = new ArrayList<int[]>();
@@ -522,17 +539,9 @@ public class TextDataset extends AbstractTokenizeDataset {
             }
             wordList.add(gibbsString);
         }
-        words = wordList.toArray(new int[wordList.size()][]);
         reader.close();
-
-        if (verbose) {
-            logln("--- --- # docs: " + words.length);
-            int numTokens = 0;
-            for (int dd = 0; dd < words.length; dd++) {
-                numTokens += words[dd].length;
-            }
-            logln("--- --- # tokens: " + numTokens);
-        }
+        int[][] words = wordList.toArray(new int[wordList.size()][]);
+        return words;
     }
 
     /**
@@ -622,8 +631,8 @@ public class TextDataset extends AbstractTokenizeDataset {
             int numTokens = 0;
             for (int d = 0; d < sentWords.length; d++) {
                 numSents += sentWords[d].length;
-                for (int s = 0; s < sentWords[d].length; s++) {
-                    numTokens += sentWords[d][s].length;
+                for (int[] sentWord : sentWords[d]) {
+                    numTokens += sentWord.length;
                 }
             }
             logln("--- --- # sents: " + numSents);
@@ -652,8 +661,8 @@ public class TextDataset extends AbstractTokenizeDataset {
                 if (verbose) {
                     logln("--- --- # docs: " + sentRawWords.length);
                     int numSents = 0;
-                    for (int dd = 0; dd < sentRawWords.length; dd++) {
-                        numSents += sentRawWords[dd].length;
+                    for (String[] sentRawWord : sentRawWords) {
+                        numSents += sentRawWord.length;
                     }
                     logln("--- --- # sents: " + numSents);
                 }
@@ -724,8 +733,8 @@ public class TextDataset extends AbstractTokenizeDataset {
             throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = new ArrayList<Integer>();
-        for (int d = 0; d < this.docIdList.size(); d++) {
-            instanceList.add(new Instance<String>(docIdList.get(d)));
+        for (String dd : this.docIdList) {
+            instanceList.add(new Instance<String>(dd));
             groupIdList.add(0); // random, no stratified
         }
 

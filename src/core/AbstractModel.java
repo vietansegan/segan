@@ -20,6 +20,10 @@ public abstract class AbstractModel {
         this.name = name;
     }
 
+    public String getBasename() {
+        return this.name;
+    }
+
     public String getName() {
         return this.name;
     }

@@ -288,8 +288,7 @@ public class LabelTextDataset extends TextDataset {
     protected void outputLabelVocab(String outputFolder) throws Exception {
         File labelVocFile = new File(outputFolder, formatFilename + labelVocabExt);
         logln("--- Outputing label vocab ... " + labelVocFile.getAbsolutePath());
-        DataUtils.outputVocab(labelVocFile.getAbsolutePath(),
-                this.labelVocab);
+        DataUtils.outputVocab(labelVocFile.getAbsolutePath(), this.labelVocab);
     }
 
     /**
