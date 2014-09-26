@@ -785,6 +785,25 @@ public class HDP extends AbstractSampler {
         return "java -cp 'dist/segan.jar' " + HDP.class.getName() + " -help";
     }
 
+    public static String getExampleCmd() {
+        return "java -cp \"dist/segan.jar:lib/*\" sampler.unsupervised.HDP "
+                + "--dataset amazon-data "
+                + "--word-voc-file demo/amazon-data/format-unsupervised/amazon-data.wvoc "
+                + "--word-file demo/amazon-data/format-unsupervised/amazon-data.dat "
+                + "--info-file demo/amazon-data/format-unsupervised/amazon-data.docinfo "
+                + "--output-folder demo/amazon-data/model-unsupervised "
+                + "--burnIn 100 "
+                + "--maxIter 250 "
+                + "--sampleLag 30 "
+                + "--report 5 "
+                + "--K 25 "
+                + "--global-alpha 1 "
+                + "--local-alpha 1 "
+                + "--beta 0.1 "
+                + "--init preset "
+                + "-v -d";
+    }
+
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -815,6 +834,7 @@ public class HDP extends AbstractSampler {
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
         options.addOption("help", false, "Help");
+        options.addOption("example", false, "Example command");
     }
 
     private static void runModel() throws Exception {
@@ -908,6 +928,9 @@ public class HDP extends AbstractSampler {
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp(getHelpString(), options);
+                return;
+            } else if (cmd.hasOption("example")) {
+                System.out.println(getExampleCmd());
                 return;
             }
 

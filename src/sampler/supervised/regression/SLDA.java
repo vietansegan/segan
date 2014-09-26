@@ -219,7 +219,7 @@ public class SLDA extends AbstractSampler {
         initializeDataStructure();
 
         initializeAssignments();
-        
+
         updateTopicRegressionParameters(); // optimize regression parameters
 
         if (debug) {
@@ -460,7 +460,7 @@ public class SLDA extends AbstractSampler {
                 for (int k = 0; k < K; k++) {
                     logprobs[k] = Math.log(docTopics[ii].getCount(k) + hyperparams.get(ALPHA))
                             + Math.log((topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
-                            / (topicWords[k].getCountSum() + totalBeta));
+                                    / (topicWords[k].getCountSum() + totalBeta));
                     if (observe) {
                         double mean = docRegressMeans[ii] + regParams[k] / words[dd].length;
                         logprobs[k] += StatUtils.logNormalProbability(responses[ii], mean, sqrtRho);
@@ -772,6 +772,27 @@ public class SLDA extends AbstractSampler {
         return "java -cp 'dist/segan.jar' " + SLDA.class.getName() + " -help";
     }
 
+    public static String getExampleCmd() {
+        return "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SLDA "
+                + "--dataset amazon-data "
+                + "--word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc "
+                + "--word-file demo/amazon-data/format-supervised/amazon-data.dat "
+                + "--info-file demo/amazon-data/format-supervised/amazon-data.docinfo "
+                + "--output-folder demo/amazon-data/model-supervised "
+                + "--burnIn 100 "
+                + "--maxIter 250 "
+                + "--sampleLag 30 "
+                + "--report 5 "
+                + "--K 50 "
+                + "--alpha 0.1 "
+                + "--beta 0.1 "
+                + "--rho 1.0 "
+                + "--sigma 1.0 "
+                + "--mu 0.0 "
+                + "--init random "
+                + "-v -d -z";
+    }
+
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -805,6 +826,7 @@ public class SLDA extends AbstractSampler {
         options.addOption("d", false, "debug");
         options.addOption("z", false, "z-normalize");
         options.addOption("help", false, "Help");
+        options.addOption("example", false, "Example command");
     }
 
     private static void runModel() throws Exception {
@@ -903,6 +925,9 @@ public class SLDA extends AbstractSampler {
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp(getHelpString(), options);
+                return;
+            } else if (cmd.hasOption("example")) {
+                System.out.println(getExampleCmd());
                 return;
             }
 

@@ -944,6 +944,26 @@ public class BinarySLDA extends AbstractSampler {
         return "java -cp dist/segan.jar " + BinarySLDA.class.getName() + " -help";
     }
 
+    public static String getExampleCmd() {
+        return "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.classification.BinarySLDA "
+                + "--dataset amazon-data "
+                + "--word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc "
+                + "--word-file demo/amazon-data/format-binary/amazon-data.dat "
+                + "--info-file demo/amazon-data/format-binary/amazon-data.docinfo "
+                + "--output-folder demo/amazon-data/model-supervised "
+                + "--burnIn 100 "
+                + "--maxIter 250 "
+                + "--sampleLag 30 "
+                + "--report 5 "
+                + "--K 50 "
+                + "--alpha 0.1 "
+                + "--beta 0.1 "
+                + "--sigma 1.0 "
+                + "--mu 0.0 "
+                + "--init random "
+                + "-v -d";
+    }
+
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -975,6 +995,7 @@ public class BinarySLDA extends AbstractSampler {
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
         options.addOption("help", false, "Help");
+        options.addOption("example", false, "Example command");
     }
 
     private static void runModel() throws Exception {
@@ -1066,6 +1087,9 @@ public class BinarySLDA extends AbstractSampler {
             cmd = parser.parse(options, args);
             if (cmd.hasOption("help")) {
                 CLIUtils.printHelp(getHelpString(), options);
+                return;
+            } else if (cmd.hasOption("example")) {
+                System.out.println(getExampleCmd());
                 return;
             }
 
