@@ -27,7 +27,6 @@ import util.MiscUtils;
  */
 public class RecursiveLDA extends AbstractSampler {
 
-    public static final int BACKGROUND = 0;
     // hyperparameters
     private double[] alphas;
     private double[] betas;
@@ -36,7 +35,8 @@ public class RecursiveLDA extends AbstractSampler {
     protected ArrayList<Integer> docIndices;
     private int[] Ks; // number of children per node at each level
     protected int V; // vocabulary size
-    protected double ratio = 1.0;
+    // configure
+    protected double[][] priorTopics; // prior for 1st-level topics
     // derived
     private int L; // number of levels
     protected int D; // number of documents
@@ -64,7 +64,6 @@ public class RecursiveLDA extends AbstractSampler {
 
     public void configure(String folder,
             int V, int[] Ks,
-            double ratio,
             double[] alphas,
             double[] betas,
             InitialState initState,
@@ -78,7 +77,6 @@ public class RecursiveLDA extends AbstractSampler {
         this.V = V;
         this.L = this.Ks.length;
 
-        this.ratio = ratio;
         this.alphas = alphas;
         this.betas = betas;
 
@@ -115,7 +113,6 @@ public class RecursiveLDA extends AbstractSampler {
             logln("--- folder\t" + folder);
             logln("--- # topics:\t" + MiscUtils.arrayToString(Ks));
             logln("--- vocab size:\t" + V);
-            logln("--- ratio:\t" + ratio);
             logln("--- alphas:\t" + MiscUtils.arrayToString(alphas));
             logln("--- betas:\t" + MiscUtils.arrayToString(betas));
             logln("--- burn-in:\t" + BURN_IN);
@@ -144,7 +141,6 @@ public class RecursiveLDA extends AbstractSampler {
         for (double beta : betas) {
             this.name += "-" + beta;
         }
-        this.name += "-r-" + this.ratio;
         this.name += "_opt-" + this.paramOptimized;
     }
 
@@ -179,8 +175,8 @@ public class RecursiveLDA extends AbstractSampler {
         }
     }
 
-    public boolean hasBackground() {
-        return this.ratio != 1.0;
+    public void setPriorTopics(double[][] priorTopics) {
+        this.priorTopics = priorTopics;
     }
 
     public RLDA[] getAssignedPath(int d, int n) {
@@ -233,7 +229,6 @@ public class RecursiveLDA extends AbstractSampler {
         if (verbose) {
             logln("Iterating ...");
         }
-
         recursive(0, 0, rootLDA, null);
     }
 
@@ -257,16 +252,8 @@ public class RecursiveLDA extends AbstractSampler {
                 paramOptimized,
                 BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
         rlda.train(words, null);
-        if (hasBackground() && level == 0) {
-            double prob = 1.0 / (Ks[level] - 1 + ratio);
-            double[][] docTopicPrior = new double[D][Ks[level]];
-            for (int d = 0; d < D; d++) {
-                docTopicPrior[d][BACKGROUND] = ratio * prob;
-                for (int k = 1; k < Ks[level]; k++) {
-                    docTopicPrior[d][k] = prob;
-                }
-            }
-            rlda.initialize(docTopicPrior, null);
+        if (level == 0) {
+            rlda.initialize(null, this.priorTopics);
         } else {
             rlda.initialize();
         }
@@ -287,25 +274,6 @@ public class RecursiveLDA extends AbstractSampler {
                     }
                 }
             }
-
-            // debug
-//            try {
-//                if (level == 0) {
-//                    IOUtils.createFolder(getSamplerFolderPath());
-//                    BufferedWriter writer = IOUtils.getBufferedWriter(new File(this.getSamplerFolderPath(), "asgn.txt"));
-//                    writer.write(D + "\n");
-//                    for (int d = 0; d < D; d++) {
-//                        for (int n = 0; n < words[d].length; n++) {
-//                            writer.write(rlda.z[d][n] + " ");
-//                        }
-//                        writer.write("\n");
-//                    }
-//                    writer.close();
-//                }
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//                System.exit(1);
-//            }
         }
 
         if (level++ == L - 1) {
@@ -313,11 +281,6 @@ public class RecursiveLDA extends AbstractSampler {
         }
 
         for (int k = 0; k < Ks[level - 1]; k++) {
-            // don't split the background topic
-            if (level == 1 && hasBackground() && k == BACKGROUND) {
-                continue;
-            }
-
             boolean[][] subValid = new boolean[D][];
             for (int d = 0; d < D; d++) {
                 subValid[d] = new boolean[words[d].length];
@@ -326,15 +289,11 @@ public class RecursiveLDA extends AbstractSampler {
                     if (!rlda.getValid()[d][n]) {
                         continue;
                     }
-                    if (level == 1 && hasBackground() && rlda.z[d][n] == BACKGROUND) {
-                        continue;
-                    }
                     if (rlda.z[d][n] == k) {
                         subValid[d][n] = true;
                     }
                 }
             }
-
             RLDA subRLda = new RLDA(k, level, subValid, rlda);
             rlda.addChild(subRLda);
             recursive(index, level, subRLda, seededZs);
@@ -433,21 +392,8 @@ public class RecursiveLDA extends AbstractSampler {
                     paramOptimized,
                     BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
             node.train(words, null);
-            if (hasBackground() && level == 0) {
-                double prob = 1.0 / (Ks[level] - 1 + ratio);
-                double[][] docTopicPrior = new double[D][Ks[level]];
-                for (int d = 0; d < D; d++) {
-                    docTopicPrior[d][BACKGROUND] = ratio * prob;
-                    for (int k = 1; k < Ks[level]; k++) {
-                        docTopicPrior[d][k] = prob;
-                    }
-                }
-                node.initializeModelStructure(null);
-                node.initializeDataStructure(docTopicPrior);
-            } else {
-                node.initializeModelStructure(null);
-                node.initializeDataStructure(null);
-            }
+            node.initializeModelStructure(null);
+            node.initializeDataStructure(null);
 
             if (level == L - 1) {
                 continue;
@@ -597,16 +543,6 @@ public class RecursiveLDA extends AbstractSampler {
         }
 
         BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        if (hasBackground()) {
-            double[] bgTopic = rootLDA.getTopicWords()[BACKGROUND].getDistribution();
-            String[] bgWords = getTopWords(bgTopic, numTopWords);
-            writer.write("[Background: " + rootLDA.getTopicWords()[BACKGROUND].getCountSum() + "]");
-            for (String tw : bgWords) {
-                writer.write(" " + tw);
-            }
-            writer.write("\n");
-        }
-
         Stack<RLDA> stack = new Stack<RLDA>();
         stack.add(rootLDA);
 
@@ -693,7 +629,6 @@ public class RecursiveLDA extends AbstractSampler {
         addOption("alphas", "Alphas");
         addOption("betas", "Betas");
         addOption("Ks", "Number of topics");
-        addOption("ratio", "Ratio");
         addOption("num-top-words", "Number of top words per topic");
 
         // configurations
@@ -729,7 +664,6 @@ public class RecursiveLDA extends AbstractSampler {
         double[] alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas", new double[]{0.1, 0.1}, ",");
         double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", new double[]{0.1, 0.1}, ",");
         int[] Ks = CLIUtils.getIntArrayArgument(cmd, "Ks", new int[]{10, 5}, ",");
-        double ratio = CLIUtils.getDoubleArgument(cmd, "ratio", 1000);
 
         // data input
         String datasetName = cmd.getOptionValue("dataset");
@@ -754,7 +688,7 @@ public class RecursiveLDA extends AbstractSampler {
         sampler.setReport(true);
         sampler.setWordVocab(data.getWordVocab());
 
-        sampler.configure(outputFolder, V, Ks, ratio, alphas, betas,
+        sampler.configure(outputFolder, V, Ks, alphas, betas,
                 initState, paramOpt, burnIn, maxIters, sampleLag, repInterval);
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
