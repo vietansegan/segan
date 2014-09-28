@@ -28,6 +28,23 @@ public class TFNN {
     protected SparseVector[] labelVectors; // L x V;
     protected int minWordTypeCount = 0;
     protected double[] labelL2Norms;
+    
+    public TFNN(
+            int[][] docWords,
+            int[] labels,
+            int L,
+            int V,
+            int minWordTypeCount) {
+        this.words = docWords;
+        this.L = L;
+        this.V = V;
+        this.D = this.words.length;
+        this.minWordTypeCount = minWordTypeCount;
+        this.labels = new int[labels.length][1];
+        for (int ii = 0; ii < this.labels.length; ii++) {
+            this.labels[ii][0] = labels[ii];
+        }
+    }
 
     public TFNN(
             int[][] docWords,
@@ -190,8 +207,8 @@ public class TFNN {
             StringBuilder labelVecStr = new StringBuilder();
             labelVecStr.append("num-labels\t").append(L).append("\n");
             labelVecStr.append("num-dimensions\t").append(V).append("\n");
-            for (int l = 0; l < this.labelVectors.length; l++) {
-                labelVecStr.append(this.labelVectors[l].toString()).append("\n");
+            for (SparseVector labelVector : this.labelVectors) {
+                labelVecStr.append(labelVector.toString()).append("\n");
             }
 
             // output to a compressed file

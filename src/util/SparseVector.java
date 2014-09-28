@@ -25,6 +25,14 @@ public class SparseVector implements Serializable {
         this.dim = dim;
     }
 
+    public SparseVector(SparseVector other) {
+        this.values = new HashMap<>();
+        for (int key : other.getIndices()) {
+            this.values.put(key, other.get(key));
+        }
+        this.dim = other.getDimension();
+    }
+
     public void setDimension(int dim) {
         this.dim = dim;
     }
@@ -192,6 +200,17 @@ public class SparseVector implements Serializable {
         double thatL2Norm = other.getL2Norm();
         double dotProd = this.dotProduct(other);
         double cosine = dotProd / (thisL2Norm * thatL2Norm);
+        return cosine;
+    }
+
+    public double cosineSimilarity(double[] other) {
+        if (this.isEmpty()) {
+            return 0.0;
+        }
+        double thisL2Norm = this.getL2Norm();
+        double thatL2Norm = StatUtils.getL2Norm(other);
+        double dotProb = this.dotProduct(other);
+        double cosine = dotProb / (thisL2Norm * thatL2Norm);
         return cosine;
     }
 

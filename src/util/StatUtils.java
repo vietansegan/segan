@@ -15,7 +15,15 @@ public class StatUtils {
     public static final double c2 = -1.0 / 12;
     public static final double c4 = 1.0 / 120;
     public static final double c6 = -1.0 / 252;
-    private static PearsonsCorrelation corr = new PearsonsCorrelation();
+    private static final PearsonsCorrelation corr = new PearsonsCorrelation();
+
+    public static double getL2Norm(double[] vector) {
+        double sumSquare = 0.0;
+        for (double val : vector) {
+            sumSquare += val * val;
+        }
+        return Math.sqrt(sumSquare);
+    }
 
     public static ArrayList<Integer> discretize(double[] values, int numClasses) {
         ArrayList<Integer> disVals = new ArrayList<Integer>();

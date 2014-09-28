@@ -118,6 +118,11 @@ public class LDA extends AbstractSampler {
         return this.z;
     }
 
+    /**
+     * Return the learned topics.
+     *
+     * @return The learned topics
+     */
     public DirMult[] getTopicWords() {
         return this.topicWords;
     }
@@ -130,7 +135,6 @@ public class LDA extends AbstractSampler {
      * documents are considered.
      */
     public void train(int[][] docWords, ArrayList<Integer> docIndices) {
-        this.words = docWords;
         this.docIndices = docIndices;
         if (this.docIndices == null) { // add all documents
             this.docIndices = new ArrayList<>();
@@ -138,11 +142,13 @@ public class LDA extends AbstractSampler {
                 this.docIndices.add(dd);
             }
         }
-        this.D = this.docIndices.size();
-
         this.numTokens = 0;
-        for (int dd : this.docIndices) {
-            this.numTokens += this.words[dd].length;
+        this.D = this.docIndices.size();
+        this.words = new int[D][];
+        for (int ii = 0; ii < D; ii++) {
+            int dd = this.docIndices.get(ii);
+            this.words[ii] = docWords[dd];
+            this.numTokens += this.words[ii].length;
         }
 
         if (verbose) {
@@ -228,7 +234,7 @@ public class LDA extends AbstractSampler {
 
         z = new int[D][];
         for (int d = 0; d < D; d++) {
-            z[d] = new int[words[docIndices.get(d)].length];
+            z[d] = new int[words[d].length];
         }
     }
 
@@ -237,11 +243,11 @@ public class LDA extends AbstractSampler {
             logln("--- Initializing assignments ...");
         }
 
-        for (int ii = 0; ii < D; ii++) {
-            for (int n = 0; n < z[ii].length; n++) {
-                z[ii][n] = rand.nextInt(K);
-                docTopics[ii].increment(z[ii][n]);
-                topicWords[z[ii][n]].increment(words[docIndices.get(ii)][n]);
+        for (int dd = 0; dd < D; dd++) {
+            for (int n = 0; n < z[dd].length; n++) {
+                z[dd][n] = rand.nextInt(K);
+                docTopics[dd].increment(z[dd][n]);
+                topicWords[z[dd][n]].increment(words[dd][n]);
             }
         }
     }
@@ -352,10 +358,9 @@ public class LDA extends AbstractSampler {
     protected long sampleZs(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
         long sTime = System.currentTimeMillis();
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
-            for (int nn = 0; nn < z[ii].length; nn++) {
-                sampleZ(ii, nn, dd, removeFromModel, addToModel,
+        for (int dd = 0; dd < D; dd++) {
+            for (int nn = 0; nn < z[dd].length; nn++) {
+                sampleZ(dd, nn, removeFromModel, addToModel,
                         removeFromData, addToData);
             }
         }
@@ -365,42 +370,41 @@ public class LDA extends AbstractSampler {
     /**
      * Sample the topic assignment for each token
      *
-     * @param ii The document index
+     * @param dd The document index
      * @param nn The token index
-     * @param dd
      * @param removeFromModel
      * @param addToModel
      * @param removeFromData
      * @param addToData
      */
-    protected void sampleZ(int ii, int nn, int dd,
+    protected void sampleZ(int dd, int nn,
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
         double totalBeta = V * hyperparams.get(BETA);
         if (removeFromData) {
-            docTopics[ii].decrement(z[ii][nn]);
+            docTopics[dd].decrement(z[dd][nn]);
         }
         if (removeFromModel) {
-            topicWords[z[ii][nn]].decrement(words[dd][nn]);
+            topicWords[z[dd][nn]].decrement(words[dd][nn]);
         }
 
         double[] probs = new double[K];
         for (int k = 0; k < K; k++) {
-            probs[k] = (docTopics[ii].getCount(k) + hyperparams.get(ALPHA))
+            probs[k] = (docTopics[dd].getCount(k) + hyperparams.get(ALPHA))
                     * (topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
                     / (topicWords[k].getCountSum() + totalBeta);
         }
         int sampledZ = SamplerUtils.scaleSample(probs);
-        if (sampledZ != z[ii][nn]) {
+        if (sampledZ != z[dd][nn]) {
             numTokensChanged++;
         }
-        z[ii][nn] = sampledZ;
+        z[dd][nn] = sampledZ;
 
         if (addToData) {
-            docTopics[ii].increment(z[ii][nn]);
+            docTopics[dd].increment(z[dd][nn]);
         }
         if (addToModel) {
-            topicWords[z[ii][nn]].increment(words[dd][nn]);
+            topicWords[z[dd][nn]].increment(words[dd][nn]);
         }
     }
 

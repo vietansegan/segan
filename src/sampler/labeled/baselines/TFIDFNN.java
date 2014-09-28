@@ -38,6 +38,23 @@ public class TFIDFNN {
 
     public TFIDFNN(
             int[][] docWords,
+            int[] labels,
+            int L,
+            int V,
+            int minWordTypeCount) {
+        this.words = docWords;
+        this.L = L;
+        this.V = V;
+        this.D = this.words.length;
+        this.minWordTypeCount = minWordTypeCount;
+        this.labels = new int[labels.length][1];
+        for (int ii = 0; ii < this.labels.length; ii++) {
+            this.labels[ii][0] = labels[ii];
+        }
+    }
+
+    public TFIDFNN(
+            int[][] docWords,
             int[][] labels,
             int L,
             int V,
@@ -120,7 +137,7 @@ public class TFIDFNN {
                     || words[d].length < minWordTypeCount) {
                 continue;
             }
-            
+
             SparseVector docVector = getFeatureVector(words[d]);
             for (int ll : docTopics) {
                 labelDocCounts[ll]++;
@@ -208,8 +225,8 @@ public class TFIDFNN {
             BufferedWriter writer = IOUtils.getBufferedWriter(predFile);
             writer.write("num-labels\t" + L + "\n");
             writer.write("num-dimension\t" + V + "\n");
-            for (int l = 0; l < this.labelVectors.length; l++) {
-                writer.write(labelVectors[l].toString() + "\n");
+            for (SparseVector labelVector : this.labelVectors) {
+                writer.write(labelVector.toString() + "\n");
             }
             for (int v = 0; v < V; v++) {
                 writer.write(this.idfs[v] + "\n");
@@ -254,8 +271,8 @@ public class TFIDFNN {
             StringBuilder labelVecStr = new StringBuilder();
             labelVecStr.append("num-labels\t").append(L).append("\n");
             labelVecStr.append("num-dimensions\t").append(V).append("\n");
-            for (int l = 0; l < this.labelVectors.length; l++) {
-                labelVecStr.append(this.labelVectors[l].toString()).append("\n");
+            for (SparseVector labelVector : this.labelVectors) {
+                labelVecStr.append(labelVector.toString()).append("\n");
             }
 
             StringBuilder docFreqStr = new StringBuilder();
