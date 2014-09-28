@@ -213,13 +213,10 @@ public class SLDA extends AbstractSampler {
             logln("Initializing ...");
         }
 
-        // compute the design matrix for lexical regression
+        iter = INIT;
         initializeModelStructure();
-
         initializeDataStructure();
-
         initializeAssignments();
-
         updateTopicRegressionParameters(); // optimize regression parameters
 
         if (debug) {

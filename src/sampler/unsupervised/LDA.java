@@ -208,6 +208,12 @@ public class LDA extends AbstractSampler {
             logln("--- Initializing model structure ...");
         }
 
+        if (topics != null && topics.length != K) {
+            throw new RuntimeException("Mismatch"
+                    + ". K = " + K
+                    + ". # prior topics = " + topics.length);
+        }
+
         topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
             if (topics != null) {
@@ -221,6 +227,12 @@ public class LDA extends AbstractSampler {
     protected void initializeDataStructure(double[][] docTopicPrior) {
         if (verbose) {
             logln("--- Initializing model structure ...");
+        }
+
+        if (docTopicPrior != null && docTopicPrior.length != D) {
+            throw new RuntimeException("Mismatch"
+                    + ". D = " + D
+                    + ". # prior documents = " + docTopicPrior.length);
         }
 
         docTopics = new DirMult[D];
@@ -242,14 +254,7 @@ public class LDA extends AbstractSampler {
         if (verbose) {
             logln("--- Initializing assignments ...");
         }
-
-        for (int dd = 0; dd < D; dd++) {
-            for (int n = 0; n < z[dd].length; n++) {
-                z[dd][n] = rand.nextInt(K);
-                docTopics[dd].increment(z[dd][n]);
-                topicWords[z[dd][n]].increment(words[dd][n]);
-            }
-        }
+        sampleZs(!REMOVE, ADD, !REMOVE, ADD);
     }
 
     @Override
@@ -278,8 +283,9 @@ public class LDA extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
+            boolean isReporting = isReporting();
             numTokensChanged = 0;
-            if (isReporting()) {
+            if (isReporting) {
                 // store llh after every iteration
                 double loglikelihood = this.getLogLikelihood();
                 logLikelihoods.add(loglikelihood);
@@ -312,7 +318,7 @@ public class LDA extends AbstractSampler {
                 }
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
+            if (isReporting) {
                 logln("--- --- Time. topic: " + topicTime);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
@@ -380,7 +386,7 @@ public class LDA extends AbstractSampler {
     protected void sampleZ(int dd, int nn,
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
-        double totalBeta = V * hyperparams.get(BETA);
+//        double totalBeta = V * hyperparams.get(BETA);
         if (removeFromData) {
             docTopics[dd].decrement(z[dd][nn]);
         }
@@ -390,9 +396,9 @@ public class LDA extends AbstractSampler {
 
         double[] probs = new double[K];
         for (int k = 0; k < K; k++) {
-            probs[k] = (docTopics[dd].getCount(k) + hyperparams.get(ALPHA))
-                    * (topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
-                    / (topicWords[k].getCountSum() + totalBeta);
+            probs[k] = (docTopics[dd].getCount(k)
+                    + hyperparams.get(ALPHA) * K * docTopics[dd].getCenterElement(k))
+                    * topicWords[k].getProbability(words[dd][nn]);
         }
         int sampledZ = SamplerUtils.scaleSample(probs);
         if (sampledZ != z[dd][nn]) {
@@ -482,11 +488,14 @@ public class LDA extends AbstractSampler {
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
             for (int k = 0; k < K; k++) {
                 String[] topWords = getTopWords(topicWords[k].getDistribution(), numTopWords);
-                // output top words
                 writer.write("[Topic " + k + ": " + topicWords[k].getCountSum() + "]");
                 for (String tw : topWords) {
                     writer.write(" " + tw);
                 }
+                writer.write("\n");
+                String topObs = MiscUtils.getTopObservations(wordVocab,
+                        topicWords[k].getSparseCounts(), numTopWords);
+                writer.write(topObs);
                 writer.write("\n\n");
             }
             writer.close();

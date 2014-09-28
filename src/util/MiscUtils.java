@@ -18,6 +18,20 @@ public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
 
+    public static String[] getTopWords(ArrayList<String> wordVocab,
+            double[] probs, int numTopObs) {
+        ArrayList<RankingItem<Integer>> rankObs = new ArrayList<RankingItem<Integer>>();
+        for (int vv = 0; vv < probs.length; vv++) {
+            rankObs.add(new RankingItem<Integer>(vv, probs[vv]));
+        }
+        Collections.sort(rankObs);
+        String[] topWords = new String[numTopObs];
+        for (int ii = 0; ii < numTopObs; ii++) {
+            topWords[ii] = wordVocab.get(rankObs.get(ii).getObject());
+        }
+        return topWords;
+    }
+
     public static String getTopObservations(ArrayList<String> wordVocab,
             double[] probs, int numTopObs) {
         ArrayList<RankingItem<Integer>> rankObs = new ArrayList<RankingItem<Integer>>();

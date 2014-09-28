@@ -211,7 +211,7 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
         return distr;
     }
 
-    public double getPhi(int w) {
+    public double getProbability(int w) {
         return (getCount(w) + this.concentration * getCenterElement(w))
                 / (getCountSum() + this.concentration);
     }

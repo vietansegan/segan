@@ -42,6 +42,7 @@ public class RecursiveLDA extends AbstractSampler {
     protected int D; // number of documents
     // latent
     protected int[][][] zs;
+    protected DirMult background; // topic at root node
     // internal
     private int numTokens;
     private RLDA rootLDA;
@@ -54,12 +55,28 @@ public class RecursiveLDA extends AbstractSampler {
         this.basename = basename;
     }
 
+    public void setPriorTopics(double[][] priorTopics) {
+        if (priorTopics.length != this.Ks[0]) {
+            throw new RuntimeException("Mismatch. " + priorTopics.length
+                    + " vs. " + this.Ks[0]);
+        }
+        this.priorTopics = priorTopics;
+    }
+
     public RLDA getRoot() {
         return this.rootLDA;
     }
 
     public int getNumLevels() {
         return this.L;
+    }
+
+    public DirMult getTopicWord(int[] path) {
+        RLDA node = rootLDA;
+        for (int ll = 0; ll < path.length - 1; ll++) {
+            node = node.getChild(path[ll]);
+        }
+        return node.getTopicWords()[path[path.length - 1]];
     }
 
     public void configure(String folder,
@@ -175,10 +192,6 @@ public class RecursiveLDA extends AbstractSampler {
         }
     }
 
-    public void setPriorTopics(double[][] priorTopics) {
-        this.priorTopics = priorTopics;
-    }
-
     public RLDA[] getAssignedPath(int d, int n) {
         RLDA[] path = new RLDA[L - 1];
         RLDA parent = rootLDA;
@@ -246,14 +259,44 @@ public class RecursiveLDA extends AbstractSampler {
         rlda.setDebug(debug);
         rlda.setLog(false);
         rlda.setReport(false);
-        rlda.configure(null, V, Ks[level],
-                alphas[level], betas[level],
-                initState,
-                paramOptimized,
-                BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
-        rlda.train(words, null);
         if (level == 0) {
-            rlda.initialize(null, this.priorTopics);
+            rlda.configure(null, V, Ks[level] + 1,
+                    alphas[level], betas[level],
+                    initState,
+                    paramOptimized,
+                    BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
+        } else {
+            rlda.configure(null, V, Ks[level] + 1,
+                    alphas[level], betas[level],
+                    initState,
+                    paramOptimized,
+                    BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
+        }
+
+        rlda.train(words, null);
+
+        if (level == 0) {
+            double[][] priors = new double[Ks[0] + 1][];
+            if (priorTopics != null) {
+                System.arraycopy(this.priorTopics, 0, priors, 0, Ks[0]);
+            } else {
+                for (int kk = 0; kk < Ks[0]; kk++) {
+                    priors[kk] = new double[V];
+                    Arrays.fill(priors[kk], 1.0 / V);
+                }
+            }
+
+            priors[Ks[0]] = new double[V];
+            for (int dd = 0; dd < D; dd++) {
+                for (int nn = 0; nn < words[dd].length; nn++) {
+                    priors[Ks[0]][words[dd][nn]]++;
+                }
+            }
+            for (int vv = 0; vv < V; vv++) {
+                priors[Ks[0]][vv] /= numTokens;
+            }
+
+            rlda.initialize(null, priors);
         } else {
             rlda.initialize();
         }
@@ -298,6 +341,7 @@ public class RecursiveLDA extends AbstractSampler {
             rlda.addChild(subRLda);
             recursive(index, level, subRLda, seededZs);
         }
+        this.background = rootLDA.getTopicWords()[Ks[0]];
     }
 
     @Override
@@ -429,7 +473,7 @@ public class RecursiveLDA extends AbstractSampler {
         }
     }
 
-    void inputAssignments(String zipFilepath) {
+    private void inputAssignments(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath + "\n");
         }
@@ -584,6 +628,192 @@ public class RecursiveLDA extends AbstractSampler {
             }
         }
         writer.close();
+    }
+
+    /**
+     * A node in the tree, which contains an LDA.
+     */
+    class RLDA extends LDA {
+
+        public static final int INVALID = -1;
+        private final boolean[][] valid;
+        private final int index;
+        private final int level;
+        private final RLDA parent;
+        private final ArrayList<RLDA> children;
+
+        public RLDA(int index, int level, boolean[][] v, RLDA parent) {
+            this.index = index;
+            this.level = level;
+            this.valid = v;
+            this.parent = parent;
+            this.children = new ArrayList<RLDA>();
+        }
+
+        public boolean[][] getValid() {
+            return this.valid;
+        }
+
+        public void updateStatistics() {
+            numTokens = 0;
+            for (int d = 0; d < D; d++) {
+                for (int n = 0; n < words[d].length; n++) {
+                    if (this.valid[d][n]) {
+                        numTokens++;
+                    }
+                }
+            }
+        }
+
+        public int getIndex() {
+            return this.index;
+        }
+
+        public int getLevel() {
+            return this.level;
+        }
+
+        public RLDA getParent() {
+            return this.parent;
+        }
+
+        public ArrayList<RLDA> getChildren() {
+            return this.children;
+        }
+
+        public RLDA getChild(int idx) {
+            return this.children.get(idx);
+        }
+
+        public void addChild(RLDA child) {
+            this.children.add(child);
+        }
+
+        public int getNumTokens() {
+            return this.numTokens;
+        }
+
+        /**
+         * Return the unique path string for each node in the tree
+         *
+         * @return Path of this node
+         */
+        public String getPathString() {
+            if (parent == null) {
+                return Integer.toString(this.index);
+            } else {
+                return this.parent.getPathString() + ":" + this.index;
+            }
+        }
+
+        protected void initializeAssignments(int[][] seededZs) {
+            if (verbose) {
+                logln("--- Initializing assignments with seeded assignments ...");
+            }
+
+            for (int d = 0; d < D; d++) {
+                Arrays.fill(z[d], INVALID);
+                for (int n = 0; n < words[d].length; n++) {
+                    if (valid[d][n]) {
+                        z[d][n] = seededZs[d][n];
+                        docTopics[d].increment(z[d][n]);
+                        topicWords[z[d][n]].increment(words[d][n]);
+                    }
+                }
+            }
+        }
+
+        @Override
+        protected void initializeAssignments() {
+            if (verbose) {
+                logln("--- Initializing assignments ...");
+            }
+
+            for (int d = 0; d < D; d++) {
+                Arrays.fill(z[d], INVALID);
+                for (int n = 0; n < words[d].length; n++) {
+                    if (valid[d][n]) {
+                        z[d][n] = rand.nextInt(K);
+                        docTopics[d].increment(z[d][n]);
+                        topicWords[z[d][n]].increment(words[d][n]);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void iterate() {
+            if (verbose) {
+                logln("Iterating ...");
+            }
+            updateStatistics();
+            logLikelihoods = new ArrayList<Double>();
+
+            for (iter = 0; iter < MAX_ITER; iter++) {
+                numTokensChanged = 0;
+
+                for (int d = 0; d < D; d++) {
+                    for (int n = 0; n < words[d].length; n++) {
+                        if (valid[d][n]) {
+                            sampleZ(d, n, REMOVE, ADD, REMOVE, ADD);
+                        }
+                    }
+                }
+
+                if (debug) {
+                    validate("Iter " + iter);
+                }
+
+                double loglikelihood = this.getLogLikelihood();
+                logLikelihoods.add(loglikelihood);
+
+                if (verbose && iter % REP_INTERVAL == 0) {
+                    double changeRatio = (double) numTokensChanged / numTokens;
+                    String str = "Iter " + iter + "/" + MAX_ITER
+                            + ". llh = " + MiscUtils.formatDouble(loglikelihood)
+                            + ". numTokensChanged = " + numTokensChanged
+                            + ". change ratio = " + MiscUtils.formatDouble(changeRatio);
+                    if (iter < BURN_IN) {
+                        logln("--- Burning in. " + str);
+                    } else {
+                        logln("--- Sampling. " + str);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void validate(String msg) {
+            super.validate(msg);
+            int totalValid = 0;
+            for (int d = 0; d < D; d++) {
+                for (int n = 0; n < valid[d].length; n++) {
+                    if (valid[d][n]) {
+                        totalValid++;
+                    }
+                }
+            }
+
+            int totalDocTopicCount = 0;
+            for (int d = 0; d < D; d++) {
+                totalDocTopicCount += docTopics[d].getCountSum();
+            }
+
+            if (totalValid != totalDocTopicCount) {
+                throw new RuntimeException(msg + ". Total count mismatch. "
+                        + totalValid + " vs. " + totalDocTopicCount);
+            }
+
+            int totalTopicWordCount = 0;
+            for (int k = 0; k < K; k++) {
+                totalTopicWordCount += topicWords[k].getCountSum();
+            }
+
+            if (totalValid != totalTopicWordCount) {
+                throw new RuntimeException(msg + ". Total count mismatch. "
+                        + totalValid + " vs. " + totalTopicWordCount);
+            }
+        }
     }
 
     public static String getHelpString() {
