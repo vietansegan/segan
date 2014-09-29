@@ -266,7 +266,7 @@ public class RecursiveLDA extends AbstractSampler {
                     paramOptimized,
                     BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
         } else {
-            rlda.configure(null, V, Ks[level] + 1,
+            rlda.configure(null, V, Ks[level],
                     alphas[level], betas[level],
                     initState,
                     paramOptimized,
@@ -276,24 +276,25 @@ public class RecursiveLDA extends AbstractSampler {
         rlda.train(words, null);
 
         if (level == 0) {
-            double[][] priors = new double[Ks[0] + 1][];
+            double[][] priors = new double[Ks[level] + 1][];
+            // priors for the first K topics
             if (priorTopics != null) {
-                System.arraycopy(this.priorTopics, 0, priors, 0, Ks[0]);
+                System.arraycopy(this.priorTopics, 0, priors, 0, Ks[level]);
             } else {
-                for (int kk = 0; kk < Ks[0]; kk++) {
+                for (int kk = 0; kk < Ks[level]; kk++) {
                     priors[kk] = new double[V];
                     Arrays.fill(priors[kk], 1.0 / V);
                 }
             }
-
-            priors[Ks[0]] = new double[V];
+            // background prior = empirical distribution
+            priors[Ks[level]] = new double[V];
             for (int dd = 0; dd < D; dd++) {
                 for (int nn = 0; nn < words[dd].length; nn++) {
-                    priors[Ks[0]][words[dd][nn]]++;
+                    priors[Ks[level]][words[dd][nn]]++;
                 }
             }
             for (int vv = 0; vv < V; vv++) {
-                priors[Ks[0]][vv] /= numTokens;
+                priors[Ks[level]][vv] /= numTokens;
             }
 
             rlda.initialize(null, priors);
@@ -430,11 +431,19 @@ public class RecursiveLDA extends AbstractSampler {
             RLDA node = stack.pop();
             node.setVerbose(false);
             int level = node.getLevel();
-            node.configure(null, V, Ks[level],
-                    alphas[level], betas[level],
-                    initState,
-                    paramOptimized,
-                    BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
+            if (level == 0) {
+                node.configure(null, V, Ks[level] + 1,
+                        alphas[level], betas[level],
+                        initState,
+                        paramOptimized,
+                        BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
+            } else {
+                node.configure(null, V, Ks[level],
+                        alphas[level], betas[level],
+                        initState,
+                        paramOptimized,
+                        BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
+            }
             node.train(words, null);
             node.initializeModelStructure(null);
             node.initializeDataStructure(null);
@@ -458,6 +467,7 @@ public class RecursiveLDA extends AbstractSampler {
                 assign(rootLDA, path, words[d][n]);
             }
         }
+        this.background = rootLDA.getTopicWords()[Ks[0]];
 
         if (debug) {
             validate("Input from " + filepath);
@@ -467,7 +477,9 @@ public class RecursiveLDA extends AbstractSampler {
     private void assign(RLDA node, int[] path, int obs) {
         int level = node.getLevel();
         node.topicWords[path[level]].increment(obs);
-
+        if (level == 0 && path[level] == Ks[0]) { // assign to background topic
+            return;
+        }
         if (level < L - 1) {
             assign(node.getChildren().get(path[level]), path, obs);
         }
@@ -662,6 +674,10 @@ public class RecursiveLDA extends AbstractSampler {
                         numTokens++;
                     }
                 }
+            }
+
+            if (verbose) {
+                logln("--- # valid tokens: " + numTokens);
             }
         }
 
