@@ -196,7 +196,7 @@ public class RecursiveLDA extends AbstractSampler {
         RLDA[] path = new RLDA[L - 1];
         RLDA parent = rootLDA;
         for (int l = 0; l < L - 1; l++) {
-            path[l] = parent.getChildren().get(zs[l][d][n]);
+            path[l] = parent.getChildren()[zs[l][d][n]];
             parent = path[l];
         }
         return path;
@@ -230,7 +230,7 @@ public class RecursiveLDA extends AbstractSampler {
             valid[d] = new boolean[words[d].length];
             Arrays.fill(valid[d], true);
         }
-        rootLDA = new RLDA(0, 0, valid, null);
+        rootLDA = new RLDA(0, 0, valid, null, Ks[0]);
 
         if (debug) {
             validate("Initialized");
@@ -338,8 +338,12 @@ public class RecursiveLDA extends AbstractSampler {
                     }
                 }
             }
-            RLDA subRLda = new RLDA(k, level, subValid, rlda);
-            rlda.addChild(subRLda);
+            int numChildren = 0;
+            if (level < L - 1) {
+                numChildren = Ks[level];
+            }
+            RLDA subRLda = new RLDA(k, level, subValid, rlda, numChildren);
+            rlda.children[k] = subRLda;
             recursive(index, level, subRLda, seededZs);
         }
         this.background = rootLDA.getTopicWords()[Ks[0]];
@@ -367,6 +371,7 @@ public class RecursiveLDA extends AbstractSampler {
 
     @Override
     public void validate(String msg) {
+        logln(msg + "Validateing ... TODO");
     }
 
     @Override
@@ -381,12 +386,12 @@ public class RecursiveLDA extends AbstractSampler {
             stack.add(rootLDA);
             while (!stack.isEmpty()) {
                 RLDA node = stack.pop();
-                for (RLDA child : node.getChildren()) {
-                    stack.add(child);
-                }
-                modelStr.append(node.getPathString()).append("\n");
-                for (int k = 0; k < Ks[node.getLevel()]; k++) {
-                    modelStr.append(DirMult.output(node.topicWords[k])).append("\n");
+                stack.addAll(Arrays.asList(node.getChildren()));
+                modelStr.append(node.getPathString()).append("\t")
+                        .append(node.topicWords.length).append("\t")
+                        .append(node.numChildren).append("\n");
+                for (DirMult topicWord : node.topicWords) {
+                    modelStr.append(DirMult.output(topicWord)).append("\n");
                 }
             }
 
@@ -406,168 +411,41 @@ public class RecursiveLDA extends AbstractSampler {
             this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+            throw new RuntimeException("Exception while outputing state to " + filepath);
         }
     }
 
-    @Override
-    public void inputState(String filepath) {
-        if (verbose) {
-            logln("--- Reading state from " + filepath);
-        }
-
-        inputAssignments(filepath);
-
-        boolean[][] valid = new boolean[D][];
-        for (int d = 0; d < D; d++) {
-            valid[d] = new boolean[words[d].length];
-            Arrays.fill(valid[d], true);
-        }
-        this.rootLDA = new RLDA(0, 0, valid, null);
-        Stack<RLDA> stack = new Stack<RLDA>();
-        stack.add(rootLDA);
-
-        while (!stack.isEmpty()) {
-            RLDA node = stack.pop();
-            node.setVerbose(false);
-            int level = node.getLevel();
-            if (level == 0) {
-                node.configure(null, V, Ks[level] + 1,
-                        alphas[level], betas[level],
-                        initState,
-                        paramOptimized,
-                        BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
-            } else {
-                node.configure(null, V, Ks[level],
-                        alphas[level], betas[level],
-                        initState,
-                        paramOptimized,
-                        BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
-            }
-            node.train(words, null);
-            node.initializeModelStructure(null);
-            node.initializeDataStructure(null);
-
-            if (level == L - 1) {
-                continue;
-            }
-            for (int k = 0; k < Ks[level]; k++) {
-                RLDA child = new RLDA(k, level + 1, null, node);
-                node.addChild(child);
-                stack.add(child);
-            }
-        }
-
-        for (int d = 0; d < D; d++) {
-            for (int n = 0; n < words[d].length; n++) {
-                int[] path = new int[L];
-                for (int l = 0; l < L; l++) {
-                    path[l] = zs[l][d][n];
-                }
-                assign(rootLDA, path, words[d][n]);
-            }
-        }
-        this.background = rootLDA.getTopicWords()[Ks[0]];
-
-        if (debug) {
-            validate("Input from " + filepath);
-        }
-    }
-
-    private void assign(RLDA node, int[] path, int obs) {
-        int level = node.getLevel();
-        node.topicWords[path[level]].increment(obs);
-        if (level == 0 && path[level] == Ks[0]) { // assign to background topic
-            return;
-        }
-        if (level < L - 1) {
-            assign(node.getChildren().get(path[level]), path, obs);
-        }
-    }
-
-    private void inputAssignments(String zipFilepath) {
-        if (verbose) {
-            logln("--- --- Loading assignments from " + zipFilepath + "\n");
-        }
-
-        zs = new int[L][][];
-        for (int l = 0; l < L; l++) {
-            zs[l] = new int[D][];
-            for (int d = 0; d < D; d++) {
-                zs[l][d] = new int[words[d].length];
-            }
-        }
-
-        try {
-            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
-            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
-            String line;
-            String[] sline;
-            while ((line = reader.readLine()) != null) {
-                int l = Integer.parseInt(line);
-                for (int d = 0; d < D; d++) {
-                    int docIdx = Integer.parseInt(reader.readLine());
-                    if (docIdx != d) {
-                        throw new RuntimeException("Mismatch. " + d + " vs. " + docIdx);
-                    }
-
-                    // if this document is empty
-                    line = reader.readLine().trim();
-                    if (line.isEmpty()) {
-                        zs[l][d] = new int[0];
-                    } else {
-                        sline = line.split("\t");
-                        if (sline.length != words[d].length) {
-                            throw new RuntimeException("Mismatch. "
-                                    + sline.length
-                                    + " vs. " + words[d].length
-                                    + ". in document " + d);
-                        }
-                        for (int n = 0; n < words[d].length; n++) {
-                            zs[l][d][n] = Integer.parseInt(sline[n]);
-                        }
-                    }
-                }
-            }
-            reader.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while loading assignments from "
-                    + zipFilepath);
-        }
-    }
-
-    void inputModel(String zipFilepath) {
+    private void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath + "\n");
         }
 
         try {
             // initialize
-            rootLDA = new RLDA(0, 0, null, null);
-
+            rootLDA = new RLDA(0, 0, null, null, Ks[0]);
             String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
-
             String line;
             HashMap<String, RLDA> nodeMap = new HashMap<String, RLDA>();
             while ((line = reader.readLine()) != null) {
-                String pathStr = line;
+                String[] sline = line.split("\t");
 
-                // create node
+                String pathStr = sline[0];
+                int numTopics = Integer.parseInt(sline[1]);
+                int numChildren = Integer.parseInt(sline[2]);
+
                 int lastColonIndex = pathStr.lastIndexOf(":");
                 RLDA parent = null;
                 if (lastColonIndex != -1) {
                     parent = nodeMap.get(pathStr.substring(0, lastColonIndex));
                 }
-
                 String[] pathIndices = pathStr.split(":");
                 int nodeIndex = Integer.parseInt(pathIndices[pathIndices.length - 1]);
                 int nodeLevel = pathIndices.length - 1;
-                RLDA node = new RLDA(nodeIndex, nodeLevel, null, parent);
+                RLDA node = new RLDA(nodeIndex, nodeLevel, null, parent, numChildren);
 
-                DirMult[] topics = new DirMult[Ks[nodeLevel]];
-                for (int k = 0; k < Ks[nodeLevel]; k++) {
+                DirMult[] topics = new DirMult[numTopics];
+                for (int k = 0; k < numTopics; k++) {
                     topics[k] = DirMult.input(reader.readLine());
                 }
                 node.topicWords = topics;
@@ -577,16 +455,26 @@ public class RecursiveLDA extends AbstractSampler {
                 }
 
                 if (parent != null) {
-                    parent.getChildren().add(node.getIndex(), node);
+                    parent.children[node.getIndex()] = node;
                 }
 
                 nodeMap.put(pathStr, node);
             }
+            reader.close();
+            this.background = rootLDA.getTopicWords()[Ks[0]];
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while loading model from "
                     + zipFilepath);
         }
+    }
+
+    @Override
+    public void inputState(String filepath) {
+        if (verbose) {
+            logln("--- Reading state from " + filepath);
+        }
+        inputModel(filepath);
     }
 
     public void outputTopicTopWords(File file, int numTopWords) throws Exception {
@@ -604,9 +492,7 @@ public class RecursiveLDA extends AbstractSampler {
 
         while (!stack.isEmpty()) {
             RLDA node = stack.pop();
-            for (RLDA child : node.getChildren()) {
-                stack.add(child);
-            }
+            stack.addAll(Arrays.asList(node.getChildren()));
 
             int level = node.getLevel();
             if (node.getParent() != null) {
@@ -623,7 +509,7 @@ public class RecursiveLDA extends AbstractSampler {
                 writer.write("\n");
             }
 
-            if (node.getChildren().isEmpty()) {
+            if (node.numChildren == 0) {
                 DirMult[] topics = node.getTopicWords();
                 for (int k = 0; k < topics.length; k++) {
                     String[] topWords = getTopWords(topics[k].getDistribution(), numTopWords);
@@ -652,14 +538,16 @@ public class RecursiveLDA extends AbstractSampler {
         private final int index;
         private final int level;
         private final RLDA parent;
-        private final ArrayList<RLDA> children;
+        private final RLDA[] children;
+        private final int numChildren;
 
-        public RLDA(int index, int level, boolean[][] v, RLDA parent) {
+        public RLDA(int index, int level, boolean[][] v, RLDA parent, int numChildren) {
             this.index = index;
             this.level = level;
             this.valid = v;
             this.parent = parent;
-            this.children = new ArrayList<RLDA>();
+            this.numChildren = numChildren;
+            this.children = new RLDA[numChildren];
         }
 
         public boolean[][] getValid() {
@@ -693,18 +581,17 @@ public class RecursiveLDA extends AbstractSampler {
             return this.parent;
         }
 
-        public ArrayList<RLDA> getChildren() {
+        public RLDA[] getChildren() {
             return this.children;
         }
 
         public RLDA getChild(int idx) {
-            return this.children.get(idx);
+            return this.children[idx];
         }
 
-        public void addChild(RLDA child) {
-            this.children.add(child);
-        }
-
+//        public void addChild(RLDA child) {
+//            this.children.add(child);
+//        }
         public int getNumTokens() {
             return this.numTokens;
         }
