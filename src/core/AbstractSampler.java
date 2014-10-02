@@ -46,6 +46,8 @@ public abstract class AbstractSampler implements Serializable {
     public static final boolean OBSERVED = true;
     public static final boolean EXTEND = true;
     public static final int UNOBSERVED = AbstractExperiment.UNOBSERVED;
+    public static final int PROPOSAL_INDEX = 0;
+    public static final int ACTUAL_INDEX = 1;
 
     public static enum InitialState {
 
@@ -105,10 +107,13 @@ public abstract class AbstractSampler implements Serializable {
         addOption("maxIter", "Maximum number of iterations");
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
-
+    }
+    
+    public static void addRunningOptions() {
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
-        options.addOption("help", false, "Help");
+        options.addOption("help", false, "help");
+        options.addOption("example", false, "example");
     }
 
     public String getBasename() {

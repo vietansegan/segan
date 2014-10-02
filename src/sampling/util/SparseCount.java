@@ -28,6 +28,17 @@ public class SparseCount implements Cloneable, Serializable {
         return sc;
     }
 
+    public int size() {
+        return this.counts.size();
+    }
+
+    public void remove(int idx) {
+        if (!this.containsIndex(idx)) {
+            throw new RuntimeException("Index " + idx + " not found");
+        }
+        this.setCount(idx, 0);
+    }
+
     public HashMap<Integer, Integer> getObservations() {
         return this.counts;
     }
@@ -39,6 +50,9 @@ public class SparseCount implements Cloneable, Serializable {
         int curCount = this.getCount(observation);
         this.counts.put(observation, count);
         this.countSum += count - curCount;
+        if (count == 0) {
+            this.counts.remove(observation);
+        }
 
         if (counts.get(observation) != null && this.counts.get(observation) < 0) {
             throw new RuntimeException("Negative count for observation " + observation

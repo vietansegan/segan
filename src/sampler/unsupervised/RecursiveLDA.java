@@ -272,7 +272,6 @@ public class RecursiveLDA extends AbstractSampler {
                     paramOptimized,
                     BURN_IN, MAX_ITER, LAG, REP_INTERVAL);
         }
-
         rlda.train(words, null);
 
         if (level == 0) {
@@ -589,9 +588,6 @@ public class RecursiveLDA extends AbstractSampler {
             return this.children[idx];
         }
 
-//        public void addChild(RLDA child) {
-//            this.children.add(child);
-//        }
         public int getNumTokens() {
             return this.numTokens;
         }
