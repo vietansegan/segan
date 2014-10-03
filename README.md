@@ -101,6 +101,14 @@ Notes:
 - For other input arguments, use `-help`. For example, `java -cp dist/segan.jar data.ResponseTextData -help`.
 - For each document in the input folder, the filename is used as its ID. If the filename has `txt` as the file extension, `txt` will be discarded. For example, a document stored in file `doc-1.txt` will have `doc-1` as its ID, whereas a document stored in file `doc-2.dat` will have `doc-2.dat` as its ID.
 
+# SNLDA
+SNLDA takes in the same input as SLDA to learn a hierarchy of topics instead of a flat topic structure in SLDA.
+
+Example cmd:
+```
+java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SNLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/model-supervised  --Ks 15,4 --burnIn 50 --maxIter 100 --sampleLag 25 --report 5 --init random --alphas 0.1,0.1 --betas 1.0,0.5,0.1 --gamma-means 0.2,0.2 --gamma-scales 100,10 --rho 1.0 --mu 0.0 --sigma 2.5 -v -d -z
+```
+
 # Binary SLDA
 SLDA for a set of documents, each of which is associated with a binary response variable (0 or 1). 
 ### Running BinarySLDA
