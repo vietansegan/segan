@@ -273,6 +273,7 @@ public class SNLDA extends AbstractSampler {
         initializeModelStructure();
         initializeDataStructure();
         initializeAssignments();
+        updateEtas();
 
         if (verbose) {
             logln("--- Done initializing.\n" + printGlobalTree());
@@ -306,13 +307,13 @@ public class SNLDA extends AbstractSampler {
                 initState, paramOptimized,
                 rlda_burnin, rlda_maxiter, rlda_samplelag, rlda_samplelag);
         try {
-            File rldaZFile = new File(rlda.getSamplerFolderPath(), basename + ".zip");
+            File rldaFile = new File(rlda.getSamplerFolderPath(), basename + ".zip");
             rlda.train(words, null); // words are already filtered using docIndices
-            if (rldaZFile.exists()) {
+            if (rldaFile.exists()) {
                 if (verbose) {
-                    logln("--- --- Recursive LDA file exists. Loading from " + rldaZFile);
+                    logln("--- --- Recursive LDA file exists. Loading from " + rldaFile);
                 }
-                rlda.inputState(rldaZFile);
+                rlda.inputState(rldaFile);
             } else {
                 if (verbose) {
                     logln("--- --- Recursive LDA not found. Running RecursiveLDA ...");
@@ -320,7 +321,7 @@ public class SNLDA extends AbstractSampler {
                 rlda.initialize();
                 rlda.iterate();
                 IOUtils.createFolder(rlda.getSamplerFolderPath());
-                rlda.outputState(rldaZFile);
+                rlda.outputState(rldaFile);
                 rlda.setWordVocab(wordVocab);
                 rlda.outputTopicTopWords(new File(rlda.getSamplerFolderPath(), TopWordFile), 20);
             }
@@ -486,10 +487,12 @@ public class SNLDA extends AbstractSampler {
             }
 
             long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
+            long etaTime = updateEtas();
 
             if (isReporting) {
                 logln(printGlobalTree() + "\n");
-                logln("--- --- Time (s). sample topic: " + topicTime);
+                logln("--- --- Time (s). sample topic: " + topicTime
+                        + ". update eta: " + etaTime);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
                         + " (" + (double) numTokensChanged / numTokens + ") "
@@ -809,7 +812,16 @@ public class SNLDA extends AbstractSampler {
 
     @Override
     public void validate(String msg) {
-        logln(msg + ". Not implemented!");
+        logln("Validating ..." + msg);
+        Stack<Node> stack = new Stack<>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            for (Node child : node.getChildren()) {
+                stack.add(child);
+            }
+            node.validate(msg);
+        }
     }
 
     @Override
@@ -1131,7 +1143,7 @@ public class SNLDA extends AbstractSampler {
             // token counts
             str.append(", (").append(subtreeTokenCounts.getCountSum());
             str.append(", ").append(tokenCounts.getCountSum()).append(")");
-
+            str.append(", ").append(MiscUtils.formatDouble(eta));
             str.append("]");
             return str.toString();
         }

@@ -177,7 +177,6 @@ public class SLDA extends AbstractSampler {
      */
     public void train(int[][] docWords, ArrayList<Integer> docIndices,
             double[] docResponses) {
-        this.words = docWords;
         this.docIndices = docIndices;
         if (this.docIndices == null) { // add all documents
             this.docIndices = new ArrayList<>();
@@ -186,12 +185,14 @@ public class SLDA extends AbstractSampler {
             }
         }
         this.D = this.docIndices.size();
+        this.words = new int[D][];
         this.responses = new double[D]; // responses of considered documents
         this.numTokens = 0;
         for (int ii = 0; ii < D; ii++) {
             int dd = this.docIndices.get(ii);
-            this.numTokens += this.words[dd].length;
             this.responses[ii] = docResponses[dd];
+            this.words[ii] = docWords[dd];
+            this.numTokens += this.words[ii].length;
         }
 
         if (verbose) {
@@ -244,9 +245,8 @@ public class SLDA extends AbstractSampler {
 
     protected void initializeDataStructure() {
         z = new int[D][];
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
-            z[ii] = new int[words[dd].length];
+        for (int dd = 0; dd < D; dd++) {
+            z[dd] = new int[words[dd].length];
         }
 
         docTopics = new DirMult[D];
@@ -271,12 +271,11 @@ public class SLDA extends AbstractSampler {
     }
 
     private void initializeRandomAssignments() {
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
+        for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
-                z[ii][nn] = rand.nextInt(K);
-                docTopics[ii].increment(z[ii][nn]);
-                topicWords[z[ii][nn]].increment(words[dd][nn]);
+                z[dd][nn] = rand.nextInt(K);
+                docTopics[dd].increment(z[dd][nn]);
+                topicWords[z[dd][nn]].increment(words[dd][nn]);
             }
         }
     }
@@ -302,15 +301,21 @@ public class SLDA extends AbstractSampler {
 
         int[][] ldaZ = null;
         try {
-            File ldaZFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
-            lda.train(words, docIndices);
-            if (ldaZFile.exists()) {
-                lda.inputState(ldaZFile);
+            File ldaFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
+            lda.train(words, null);
+            if (ldaFile.exists()) {
+                if (verbose) {
+                    logln("--- --- LDA file exists. Loading from " + ldaFile);
+                }
+                lda.inputState(ldaFile);
             } else {
+                if (verbose) {
+                    logln("--- --- LDA not found. Running LDA ...");
+                }
                 lda.initialize();
                 lda.iterate();
                 IOUtils.createFolder(lda.getSamplerFolderPath());
-                lda.outputState(ldaZFile);
+                lda.outputState(ldaFile);
                 lda.setWordVocab(wordVocab);
                 lda.outputTopicTopWords(new File(lda.getSamplerFolderPath(), TopWordFile), 20);
             }
@@ -322,12 +327,11 @@ public class SLDA extends AbstractSampler {
         setLog(log);
 
         // initialize assignments
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
+        for (int dd = 0; dd < D; dd++) {
             for (int n = 0; n < words[dd].length; n++) {
-                z[ii][n] = ldaZ[ii][n];
-                docTopics[ii].increment(z[ii][n]);
-                topicWords[z[ii][n]].increment(words[dd][n]);
+                z[dd][n] = ldaZ[dd][n];
+                docTopics[dd].increment(z[dd][n]);
+                topicWords[z[dd][n]].increment(words[dd][n]);
             }
         }
     }
@@ -442,42 +446,41 @@ public class SLDA extends AbstractSampler {
             boolean removeFromData, boolean addToData,
             boolean observe) {
         double totalBeta = V * hyperparams.get(BETA);
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
+        for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
                 if (removeFromModel) {
-                    topicWords[z[ii][nn]].decrement(words[dd][nn]);
+                    topicWords[z[dd][nn]].decrement(words[dd][nn]);
                 }
                 if (removeFromData) {
-                    docTopics[ii].decrement(z[ii][nn]);
-                    docRegressMeans[ii] -= regParams[z[ii][nn]] / words[dd].length;
+                    docTopics[dd].decrement(z[dd][nn]);
+                    docRegressMeans[dd] -= regParams[z[dd][nn]] / words[dd].length;
                 }
 
                 double[] logprobs = new double[K];
                 for (int k = 0; k < K; k++) {
-                    logprobs[k] = Math.log(docTopics[ii].getCount(k) + hyperparams.get(ALPHA))
+                    logprobs[k] = Math.log(docTopics[dd].getCount(k) + hyperparams.get(ALPHA))
                             + Math.log((topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
                                     / (topicWords[k].getCountSum() + totalBeta));
                     if (observe) {
-                        double mean = docRegressMeans[ii] + regParams[k] / words[dd].length;
-                        logprobs[k] += StatUtils.logNormalProbability(responses[ii], mean, sqrtRho);
+                        double mean = docRegressMeans[dd] + regParams[k] / words[dd].length;
+                        logprobs[k] += StatUtils.logNormalProbability(responses[dd], mean, sqrtRho);
                     }
                 }
 
                 int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
 
-                if (z[ii][nn] != sampledZ) {
+                if (z[dd][nn] != sampledZ) {
                     numTokensChanged++; // for debugging
                 }
                 // update
-                z[ii][nn] = sampledZ;
+                z[dd][nn] = sampledZ;
 
                 if (addToModel) {
-                    topicWords[z[ii][nn]].increment(words[dd][nn]);
+                    topicWords[z[dd][nn]].increment(words[dd][nn]);
                 }
                 if (addToData) {
-                    docTopics[ii].increment(z[ii][nn]);
-                    docRegressMeans[ii] += regParams[z[ii][nn]] / words[dd].length;
+                    docTopics[dd].increment(z[dd][nn]);
+                    docRegressMeans[dd] += regParams[z[dd][nn]] / words[dd].length;
                 }
             }
         }
@@ -488,11 +491,11 @@ public class SLDA extends AbstractSampler {
      */
     private void updateTopicRegressionParameters() {
         designMatrix = new SparseVector[D];
-        for (int ii = 0; ii < D; ii++) {
-            designMatrix[ii] = new SparseVector(K);
-            for (int k : docTopics[ii].getSparseCounts().getIndices()) {
-                double val = (double) docTopics[ii].getCount(k) / z[ii].length;
-                designMatrix[ii].change(k, val);
+        for (int dd = 0; dd < D; dd++) {
+            designMatrix[dd] = new SparseVector(K);
+            for (int k : docTopics[dd].getSparseCounts().getIndices()) {
+                double val = (double) docTopics[dd].getCount(k) / z[dd].length;
+                designMatrix[dd].change(k, val);
             }
         }
 
@@ -518,9 +521,9 @@ public class SLDA extends AbstractSampler {
 
         // update current predictions
         this.docRegressMeans = new double[D];
-        for (int ii = 0; ii < D; ii++) {
-            for (int kk : designMatrix[ii].getIndices()) {
-                this.docRegressMeans[ii] += designMatrix[ii].get(kk) * regParams[kk];
+        for (int dd = 0; dd < D; dd++) {
+            for (int kk : designMatrix[dd].getIndices()) {
+                this.docRegressMeans[dd] += designMatrix[dd].get(kk) * regParams[kk];
             }
         }
     }
@@ -573,8 +576,8 @@ public class SLDA extends AbstractSampler {
         }
 
         double topicLlh = 0.0;
-        for (int ii = 0; ii < D; ii++) {
-            topicLlh += docTopics[ii].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
+        for (int dd = 0; dd < D; dd++) {
+            topicLlh += docTopics[dd].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
         }
 
         double responseLlh = 0.0;
@@ -633,12 +636,12 @@ public class SLDA extends AbstractSampler {
 
             // assignments
             StringBuilder assignStr = new StringBuilder();
-            for (int ii = 0; ii < D; ii++) {
-                assignStr.append(ii).append("\n");
-                assignStr.append(DirMult.output(docTopics[ii])).append("\n");
+            for (int dd = 0; dd < D; dd++) {
+                assignStr.append(dd).append("\n");
+                assignStr.append(DirMult.output(docTopics[dd])).append("\n");
 
-                for (int n = 0; n < z[ii].length; n++) {
-                    assignStr.append(z[ii][n]).append("\t");
+                for (int n = 0; n < z[dd].length; n++) {
+                    assignStr.append(z[dd][n]).append("\t");
                 }
                 assignStr.append("\n");
             }
