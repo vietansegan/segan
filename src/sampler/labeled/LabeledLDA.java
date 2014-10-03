@@ -151,7 +151,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 this.docIndices.add(dd);
             }
         }
-        this.D = this.words.length;
+        this.D = this.docIndices.size();
         this.words = new int[D][];
         this.labels = new int[D][];
         for (int ii = 0; ii < D; ii++) {

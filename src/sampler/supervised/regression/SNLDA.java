@@ -1,7 +1,9 @@
-package sampler.unsupervised;
+package sampler.supervised.regression;
 
+import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
-import data.TextDataset;
+import static core.AbstractSampler.addSamplingOptions;
+import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -13,8 +15,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Stack;
+import optimization.RidgeLinearRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
+import sampler.unsupervised.RecursiveLDA;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
@@ -23,20 +27,28 @@ import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
 import util.SamplerUtils;
+import util.SparseVector;
+import util.StatUtils;
+import util.normalizer.ZNormalizer;
 
 /**
  *
  * @author vietan
  */
-public class NLDA extends AbstractSampler {
+public class SNLDA extends AbstractSampler {
 
     // hyperparameters for fixed-height tree
     protected double[] alphas;          // [L-1]
     protected double[] betas;           // [L]
     protected double[] gamma_means;     // [L-1] mean of bias coins
     protected double[] gamma_scales;    // [L-1] scale of bias coins
+    protected double rho;
+    protected double mu;
+    protected double sigma;
+
     // inputs
     protected int[][] words; // all words
+    protected double[] responses; // [D]: responses of selected documents
     protected ArrayList<Integer> docIndices; // indices of docs under consideration
     protected int V;    // vocabulary size
     protected int[] Ks; // [L-1]: number of children per node at each level
@@ -51,12 +63,13 @@ public class NLDA extends AbstractSampler {
     private int numTokensChanged;
     private int numTokensAccepted;
     private double[] background;
+    private double[] docMeans;
 
-    public NLDA() {
-        this.basename = "NLDA";
+    public SNLDA() {
+        this.basename = "SNLDA";
     }
 
-    public NLDA(String bname) {
+    public SNLDA(String bname) {
         this.basename = bname;
     }
 
@@ -66,6 +79,9 @@ public class NLDA extends AbstractSampler {
             double[] betas,
             double[] gamma_means,
             double[] gamma_scales,
+            double rho,
+            double mu,
+            double sigma,
             InitialState initState,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
@@ -81,6 +97,9 @@ public class NLDA extends AbstractSampler {
         this.betas = betas;
         this.gamma_means = gamma_means;
         this.gamma_scales = gamma_scales;
+        this.rho = rho;
+        this.mu = mu;
+        this.sigma = sigma;
 
         this.hyperparams = new ArrayList<Double>();
         this.sampledParams = new ArrayList<ArrayList<Double>>();
@@ -105,6 +124,9 @@ public class NLDA extends AbstractSampler {
             logln("--- betas:\t" + MiscUtils.arrayToString(betas));
             logln("--- gamma means:\t" + MiscUtils.arrayToString(gamma_means));
             logln("--- gamma scales:\t" + MiscUtils.arrayToString(gamma_scales));
+            logln("--- rho:\t" + MiscUtils.formatDouble(rho));
+            logln("--- mu:\t" + MiscUtils.formatDouble(mu));
+            logln("--- sigma:\t" + MiscUtils.formatDouble(sigma));
             logln("--- burn-in:\t" + BURN_IN);
             logln("--- max iter:\t" + MAX_ITER);
             logln("--- sample lag:\t" + LAG);
@@ -161,6 +183,9 @@ public class NLDA extends AbstractSampler {
         for (double gs : gamma_scales) {
             str.append("-").append(MiscUtils.formatDouble(gs));
         }
+        str.append("_r-").append(MiscUtils.formatDouble(rho));
+        str.append("_m-").append(MiscUtils.formatDouble(mu));
+        str.append("_s-").append(MiscUtils.formatDouble(sigma));
         str.append("_opt-").append(this.paramOptimized);
         this.name = str.toString();
     }
@@ -197,7 +222,9 @@ public class NLDA extends AbstractSampler {
      * @param docIndices Indices of selected documents. If this is null, all
      * documents are considered.
      */
-    public void train(int[][] docWords, ArrayList<Integer> docIndices) {
+    public void train(int[][] docWords,
+            ArrayList<Integer> docIndices,
+            double[] docResponses) {
         this.docIndices = docIndices;
         if (this.docIndices == null) { // add all documents
             this.docIndices = new ArrayList<>();
@@ -208,10 +235,12 @@ public class NLDA extends AbstractSampler {
         this.numTokens = 0;
         this.D = this.docIndices.size();
         this.words = new int[D][];
+        this.responses = new double[D];
         this.background = new double[V];
         for (int ii = 0; ii < D; ii++) {
             int dd = this.docIndices.get(ii);
             this.words[ii] = docWords[dd];
+            this.responses[ii] = docResponses[dd];
             this.numTokens += this.words[ii].length;
             for (int nn = 0; nn < words[ii].length; nn++) {
                 this.background[words[ii][nn]]++;
@@ -225,6 +254,13 @@ public class NLDA extends AbstractSampler {
             logln("--- # all docs:\t" + words.length);
             logln("--- # selected docs:\t" + D);
             logln("--- # tokens:\t" + numTokens);
+            logln("--- responses:");
+            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+            int[] histogram = StatUtils.bin(responses, 10);
+            for (int ii = 0; ii < histogram.length; ii++) {
+                logln("--- --- " + ii + "\t" + histogram[ii]);
+            }
         }
     }
 
@@ -295,7 +331,7 @@ public class NLDA extends AbstractSampler {
         setLog(log);
 
         DirMult rootTopic = new DirMult(V, getBeta(0) * V, background);
-        this.root = new Node(iter, 0, 0, rootTopic, null);
+        this.root = new Node(iter, 0, 0, rootTopic, null, SamplerUtils.getGaussian(mu, sigma));
         Stack<Node> stack = new Stack<>();
         stack.add(root);
         while (!stack.isEmpty()) {
@@ -310,7 +346,8 @@ public class NLDA extends AbstractSampler {
                     childPathIndices[level] = kk;
                     DirMult childTopic = new DirMult(V, getBeta(level + 1) * V,
                             rlda.getTopicWord(childPathIndices).getDistribution());
-                    Node childNode = new Node(iter, kk, level + 1, childTopic, node);
+                    Node childNode = new Node(iter, kk, level + 1, childTopic, node,
+                            SamplerUtils.getGaussian(mu, sigma));
                     node.addChild(kk, childNode);
 
                     stack.add(childNode);
@@ -334,6 +371,7 @@ public class NLDA extends AbstractSampler {
             int dd = docIndices.get(ii);
             this.z[ii] = new Node[words[dd].length];
         }
+        this.docMeans = new double[D];
     }
 
     protected void initializeAssignments() {
@@ -350,7 +388,7 @@ public class NLDA extends AbstractSampler {
     }
 
     private void initializeRandomAssignments() {
-        sampleZs(!REMOVE, ADD, !REMOVE, ADD);
+        sampleZs(!REMOVE, ADD, !REMOVE, ADD, !OBSERVED);
     }
 
     /**
@@ -368,6 +406,7 @@ public class NLDA extends AbstractSampler {
             node.getContent().increment(words[dd][nn]);
         }
         if (addToData) {
+            docMeans[dd] += node.eta / this.words[dd].length;
             node.tokenCounts.increment(dd);
             Node tempNode = node;
             while (tempNode != null) {
@@ -389,6 +428,7 @@ public class NLDA extends AbstractSampler {
     private void removeToken(int dd, int nn, Node node,
             boolean removeFromData, boolean removeFromModel) {
         if (removeFromData) {
+            docMeans[dd] -= node.eta / this.words[dd].length;
             node.tokenCounts.decrement(dd);
             Node tempNode = node;
             while (tempNode != null) {
@@ -445,7 +485,7 @@ public class NLDA extends AbstractSampler {
                 }
             }
 
-            long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD);
+            long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
 
             if (isReporting) {
                 logln(printGlobalTree() + "\n");
@@ -490,10 +530,11 @@ public class NLDA extends AbstractSampler {
      * @param addToModel
      * @param removeFromData
      * @param addToData
+     * @param observed
      * @return Elapsed time
      */
     protected long sampleZs(boolean removeFromModel, boolean addToModel,
-            boolean removeFromData, boolean addToData) {
+            boolean removeFromData, boolean addToData, boolean observed) {
         long sTime = System.currentTimeMillis();
         for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
@@ -508,8 +549,8 @@ public class NLDA extends AbstractSampler {
                     accept = true;
                     numTokensAccepted++;
                 } else {
-                    double[] curLogprobs = getLogProbabilities(dd, nn, z[dd][nn]);
-                    double[] newLogprobs = getLogProbabilities(dd, nn, sampledNode);
+                    double[] curLogprobs = getLogProbabilities(dd, nn, z[dd][nn], observed);
+                    double[] newLogprobs = getLogProbabilities(dd, nn, sampledNode, observed);
                     double ratio = Math.min(1.0,
                             Math.exp(newLogprobs[ACTUAL_INDEX] - curLogprobs[ACTUAL_INDEX]
                                     + curLogprobs[PROPOSAL_INDEX] - newLogprobs[PROPOSAL_INDEX]));
@@ -534,16 +575,62 @@ public class NLDA extends AbstractSampler {
     }
 
     /**
+     * Recursively sample a node from a current node. The sampled node can be
+     * either the same node or one of its children. If the current node is a
+     * leaf node, return it.
+     *
+     * @param dd Document index
+     * @param nn Token index
+     * @param curNode Current node
+     */
+    private Node sampleNode(int dd, int nn, Node curNode) {
+        if (curNode.isLeaf()) {
+            return curNode;
+        }
+        int level = curNode.getLevel();
+        double lAlpha = getAlpha(level);
+        double gammaScale = getGammaScale(level);
+        double stayprob = (curNode.tokenCounts.getCount(dd) + gammaScale * curNode.pi)
+                / (curNode.subtreeTokenCounts.getCount(dd) + gammaScale);
+        double passprob = 1.0 - stayprob;
+
+        int KK = curNode.getNumChildren();
+        double[] probs = new double[KK + 1];
+        double norm = curNode.subtreeTokenCounts.getCount(dd)
+                - curNode.tokenCounts.getCount(dd) + lAlpha * KK;
+        for (Node child : curNode.getChildren()) {
+            int kk = child.getIndex();
+            double pathprob = (child.subtreeTokenCounts.getCount(dd)
+                    + lAlpha * KK * curNode.theta[kk]) / norm;
+            double wordprob = child.getPhi(words[dd][nn]);
+            probs[kk] = passprob * pathprob * wordprob;
+        }
+        double wordprob = curNode.getPhi(words[dd][nn]);
+        probs[KK] = stayprob * wordprob;
+
+        int sampledIdx = SamplerUtils.scaleSample(probs);
+        if (sampledIdx == KK) {
+            return curNode;
+        } else {
+            return sampleNode(dd, nn, curNode.getChild(sampledIdx));
+        }
+    }
+
+    /**
      * Compute both the proposal log probabilities and the actual log
      * probabilities of assigning a token to a node.
      *
      * @param dd Document index
      * @param nn Token index
+     * @param observed
      * @param node The node to be assigned to
      */
-    private double[] getLogProbabilities(int dd, int nn, Node node) {
+    private double[] getLogProbabilities(int dd, int nn, Node node, boolean observed) {
         double[] logprobs = getTransLogProbabilities(dd, nn, node, node);
         logprobs[ACTUAL_INDEX] = Math.log(node.getPhi(words[dd][nn]));
+        if (observed) {
+            logprobs[ACTUAL_INDEX] += getResponseLogLikelihood(dd, node);
+        }
         Node source = node.getParent();
         Node target = node;
         while (source != null) {
@@ -622,46 +709,87 @@ public class NLDA extends AbstractSampler {
         return lps;
     }
 
+    private double getResponseLogLikelihood(int dd, Node node) {
+        double aMean = docMeans[dd] + node.eta / this.words[dd].length;
+        double resLLh = StatUtils.logNormalProbability(responses[dd], aMean, Math.sqrt(rho));
+        return resLLh;
+    }
+
     /**
-     * Recursively sample a node from a current node. The sampled node can be
-     * either the same node or one of its children. If the current node is a
-     * leaf node, return it.
+     * Update regression parameters using L-BFGS.
      *
-     * @param dd Document index
-     * @param nn Token index
-     * @param curNode Current node
+     * @return Elapsed time
      */
-    private Node sampleNode(int dd, int nn, Node curNode) {
-        if (curNode.isLeaf()) {
-            return curNode;
-        }
-        int level = curNode.getLevel();
-        double lAlpha = getAlpha(level);
-        double gammaScale = getGammaScale(level);
-        double stayprob = (curNode.tokenCounts.getCount(dd) + gammaScale * curNode.pi)
-                / (curNode.subtreeTokenCounts.getCount(dd) + gammaScale);
-        double passprob = 1.0 - stayprob;
+    public long updateEtas() {
+        long sTime = System.currentTimeMillis();
 
-        int KK = curNode.getNumChildren();
-        double[] probs = new double[KK + 1];
-        double norm = curNode.subtreeTokenCounts.getCount(dd)
-                - curNode.tokenCounts.getCount(dd) + lAlpha * KK;
-        for (Node child : curNode.getChildren()) {
-            int kk = child.getIndex();
-            double pathprob = (child.subtreeTokenCounts.getCount(dd)
-                    + lAlpha * KK * curNode.theta[kk]) / norm;
-            double wordprob = child.getPhi(words[dd][nn]);
-            probs[kk] = passprob * pathprob * wordprob;
-        }
-        double wordprob = curNode.getPhi(words[dd][nn]);
-        probs[KK] = stayprob * wordprob;
+        // list of nodes
+        ArrayList<Node> nodeList = getNodeList();
+        int N = nodeList.size();
 
-        int sampledIdx = SamplerUtils.scaleSample(probs);
-        if (sampledIdx == KK) {
-            return curNode;
-        } else {
-            return sampleNode(dd, nn, curNode.getChild(sampledIdx));
+        // design matrix
+        SparseVector[] designMatrix = new SparseVector[D];
+        for (int aa = 0; aa < D; aa++) {
+            designMatrix[aa] = new SparseVector(N);
         }
+        for (int kk = 0; kk < N; kk++) {
+            Node node = nodeList.get(kk);
+            for (int dd : node.tokenCounts.getIndices()) {
+                int count = node.tokenCounts.getCount(dd);
+                double val = (double) count / this.words[dd].length;
+                designMatrix[dd].change(kk, val);
+            }
+        }
+
+        // current params
+        double[] etas = new double[N];
+        for (int kk = 0; kk < N; kk++) {
+            etas[kk] = nodeList.get(kk).eta;
+        }
+
+        RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
+                responses, etas, designMatrix, rho, mu, sigma);
+
+        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+        boolean converged = false;
+        try {
+            converged = optimizer.optimize();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        if (isReporting()) {
+            logln("--- converged? " + converged);
+        }
+
+        // update regression parameters
+        for (int kk = 0; kk < N; kk++) {
+            nodeList.get(kk).eta = optimizable.getParameter(kk);
+        }
+        // update document means
+        for (int dd = 0; dd < D; dd++) {
+            docMeans[dd] = 0.0;
+            for (int kk : designMatrix[dd].getIndices()) {
+                docMeans[dd] += designMatrix[dd].get(kk) * nodeList.get(kk).eta;
+            }
+        }
+        return System.currentTimeMillis() - sTime;
+    }
+
+    private ArrayList<Node> getNodeList() {
+        ArrayList<Node> nodeList = new ArrayList<>();
+        Stack<Node> stack = new Stack<>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            for (Node child : node.getChildren()) {
+                stack.add(child);
+            }
+            if (!node.isRoot()) {
+                nodeList.add(node);
+            }
+        }
+        return nodeList;
     }
 
     @Override
@@ -681,44 +809,7 @@ public class NLDA extends AbstractSampler {
 
     @Override
     public void validate(String msg) {
-        logln("Validating ... " + msg);
-        validateModel(msg);
-        validateData(msg);
-    }
-
-    private void validateModel(String msg) {
-        Stack<Node> stack = new Stack<>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-            node.validate(msg);
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
-        }
-    }
-
-    private void validateData(String msg) {
-        int[] tokenCounts = new int[D];
-        Stack<Node> stack = new Stack<>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-            for (int ii : node.tokenCounts.getIndices()) {
-                tokenCounts[ii] += node.tokenCounts.getCount(ii);
-            }
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
-        }
-
-        for (int dd = 0; dd < D; dd++) {
-            if (tokenCounts[dd] != words[dd].length) {
-                throw new RuntimeException(msg + ". MISMATCH. dd = " + dd
-                        + ". " + tokenCounts[dd]
-                        + " vs. " + words[dd].length);
-            }
-        }
+        logln(msg + ". Not implemented!");
     }
 
     @Override
@@ -744,6 +835,7 @@ public class NLDA extends AbstractSampler {
         StringBuilder str = new StringBuilder();
         SparseCount nodeCountPerLevel = new SparseCount();
         SparseCount obsCountPerLevel = new SparseCount();
+        SparseCount subtreeObsCountPerLvl = new SparseCount();
         int numEffNodes = 0;
 
         Stack<Node> stack = new Stack<Node>();
@@ -760,6 +852,7 @@ public class NLDA extends AbstractSampler {
 
             nodeCountPerLevel.increment(level);
             obsCountPerLevel.changeCount(level, node.getContent().getCountSum());
+            subtreeObsCountPerLvl.changeCount(level, node.subtreeTokenCounts.getCountSum());
 
             totalObs += node.getContent().getCountSum();
 
@@ -769,13 +862,17 @@ public class NLDA extends AbstractSampler {
         }
         str.append("global tree:\n\t>>> node count per level:\n");
         for (int l : nodeCountPerLevel.getSortedIndices()) {
-            str.append("\t>>> >>> ").append(l).append(" (")
-                    .append(nodeCountPerLevel.getCount(l))
-                    .append(", ").append(obsCountPerLevel.getCount(l))
-                    .append(", ").append(MiscUtils.formatDouble(
-                                    (double) obsCountPerLevel.getCount(l)
-                                    / nodeCountPerLevel.getCount(l)))
-                    .append(");\n");
+            int obsCount = obsCountPerLevel.getCount(l);
+            int subtreeObsCount = subtreeObsCountPerLvl.getCount(l);
+            int nodeCount = nodeCountPerLevel.getCount(l);
+            str.append("\t>>> >>> ").append(l)
+                    .append(" [")
+                    .append(nodeCount)
+                    .append("] [").append(obsCount)
+                    .append(", ").append(MiscUtils.formatDouble((double) obsCount / nodeCount))
+                    .append("] [").append(subtreeObsCount)
+                    .append(", ").append(MiscUtils.formatDouble((double) subtreeObsCount / nodeCount))
+                    .append("]\n");
         }
         str.append("\n");
         str.append("\t>>> # observations = ").append(totalObs).append("\n");
@@ -792,6 +889,7 @@ public class NLDA extends AbstractSampler {
     public String printGlobalTree() {
         SparseCount nodeCountPerLvl = new SparseCount();
         SparseCount obsCountPerLvl = new SparseCount();
+        SparseCount subtreeObsCountPerLvl = new SparseCount();
         int totalNumObs = 0;
         int numEffNodes = 0;
 
@@ -802,14 +900,26 @@ public class NLDA extends AbstractSampler {
         stack.add(root);
         while (!stack.isEmpty()) {
             Node node = stack.pop();
-            int level = node.getLevel();
+            ArrayList<RankingItem<Node>> rankChildren = new ArrayList<RankingItem<Node>>();
+            for (Node child : node.getChildren()) {
+                rankChildren.add(new RankingItem<Node>(child, child.eta));
+            }
+            Collections.sort(rankChildren);
+            for (RankingItem<Node> item : rankChildren) {
+                stack.add(item.getObject());
+            }
 
+            int level = node.getLevel();
             if (node.getContent().getCountSum() > 20) {
                 numEffNodes++;
+            }
+            if (node.isEmpty()) { // skip empty nodes
+                continue;
             }
 
             nodeCountPerLvl.increment(level);
             obsCountPerLvl.changeCount(level, node.getContent().getCountSum());
+            subtreeObsCountPerLvl.changeCount(level, node.subtreeTokenCounts.getCountSum());
 
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("\t");
@@ -833,26 +943,24 @@ public class NLDA extends AbstractSampler {
                 }
                 str.append(node.getTopObservations()).append("\n");
             }
-            if (!node.isLeaf()) {
-                for (int i = 0; i < node.getLevel(); i++) {
-                    str.append("\t");
-                }
-                str.append(MiscUtils.arrayToString(node.theta)).append("\n");
-            }
             str.append("\n");
 
             totalNumObs += node.getContent().getCountSum();
 
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
         }
         str.append("Tree summary").append("\n");
         for (int l : nodeCountPerLvl.getSortedIndices()) {
-            str.append("\t>>> ").append(l).append(" (")
-                    .append(nodeCountPerLvl.getCount(l))
-                    .append(", ").append(obsCountPerLvl.getCount(l))
-                    .append(");\n");
+            int obsCount = obsCountPerLvl.getCount(l);
+            int subtreeObsCount = subtreeObsCountPerLvl.getCount(l);
+            int nodeCount = nodeCountPerLvl.getCount(l);
+            str.append("\t>>> ").append(l)
+                    .append(" [")
+                    .append(nodeCount)
+                    .append("] [").append(obsCount)
+                    .append(", ").append(MiscUtils.formatDouble((double) obsCount / nodeCount))
+                    .append("] [").append(subtreeObsCount)
+                    .append(", ").append(MiscUtils.formatDouble((double) subtreeObsCount / nodeCount))
+                    .append("]\n");
         }
         str.append("\t>>> # observations = ").append(totalNumObs).append("\n");
         str.append("\t>>> # nodes = ").append(nodeCountPerLvl.getCountSum()).append("\n");
@@ -883,14 +991,14 @@ public class NLDA extends AbstractSampler {
 
             ArrayList<RankingItem<Node>> rankChildren = new ArrayList<RankingItem<Node>>();
             for (Node child : node.getChildren()) {
-                rankChildren.add(new RankingItem<Node>(child, child.getContent().getCountSum()));
+                rankChildren.add(new RankingItem<Node>(child, child.eta));
             }
             Collections.sort(rankChildren);
             for (RankingItem<Node> item : rankChildren) {
                 stack.add(item.getObject());
             }
 
-            double[] nodeTopic = node.getContent().getDistribution();
+            double[] nodeTopic = node.getMLEPhi();
             String[] topWords = getTopWords(nodeTopic, numWords);
 
             // top words according to the distribution
@@ -900,15 +1008,22 @@ public class NLDA extends AbstractSampler {
             str.append(node.getPathString())
                     .append(" (").append(node.born)
                     .append("; ").append(node.getContent().getCountSum())
+                    .append("; ").append(MiscUtils.formatDouble(node.eta))
                     .append(")");
+            str.append("\n");
+
+            // words with highest probabilities
+            for (int i = 0; i < node.getLevel(); i++) {
+                str.append("   ");
+            }
             for (String topWord : topWords) {
-                str.append(" ").append(topWord);
+                str.append(topWord).append(" ");
             }
             str.append("\n");
 
             // top assigned words
             for (int i = 0; i < node.getLevel(); i++) {
-                str.append("\t");
+                str.append("   ");
             }
             str.append(node.getTopObservations()).append("\n\n");
         }
@@ -931,12 +1046,15 @@ public class NLDA extends AbstractSampler {
         protected SparseCount tokenCounts;
         protected double[] theta;
         protected double pi;
+        protected double eta;
 
-        public Node(int iter, int index, int level, DirMult content, Node parent) {
+        public Node(int iter, int index, int level, DirMult content, Node parent,
+                double eta) {
             super(index, level, content, parent);
             this.born = iter;
             this.subtreeTokenCounts = new SparseCount();
             this.tokenCounts = new SparseCount();
+            this.eta = eta;
         }
 
         void initializeGlobalPi() {
@@ -1020,16 +1138,16 @@ public class NLDA extends AbstractSampler {
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar' " + NLDA.class.getName() + " -help";
+        return "java -cp 'dist/segan.jar' " + SNLDA.class.getName() + " -help";
     }
 
     public static String getExampleCmd() {
-        return "java -cp \"dist/segan.jar:lib/*\" sampler.unsupervised.NLDA "
+        return "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
                 + "--dataset amazon-data "
-                + "--word-voc-file demo/amazon-data/format-unsupervised/amazon-data.wvoc "
-                + "--word-file demo/amazon-data/format-unsupervised/amazon-data.dat "
-                + "--info-file demo/amazon-data/format-unsupervised/amazon-data.docinfo "
-                + "--output-folder demo/amazon-data/model-unsupervised  "
+                + "--word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc "
+                + "--word-file demo/amazon-data/format-supervised/amazon-data.dat "
+                + "--info-file demo/amazon-data/format-supervised/amazon-data.docinfo "
+                + "--output-folder demo/amazon-data/model-supervised  "
                 + "--Ks 15,4 "
                 + "--burnIn 50 "
                 + "--maxIter 100 "
@@ -1040,7 +1158,10 @@ public class NLDA extends AbstractSampler {
                 + "--betas 1.0,0.5,0.1 "
                 + "--gamma-means 0.2,0.2 "
                 + "--gamma-scales 100,10 "
-                + "-v -d";
+                + "--rho 1.0 "
+                + "--mu 0.0 "
+                + "--sigma 2.5 "
+                + "-v -d -z";
     }
 
     private static void addOpitions() throws Exception {
@@ -1057,20 +1178,28 @@ public class NLDA extends AbstractSampler {
         // data output
         addOption("output-folder", "Output folder");
 
-        // sampling & running
+        // sampling
         addSamplingOptions();
-        addRunningOptions();
 
         // parameters
-        addOption("alphas", "Alphas");
-        addOption("betas", "Betas");
+        addOption("alphas", "Alpha");
+        addOption("betas", "Beta");
         addOption("gamma-means", "Gamma means");
         addOption("gamma-scales", "Gamma scales");
+        addOption("rho", "Rho");
+        addOption("mu", "Mu");
+        addOption("sigma", "Sigma");
         addOption("Ks", "Number of topics");
         addOption("num-top-words", "Number of top words per topic");
 
         // configurations
         addOption("init", "Initialization");
+
+        options.addOption("v", false, "verbose");
+        options.addOption("d", false, "debug");
+        options.addOption("z", false, "z-normalize");
+        options.addOption("help", false, "Help");
+        options.addOption("example", false, "Example command");
     }
 
     private static void runModel() throws Exception {
@@ -1096,13 +1225,16 @@ public class NLDA extends AbstractSampler {
 
         // model parameters
         double[] alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas",
-                new double[]{1.0, 1.0}, ",");
+                new double[]{0.1, 0.1}, ",");
         double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas",
-                new double[]{1.0, 0.5, 0.1}, ",");
-        double[] gammaMeans = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means",
+                new double[]{10, 10, 0.1}, ",");
+        double[] gamma_means = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means",
                 new double[]{0.2, 0.2}, ",");
-        double[] gammaScales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales",
+        double[] gamma_scales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales",
                 new double[]{10, 1}, ",");
+        double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
+        double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
+        double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
         int[] Ks = CLIUtils.getIntArrayArgument(cmd, "Ks", new int[]{15, 4}, ",");
 
         // data input
@@ -1114,14 +1246,14 @@ public class NLDA extends AbstractSampler {
         // data output
         String outputFolder = cmd.getOptionValue("output-folder");
 
-        TextDataset data = new TextDataset(datasetName);
+        ResponseTextDataset data = new ResponseTextDataset(datasetName);
         data.loadFormattedData(new File(wordVocFile),
                 new File(docWordFile),
                 new File(docInfoFile),
                 null);
         int V = data.getWordVocab().size();
 
-        NLDA sampler = new NLDA();
+        SNLDA sampler = new SNLDA();
         sampler.setVerbose(cmd.hasOption("v"));
         sampler.setDebug(cmd.hasOption("d"));
         sampler.setLog(true);
@@ -1129,11 +1261,17 @@ public class NLDA extends AbstractSampler {
         sampler.setWordVocab(data.getWordVocab());
 
         sampler.configure(outputFolder, V, Ks,
-                alphas, betas, gammaMeans, gammaScales,
+                alphas, betas, gamma_means, gamma_scales, rho, mu, sigma,
                 initState, paramOpt,
                 burnIn, maxIters, sampleLag, repInterval);
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
+
+        double[] docResponses = data.getResponses();
+        if (cmd.hasOption("z")) { // z-normalization
+            ZNormalizer zNorm = new ZNormalizer(docResponses);
+            docResponses = zNorm.normalize(docResponses);
+        }
 
         ArrayList<Integer> selectedDocIndices = null;
         if (cmd.hasOption("selected-docs-file")) {
@@ -1151,7 +1289,7 @@ public class NLDA extends AbstractSampler {
             reader.close();
         }
 
-        sampler.train(data.getWords(), selectedDocIndices);
+        sampler.train(data.getWords(), selectedDocIndices, docResponses);
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
