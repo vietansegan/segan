@@ -1,5 +1,6 @@
 package core;
 
+import static core.AbstractRunner.cmd;
 import core.AbstractSampler.InitialState;
 import core.crossvalidation.Fold;
 import java.io.BufferedReader;
@@ -10,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import regression.AbstractRegressor;
+import util.CLIUtils;
 import util.IOUtils;
 import util.StatUtils;
 import util.evaluation.Measurement;
@@ -60,6 +62,25 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
 
     public String getDatasetFolder() {
         return data.getFolder();
+    }
+
+    public void setupSampling() {
+        burn_in = CLIUtils.getIntegerArgument(cmd, "burnIn", 5);
+        max_iters = CLIUtils.getIntegerArgument(cmd, "maxIter", 10);
+        sample_lag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 5);
+        report_interval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+        paramOpt = cmd.hasOption("paramOpt");
+        String init = CLIUtils.getStringArgument(cmd, "init", "random");
+        switch (init) {
+            case "random":
+                initState = InitialState.RANDOM;
+                break;
+            case "preset":
+                initState = InitialState.PRESET;
+                break;
+            default:
+                throw new RuntimeException("Initialization " + init + " not supported");
+        }
     }
 
     public static void addSamplingOptions() {

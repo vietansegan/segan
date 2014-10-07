@@ -331,6 +331,12 @@ public class SNLDA extends AbstractSampler {
         }
         setLog(log);
 
+        if (verbose) {
+            logln("--- Recursive LDA loaded");
+            logln(rlda.printSummary());
+        }
+
+        // initialize structure
         DirMult rootTopic = new DirMult(V, getBeta(0) * V, background);
         this.root = new Node(iter, 0, 0, rootTopic, null, SamplerUtils.getGaussian(mu, sigma));
         Stack<Node> stack = new Stack<>();
@@ -1236,18 +1242,50 @@ public class SNLDA extends AbstractSampler {
         }
 
         // model parameters
-        double[] alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas",
-                new double[]{0.1, 0.1}, ",");
-        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas",
-                new double[]{10, 10, 0.1}, ",");
-        double[] gamma_means = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means",
-                new double[]{0.2, 0.2}, ",");
-        double[] gamma_scales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales",
-                new double[]{10, 1}, ",");
+        int[] Ks = CLIUtils.getIntArrayArgument(cmd, "Ks", new int[]{15, 4}, ",");
+        int L = Ks.length + 1;
+
+        // set alphas
+        double[] defaultAlphas = new double[L - 1];
+        Arrays.fill(defaultAlphas, 0.1);
+        double[] alphas = defaultAlphas;
+        if (cmd.hasOption("alphas")) {
+            alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas", defaultAlphas, ",");
+        }
+
+        // set betas
+        double[] defaultBetas = new double[L];
+        for (int ll = 0; ll < L; ll++) {
+            defaultBetas[ll] = 0.1 * (L - ll);
+        }
+        double[] betas = defaultBetas;
+        if (cmd.hasOption("betas")) {
+            betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
+        }
+
+        // set gamma means
+        double[] defaultGammaMeans = new double[L - 1];
+        Arrays.fill(defaultGammaMeans, 0.25);
+        double[] gamma_means = defaultGammaMeans;
+        if (cmd.hasOption("gamma-means")) {
+            gamma_means = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means",
+                    defaultGammaMeans, ",");
+        }
+
+        // set gamma scales
+        double[] defaultGammaScales = new double[L - 1];
+        for (int ll = 0; ll < L - 1; ll++) {
+            defaultGammaScales[ll] = 10 * (L - ll);
+        }
+        double[] gamma_scales = defaultGammaScales;
+        if (cmd.hasOption("gamma-scales")) {
+            gamma_scales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales",
+                    defaultGammaScales, ",");
+        }
+
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
         double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
         double sigma = CLIUtils.getDoubleArgument(cmd, "sigma", 1.0);
-        int[] Ks = CLIUtils.getIntArrayArgument(cmd, "Ks", new int[]{15, 4}, ",");
 
         // data input
         String datasetName = cmd.getOptionValue("dataset");
@@ -1299,6 +1337,11 @@ public class SNLDA extends AbstractSampler {
                 selectedDocIndices.add(Integer.parseInt(line));
             }
             reader.close();
+        }
+
+        selectedDocIndices = new ArrayList<>();
+        for (int dd = 0; dd < 1000; dd++) {
+            selectedDocIndices.add(dd);
         }
 
         sampler.train(data.getWords(), selectedDocIndices, docResponses);

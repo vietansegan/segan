@@ -16,6 +16,7 @@ import java.util.Stack;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampling.likelihood.DirMult;
+import sampling.util.SparseCount;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
@@ -73,7 +74,7 @@ public class RecursiveLDA extends AbstractSampler {
 
     public DirMult getTopicWord(int[] path) {
         RLDA node = rootLDA;
-        for (int ll = 0; ll < path.length - 1; ll++) {
+        for (int ll = 1; ll < path.length - 1; ll++) {
             node = node.getChild(path[ll]);
         }
         return node.getTopicWords()[path[path.length - 1]];
@@ -152,11 +153,11 @@ public class RecursiveLDA extends AbstractSampler {
                 + "_L-" + LAG
                 + "_a";
         for (double alpha : alphas) {
-            this.name += "-" + alpha;
+            this.name += "-" + MiscUtils.formatDouble(alpha);
         }
         this.name += "_b";
         for (double beta : betas) {
-            this.name += "-" + beta;
+            this.name += "-" + MiscUtils.formatDouble(beta);
         }
         this.name += "_opt-" + this.paramOptimized;
     }
@@ -525,6 +526,28 @@ public class RecursiveLDA extends AbstractSampler {
             }
         }
         writer.close();
+    }
+
+    public String printSummary() {
+        Stack<RLDA> stack = new Stack<>();
+        stack.add(rootLDA);
+        SparseCount levelCounts = new SparseCount();
+        SparseCount topicCounts = new SparseCount();
+        while (!stack.isEmpty()) {
+            RLDA node = stack.pop();
+            levelCounts.increment(node.getLevel());
+            topicCounts.changeCount(node.getLevel(), node.topicWords.length);
+            stack.addAll(Arrays.asList(node.getChildren()));
+        }
+
+        StringBuilder str = new StringBuilder();
+        for (int lvl : levelCounts.getSortedIndices()) {
+            str.append("l = ").append(lvl)
+                    .append(". ").append(levelCounts.getCount(lvl))
+                    .append(". ").append(topicCounts.getCount(lvl))
+                    .append("\n");
+        }
+        return str.toString();
     }
 
     /**
