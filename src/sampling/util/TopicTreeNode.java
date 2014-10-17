@@ -1,7 +1,6 @@
 package sampling.util;
 
 import cc.mallet.types.Dirichlet;
-import cc.mallet.util.Randoms;
 import java.util.Arrays;
 import sampling.likelihood.DirMult;
 
@@ -10,6 +9,8 @@ import sampling.likelihood.DirMult;
  * distribution over the vocabulary)
  *
  * @author vietan
+ * @param <N>
+ * @param <C>
  */
 public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends TreeNode<N, C> {
 
@@ -31,6 +32,7 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
 
     /**
      * Get the sampling topic (without collapsed).
+     * @return 
      */
     public double[] getTopic() {
         return this.content.getSamplingDistribution();
@@ -38,6 +40,7 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
 
     /**
      * Get the log sampling topic
+     * @return 
      */
     public double[] getLogTopic() {
         return this.logTopics;
@@ -48,6 +51,7 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
      * been explicitly sampled, use the smoothed observation counts.
      *
      * @param obs The observation
+     * @return 
      */
     public double getLogProbability(int obs) {
         if (this.getTopic() == null) { // collapsed, smoothed log probability
@@ -59,6 +63,7 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
 
     /**
      * Get pseudo-counts of observations from children
+     * @return 
      */
     public SparseCount getPseudoCounts() {
         return this.pseudoCounts;
@@ -118,33 +123,6 @@ public class TopicTreeNode<N extends TopicTreeNode, C extends DirMult> extends T
         }
         for (int obs : this.pseudoCounts.getIndices()) {
             meanVector[obs] += this.pseudoCounts.getCount(obs);
-        }
-        Dirichlet dir = new Dirichlet(meanVector);
-        double[] topic = dir.nextDistribution();
-        this.setTopic(topic);
-    }
-
-    public void sampleTopicOld(double beta, double gamma) {
-        int V = content.getDimension();
-        double[] meanVector = new double[V];
-        Arrays.fill(meanVector, beta);
-        SparseCount observations = this.content.getSparseCounts();
-        for (int obs : observations.getIndices()) {
-            meanVector[obs] += observations.getCount(obs);
-        }
-
-        for (int obs : this.pseudoCounts.getIndices()) {
-            meanVector[obs] += this.pseudoCounts.getCount(obs);
-        }
-        if (this.parent != null) {
-            double[] parentTopic = ((C) parent.getContent()).getSamplingDistribution();
-            for (int v = 0; v < V; v++) {
-                meanVector[v] += parentTopic[v] * gamma;
-            }
-        } else {
-            for (int v = 0; v < V; v++) {
-                meanVector[v] += gamma / V; // uniform
-            }
         }
         Dirichlet dir = new Dirichlet(meanVector);
         double[] topic = dir.nextDistribution();

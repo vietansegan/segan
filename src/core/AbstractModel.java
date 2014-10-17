@@ -3,6 +3,7 @@ package core;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import util.IOUtils;
 import util.evaluation.Measurement;
@@ -25,7 +26,7 @@ public abstract class AbstractModel {
     }
 
     public String getName() {
-        return this.name;
+        return this.getBasename();
     }
 
     public abstract void output(File modelFile);
@@ -48,7 +49,7 @@ public abstract class AbstractModel {
                 writer.write(measurement.getName() + "\t" + measurement.getValue() + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing performances to " + perfFile);
         }
@@ -66,7 +67,7 @@ public abstract class AbstractModel {
                 measurements.add(new Measurement(sline[0], Double.parseDouble(sline[1])));
             }
             reader.close();
-        } catch (Exception e) {
+        } catch (IOException | NumberFormatException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing performances from " + perfFile);
         }

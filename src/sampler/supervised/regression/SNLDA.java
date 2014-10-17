@@ -2,7 +2,6 @@ package sampler.supervised.regression;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
-import static core.AbstractSampler.addSamplingOptions;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;

@@ -191,6 +191,16 @@ public class MiscUtils {
         return str.toString();
     }
 
+    public static double[] stringToDoubleArray(String str) {
+        str = str.replaceAll("[", "").replaceAll("]", "");
+        String[] sline = str.split(",");
+        double[] arr = new double[sline.length];
+        for (int ii = 0; ii < arr.length; ii++) {
+            arr[ii] = Double.parseDouble(sline[ii]);
+        }
+        return arr;
+    }
+
     public static String arrayToString(float[] array) {
         if (array.length == 0) {
             return "[]";

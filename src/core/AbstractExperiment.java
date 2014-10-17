@@ -1,6 +1,5 @@
 package core;
 
-import static core.AbstractRunner.cmd;
 import core.AbstractSampler.InitialState;
 import core.crossvalidation.Fold;
 import java.io.BufferedReader;
@@ -144,6 +143,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
      * outputs of different models
      * @param phase Whether it is training/development/test
      * @param resultFile Result file
+     * @throws java.lang.Exception
      */
     protected void evaluate(
             String resultFolder,
@@ -292,11 +292,11 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 writer.write("Model\tNum-folds\tAverage\tStdv\n");
                 for (String model : modelNames) {
                     ArrayList<Double> vals = new ArrayList<Double>();
-                    for (int f = 0; f < results.length; f++) {
-                        if (results[f] == null) {
+                    for (HashMap<String, ArrayList<Measurement>> result : results) {
+                        if (result == null) {
                             continue;
                         }
-                        ArrayList<Measurement> modelFoldMeasurements = results[f].get(model);
+                        ArrayList<Measurement> modelFoldMeasurements = result.get(model);
                         if (modelFoldMeasurements != null) {
                             for (Measurement m : modelFoldMeasurements) {
                                 if (m.getName().equals(measure)) {
