@@ -5,6 +5,7 @@ import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import org.apache.commons.cli.BasicParser;
@@ -45,6 +46,14 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     private ArrayList<String> labelVocab;
     private int numTokens;
     private int numTokensChange;
+
+    public LabeledLDA() {
+        this.basename = "L-LDA";
+    }
+
+    public LabeledLDA(String basename) {
+        this.basename = basename;
+    }
 
     public void setLabelVocab(ArrayList<String> labelVocab) {
         this.labelVocab = labelVocab;
@@ -100,10 +109,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         this.prefix += initState.toString();
         this.setName();
 
-        if (!debug) {
-            System.err.close();
-        }
-
         if (verbose) {
             logln("--- folder\t" + folder);
             logln("--- label vocab:\t" + L);
@@ -121,7 +126,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_L-LDA")
+                .append("_").append(basename)
                 .append("_K-").append(L)
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
@@ -168,7 +173,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
 
         if (verbose) {
-            logln("--- # documents:\t" + D);
+            logln("--- # all documents:\t" + words.length);
+            logln("--- # selected documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
             logln("--- # label instances:\t" + numLabels);
         }
@@ -267,14 +273,15 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
         logLikelihoods = new ArrayList<Double>();
 
+        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
         try {
             if (report) {
-                IOUtils.createFolder(new File(getSamplerFolderPath(), ReportFolder));
+                IOUtils.createFolder(reportFolderPath);
             }
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while creating report folder "
-                    + new File(getSamplerFolderPath(), ReportFolder));
+            throw new RuntimeException("Exception while creating report folder."
+                    + " " + reportFolderPath);
         }
 
         if (log && !isLogging()) {
@@ -287,22 +294,18 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChange = 0;
 
-//            for (int d = 0; d < D; d++) {
-//                for (int n = 0; n < words[d].length; n++) {
-//                    sampleZ(d, n, REMOVE, ADD, REMOVE, ADD);
-//                }
-//            }
             sampleZs(REMOVE, ADD, REMOVE, ADD);
 
             if (debug) {
                 validate("iter " + iter);
             }
 
-            if (verbose && iter % REP_INTERVAL == 0) {
+            if (isReporting()) {
                 double loglikelihood = this.getLogLikelihood();
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                        + "\t tokens changed: " + ((double) numTokensChange / numTokens)
+                        + "\t tokens changed: " + numTokensChange
+                        + " (" + MiscUtils.formatDouble((double) numTokensChange / numTokens) + ")"
                         + "\n" + getCurrentState();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str + "\n");
@@ -336,16 +339,18 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // store model
             if (report && iter > BURN_IN && iter % LAG == 0) {
-                outputState(new File(
-                        new File(getSamplerFolderPath(), ReportFolder),
-                        "iter-" + iter + ".zip"));
+                outputState(new File(reportFolderPath, "iter-" + iter + ".zip").toString(),
+                        true, false);
+                outputTopicTopWords(new File(reportFolderPath,
+                        "topwords-" + iter + ".txt"), 20);
             }
         }
 
         if (report) {
-            outputState(new File(
-                    new File(getSamplerFolderPath(), ReportFolder),
-                    "iter-" + iter + ".zip"));
+            outputState(new File(reportFolderPath, "iter-" + iter + ".zip").toString(),
+                    true, false);
+            outputTopicTopWords(new File(reportFolderPath,
+                    "topwords-" + iter + ".txt"), 20);
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -414,57 +419,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
-    /**
-     * Sample topic assignment for each token.
-     *
-     * @param d Document index
-     * @param n Token index
-     * @param removeFromModel Whether the current assignment should be removed
-     * from the model (i.e., label-word distributions)
-     * @param addToModel Whether the new assignment should be added to the model
-     * @param removeFromData Whether the current assignment should be removed
-     * from the data (i.e., doc-label distributions)
-     * @param addToData Whether the new assignment should be added to the data
-     */
-//    public void sampleZ(int d, int n,
-//            boolean removeFromModel, boolean addToModel,
-//            boolean removeFromData, boolean addToData) {
-//        if (removeFromModel) {
-//            label_words[z[d][n]].decrement(words[d][n]);
-//        }
-//        if (removeFromData) {
-//            doc_labels[d].decrement(z[d][n]);
-//        }
-//
-//        int sampledZ;
-//        if (labels != null && labels[d].length > 0) {
-//            double[] logprobs = new double[labels[d].length];
-//            for (int ii = 0; ii < labels[d].length; ii++) {
-//                logprobs[ii] = doc_labels[d].getLogLikelihood(labels[d][ii])
-//                        + label_words[labels[d][ii]].getLogLikelihood(words[d][n]);
-//            }
-//            sampledZ = labels[d][SamplerUtils.logMaxRescaleSample(logprobs)];
-//        } else { // for documents without labels and for test documents
-//            double[] logprobs = new double[L];
-//            for (int ll = 0; ll < L; ll++) {
-//                logprobs[ll] = doc_labels[d].getLogLikelihood(ll)
-//                        + label_words[ll].getLogLikelihood(words[d][n]);
-//            }
-//            sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
-//        }
-//
-//        if (sampledZ != z[d][n]) {
-//            numTokensChange++;
-//        }
-//        z[d][n] = sampledZ;
-//
-//        if (addToModel) {
-//            label_words[z[d][n]].increment(words[d][n]);
-//        }
-//        if (addToData) {
-//            doc_labels[d].increment(z[d][n]);
-//        }
-//    }
     public double[] predictNewDocument(int[] newDoc) throws Exception {
         // initialize assignments
         DirMult docTopic = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
@@ -570,28 +524,40 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     @Override
     public void outputState(String filepath) {
+        outputState(filepath, true, true);
+    }
+
+    public void outputState(String filepath, boolean outputModel, boolean outputData) {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
+            logln("--- --- Outputing model? " + outputModel);
+            logln("--- --- Outputing assignments? " + outputData);
         }
 
         try {
             // model
-            StringBuilder modelStr = new StringBuilder();
-            for (int k = 0; k < L; k++) {
-                modelStr.append(k).append("\n");
-                modelStr.append(DirMult.output(label_words[k])).append("\n");
+            StringBuilder modelStr = null;
+            if (outputModel) {
+                modelStr = new StringBuilder();
+                for (int k = 0; k < L; k++) {
+                    modelStr.append(k).append("\n");
+                    modelStr.append(DirMult.output(label_words[k])).append("\n");
+                }
             }
 
             // data
-            StringBuilder assignStr = new StringBuilder();
-            for (int d = 0; d < D; d++) {
-                assignStr.append(d).append("\n");
-                assignStr.append(DirMult.output(doc_labels[d])).append("\n");
+            StringBuilder assignStr = null;
+            if (outputData) {
+                assignStr = new StringBuilder();
+                for (int d = 0; d < D; d++) {
+                    assignStr.append(d).append("\n");
+                    assignStr.append(DirMult.output(doc_labels[d])).append("\n");
 
-                for (int n = 0; n < words[d].length; n++) {
-                    assignStr.append(z[d][n]).append("\t");
+                    for (int n = 0; n < words[d].length; n++) {
+                        assignStr.append(z[d][n]).append("\t");
+                    }
+                    assignStr.append("\n");
                 }
-                assignStr.append("\n");
             }
 
             // output to a compressed file
@@ -647,7 +613,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
-    private void inputAssignments(String zipFilepath) throws Exception {
+    private void inputAssignments(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath);
         }
@@ -678,7 +644,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -691,20 +657,25 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("Outputing per-topic top words to " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < L; k++) {
-            double[] distrs = label_words[k].getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + labelVocab.get(k)
-                    + ", " + label_words[k].getCountSum()
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int k = 0; k < L; k++) {
+                double[] distrs = label_words[k].getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + labelVocab.get(k)
+                        + ", " + label_words[k].getCountSum()
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public void outputTopicCoherence(File file,
@@ -737,6 +708,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
      * Return the feature vector extracted from training data.
      *
      * Indices start at 1.
+     *
+     * @return
      */
     public SparseVector[] getTrainingFeatureVectors() {
         SparseVector[] featVecs = new SparseVector[D];
@@ -791,7 +764,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         String[] filenames = iterPredFolder.list();
         try {
             for (String filename : filenames) {
-                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(new File(iterPredFolder, filename));
+                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
+                        new File(iterPredFolder, filename));
                 for (int d = 0; d < D; d++) {
                     for (int ll = 0; ll < L; ll++) {
                         sumDists[d][ll] += singlePreds[d][ll];
@@ -881,7 +855,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // output aggregated topic coherence scores
             IOUtils.outputTopicCoherences(file, scores);
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during test time.");
         }
@@ -1015,7 +989,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             }
             writer.write("Average\t" + StatUtils.mean(pps) + "\n");
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during test time.");
         }
@@ -1067,6 +1041,9 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
      * @param stateFile The state file storing the learned model
      * @param newWords Words of test documents
      * @param newLabels Labels of test documents
+     * @param trainIndices
+     * @param testIndices
+     * @return
      */
     public double computePerplexity(String stateFile,
             int[][] newWords, int[][] newLabels,
@@ -1184,7 +1161,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                         + "\t" + docLogProb + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException();
         }
