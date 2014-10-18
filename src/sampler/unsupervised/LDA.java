@@ -5,6 +5,7 @@ import data.TextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -386,7 +387,6 @@ public class LDA extends AbstractSampler {
     protected void sampleZ(int dd, int nn,
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
-//        double totalBeta = V * hyperparams.get(BETA);
         if (removeFromData) {
             docTopics[dd].decrement(z[dd][nn]);
         }
@@ -499,7 +499,7 @@ public class LDA extends AbstractSampler {
                 writer.write("\n\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing top words to "
                     + file);

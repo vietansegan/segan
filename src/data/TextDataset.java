@@ -40,11 +40,6 @@ public class TextDataset extends AbstractTokenizeDataset {
     protected double[] idfs;
     protected boolean sent = false; // output/input sentences
 
-    static {
-        verbose = true;
-        debug = true;
-    }
-
     public TextDataset(String name) {
         super(name);
     }
