@@ -2,7 +2,10 @@ package core;
 
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -108,7 +111,7 @@ public abstract class AbstractSampler implements Serializable {
         addOption("sampleLag", "Sample lag");
         addOption("report", "Report interval");
     }
-    
+
     public static void addRunningOptions() {
         options.addOption("v", false, "verbose");
         options.addOption("d", false, "debug");
@@ -158,6 +161,14 @@ public abstract class AbstractSampler implements Serializable {
     public void setReportInterval(int repInt) {
         REP_INTERVAL = repInt;
     }
+
+    protected String getIteratedStateFile() {
+        return "iter-" + iter + ".zip";
+    }
+
+    protected String getIteratedTopicFile() {
+        return "topwords-" + iter + ".txt";
+    }   
 
     public abstract void initialize();
 
@@ -320,7 +331,7 @@ public abstract class AbstractSampler implements Serializable {
     public void openLogger() {
         try {
             this.logger = IOUtils.getBufferedWriter(new File(getSamplerFolderPath(), "log.txt"));
-        } catch (Exception e) {
+        } catch (FileNotFoundException | UnsupportedEncodingException e) {
             e.printStackTrace();
             System.exit(1);
         }
@@ -330,7 +341,7 @@ public abstract class AbstractSampler implements Serializable {
         try {
             this.logger.close();
             this.logger = null;
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
@@ -357,7 +368,7 @@ public abstract class AbstractSampler implements Serializable {
             if (logger != null) {
                 this.logger.write(msg + "\n");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             System.exit(1);
         }
@@ -396,7 +407,7 @@ public abstract class AbstractSampler implements Serializable {
                 writer.write("\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing sampled hyperparameters");
         }
@@ -484,6 +495,8 @@ public abstract class AbstractSampler implements Serializable {
 
     /**
      * Run multiple threads in parallel.
+     * @param threads
+     * @throws java.lang.Exception
      */
     public static void runThreads(ArrayList<Thread> threads) throws Exception {
         int c = 0;

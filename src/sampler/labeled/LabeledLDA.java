@@ -271,17 +271,17 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         if (verbose) {
             logln("Iterating ...");
         }
-        logLikelihoods = new ArrayList<Double>();
 
         File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
-        try {
-            if (report) {
-                IOUtils.createFolder(reportFolderPath);
+        if (report) {
+            if (this.wordVocab == null) {
+                throw new RuntimeException("The word vocab has not been assigned yet");
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while creating report folder."
-                    + " " + reportFolderPath);
+
+            if (this.labelVocab == null) {
+                throw new RuntimeException("The label vocab has not been assigned yet");
+            }
+            IOUtils.createFolder(reportFolderPath);
         }
 
         if (log && !isLogging()) {
@@ -339,18 +339,14 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             // store model
             if (report && iter > BURN_IN && iter % LAG == 0) {
-                outputState(new File(reportFolderPath, "iter-" + iter + ".zip").toString(),
-                        true, false);
-                outputTopicTopWords(new File(reportFolderPath,
-                        "topwords-" + iter + ".txt"), 20);
+                outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
+                outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
             }
         }
 
         if (report) {
-            outputState(new File(reportFolderPath, "iter-" + iter + ".zip").toString(),
-                    true, false);
-            outputTopicTopWords(new File(reportFolderPath,
-                    "topwords-" + iter + ".txt"), 20);
+            outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
+            outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -496,11 +492,19 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     @Override
     public void validate(String msg) {
-        for (int d = 0; d < D; d++) {
-            this.doc_labels[d].validate(msg);
-        }
+        validateData(msg);
+        validateModel(msg);
+    }
+
+    private void validateModel(String msg) {
         for (int l = 0; l < L; l++) {
             this.label_words[l].validate(msg);
+        }
+    }
+
+    private void validateData(String msg) {
+        for (int d = 0; d < D; d++) {
+            this.doc_labels[d].validate(msg);
         }
 
         int total = 0;
@@ -511,22 +515,37 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             throw new RuntimeException("Token counts mismatch. "
                     + total + " vs. " + numTokens);
         }
-
-        total = 0;
-        for (int l = 0; l < L; l++) {
-            total += label_words[l].getCountSum();
-        }
-        if (total != numTokens) {
-            throw new RuntimeException("Token counts mismatch. "
-                    + total + " vs. " + numTokens);
-        }
     }
 
+    /**
+     * Output current state including the learned model and the current
+     * assignments.
+     *
+     * @param filepath Output file
+     */
     @Override
     public void outputState(String filepath) {
         outputState(filepath, true, true);
     }
 
+    /**
+     * Output current state.
+     *
+     * @param filepath Output file
+     * @param outputModel Whether to output the model
+     * @param outputData Whether to output the assignments
+     */
+    public void outputState(File filepath, boolean outputModel, boolean outputData) {
+        this.outputState(filepath.getAbsolutePath(), outputModel, outputData);
+    }
+
+    /**
+     * Output current state.
+     *
+     * @param filepath Output file
+     * @param outputModel Whether to output the model
+     * @param outputData Whether to output the assignments
+     */
     public void outputState(String filepath, boolean outputModel, boolean outputData) {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
@@ -536,32 +555,34 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
         try {
             // model
-            StringBuilder modelStr = null;
+            String modelStr = null;
             if (outputModel) {
-                modelStr = new StringBuilder();
+                StringBuilder modelStrBuilder = new StringBuilder();
                 for (int k = 0; k < L; k++) {
-                    modelStr.append(k).append("\n");
-                    modelStr.append(DirMult.output(label_words[k])).append("\n");
+                    modelStrBuilder.append(k).append("\n");
+                    modelStrBuilder.append(DirMult.output(label_words[k])).append("\n");
                 }
+                modelStr = modelStrBuilder.toString();
             }
 
             // data
-            StringBuilder assignStr = null;
+            String assignStr = null;
             if (outputData) {
-                assignStr = new StringBuilder();
+                StringBuilder assignStrBuilder = new StringBuilder();
                 for (int d = 0; d < D; d++) {
-                    assignStr.append(d).append("\n");
-                    assignStr.append(DirMult.output(doc_labels[d])).append("\n");
+                    assignStrBuilder.append(d).append("\n");
+                    assignStrBuilder.append(DirMult.output(doc_labels[d])).append("\n");
 
                     for (int n = 0; n < words[d].length; n++) {
-                        assignStr.append(z[d][n]).append("\t");
+                        assignStrBuilder.append(z[d][n]).append("\t");
                     }
-                    assignStr.append("\n");
+                    assignStrBuilder.append("\n");
                 }
+                assignStr = assignStrBuilder.toString();
             }
 
             // output to a compressed file
-            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
+            this.outputZipFile(filepath, modelStr, assignStr);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing state to "
@@ -571,21 +592,44 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     @Override
     public void inputState(String filepath) {
+        inputState(filepath, true, true);
+    }
+
+    /**
+     * Input model state.
+     *
+     * @param filepath Output file
+     * @param inputModel Whether to input the model
+     * @param inputData Whether to input the assignments
+     */
+    public void inputState(File filepath, boolean inputModel, boolean inputData) {
+        this.inputState(filepath.getAbsolutePath(), inputModel, inputData);
+    }
+
+    /**
+     * Input model state.
+     *
+     * @param filepath Output file
+     * @param inputModel Whether to input the model
+     * @param inputData Whether to input the assignments
+     */
+    public void inputState(String filepath, boolean inputModel, boolean inputData) {
         if (verbose) {
-            logln("--- Reading state from " + filepath);
+            logln("--- Inputing state to " + filepath);
+            logln("--- --- Inputing model? " + inputModel);
+            logln("--- --- Inputing assignments? " + inputData);
         }
-
         try {
-            inputModel(filepath);
-
-            inputAssignments(filepath);
+            if (inputModel) {
+                inputModel(filepath);
+            }
+            if (inputData) {
+                inputAssignments(filepath);
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Excepion while inputing state from "
-                    + filepath);
+            throw new RuntimeException("Excepion while inputing from " + filepath);
         }
-
-        validate("Done reading state from " + filepath);
     }
 
     private void inputModel(String zipFilepath) {
@@ -606,6 +650,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 label_words[k] = DirMult.input(reader.readLine());
             }
             reader.close();
+            validateModel("Loaded from " + zipFilepath);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing model from "
@@ -637,6 +682,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 }
             }
             reader.close();
+
+            validateData("Loaded from " + zipFilepath);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing assignments from "
@@ -650,7 +697,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
 
         if (this.labelVocab == null) {
-            throw new RuntimeException("The topic vocab has not been assigned yet");
+            throw new RuntimeException("The label vocab has not been assigned yet");
         }
 
         if (verbose) {
@@ -658,13 +705,22 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
 
         try {
+            // get label frequencies
+            SparseCount labelFreqs = new SparseCount();
+            for (int[] label : labels) {
+                for (int ll : label) {
+                    labelFreqs.increment(ll);
+                }
+            }
+
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
-            for (int k = 0; k < L; k++) {
-                double[] distrs = label_words[k].getDistribution();
+            for (int kk = 0; kk < L; kk++) {
+                double[] distrs = label_words[kk].getDistribution();
                 String[] topWords = getTopWords(distrs, numTopWords);
-                writer.write("[" + k
-                        + ", " + labelVocab.get(k)
-                        + ", " + label_words[k].getCountSum()
+                writer.write("[" + kk
+                        + ", " + labelVocab.get(kk)
+                        + ", " + labelFreqs.getCount(kk)
+                        + ", " + label_words[kk].getCountSum()
                         + "]");
                 for (String topWord : topWords) {
                     writer.write("\t" + topWord);
