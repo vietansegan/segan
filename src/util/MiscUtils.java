@@ -139,14 +139,14 @@ public class MiscUtils {
 
     public static double[] flatten2DArray(double[][] array) {
         int length = 0;
-        for (int i = 0; i < array.length; i++) {
-            length += array[i].length;
+        for (double[] arr : array) {
+            length += arr.length;
         }
         double[] flattenArray = new double[length];
         int count = 0;
-        for (int i = 0; i < array.length; i++) {
-            for (int j = 0; j < array[i].length; j++) {
-                flattenArray[count++] = array[i][j];
+        for (double[] arr : array) {
+            for (int j = 0; j < arr.length; j++) {
+                flattenArray[count++] = arr[j];
             }
         }
         return flattenArray;
@@ -192,7 +192,7 @@ public class MiscUtils {
     }
 
     public static double[] stringToDoubleArray(String str) {
-        str = str.replaceAll("[", "").replaceAll("]", "");
+        str = str.substring(1, str.length() - 1);
         String[] sline = str.split(",");
         double[] arr = new double[sline.length];
         for (int ii = 0; ii < arr.length; ii++) {

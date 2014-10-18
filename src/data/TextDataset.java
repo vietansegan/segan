@@ -6,6 +6,7 @@ import core.crossvalidation.Instance;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -174,6 +175,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * format <doc_Id>\t<text>\n
      *
      * @param textFile The input data file
+     * @throws java.lang.Exception
      */
     public void loadTextDataFromFile(File textFile) throws Exception {
         loadTextDataFromFile(textFile.getAbsolutePath());
@@ -184,6 +186,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * format <doc_Id>\t<text>\n
      *
      * @param textFilepath The input data file
+     * @throws java.lang.Exception
      */
     public void loadTextDataFromFile(String textFilepath) throws Exception {
         if (verbose) {
@@ -208,6 +211,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * document, each filename is in the form of <doc_Id>.txt
      *
      * @param textFolder The input data folder
+     * @throws java.lang.Exception
      */
     public void loadTextDataFromFolder(File textFolder) throws Exception {
         loadTextDataFromFolder(textFolder.getAbsolutePath());
@@ -218,6 +222,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * document, each filename is in the form of <doc_Id>.txt
      *
      * @param textFolderPath The input data folder
+     * @throws java.lang.Exception
      */
     public void loadTextDataFromFolder(String textFolderPath) throws Exception {
         if (verbose) {
@@ -267,6 +272,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      *
      * @param outputFolder The directory of the folder that processed data will
      * be stored
+     * @throws java.lang.Exception
      */
     public void format(String outputFolder) throws Exception {
         if (verbose) {
@@ -290,6 +296,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * Output the word vocabulary
      *
      * @param outputFolder Output folder
+     * @throws java.lang.Exception
      */
     protected void outputWordVocab(String outputFolder) throws Exception {
         File wordVocFile = new File(outputFolder, formatFilename + wordVocabExt);
@@ -304,6 +311,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * Output the formatted document data.
      *
      * @param outputFolder Output folder
+     * @throws java.lang.Exception
      */
     protected void outputTextData(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + numDocDataExt);
@@ -347,6 +355,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * Output the formatted data.
      *
      * @param outputFolder Output folder
+     * @throws java.lang.Exception
      */
     protected void outputSentTextData(String outputFolder) throws Exception {
         File outputFile = new File(outputFolder, formatFilename + numSentDataExt);
@@ -540,8 +549,8 @@ public class TextDataset extends AbstractTokenizeDataset {
             wordList.add(gibbsString);
         }
         reader.close();
-        int[][] words = wordList.toArray(new int[wordList.size()][]);
-        return words;
+        int[][] wds = wordList.toArray(new int[wordList.size()][]);
+        return wds;
     }
 
     /**
@@ -581,6 +590,7 @@ public class TextDataset extends AbstractTokenizeDataset {
      * Load sentence-level formatted data.
      *
      * @param file Sentence file
+     * @throws java.lang.Exception
      */
     protected void inputSentenceTextData(File file) throws Exception {
         if (verbose) {
@@ -629,10 +639,10 @@ public class TextDataset extends AbstractTokenizeDataset {
             logln("--- --- # docs: " + sentWords.length);
             int numSents = 0;
             int numTokens = 0;
-            for (int d = 0; d < sentWords.length; d++) {
-                numSents += sentWords[d].length;
-                for (int[] sentWord : sentWords[d]) {
-                    numTokens += sentWord.length;
+            for (int[][] sentWord : sentWords) {
+                numSents += sentWord.length;
+                for (int[] sw : sentWord) {
+                    numTokens += sw.length;
                 }
             }
             logln("--- --- # sents: " + numSents);
@@ -666,7 +676,7 @@ public class TextDataset extends AbstractTokenizeDataset {
                     }
                     logln("--- --- # sents: " + numSents);
                 }
-            } catch (Exception e) {
+            } catch (IOException | NumberFormatException e) {
                 e.printStackTrace();
                 System.out.println("Exception while loading raw sentences from "
                         + rawSentFile);
@@ -727,10 +737,10 @@ public class TextDataset extends AbstractTokenizeDataset {
      * @param numFolds Number of folds
      * @param trToDevRatio Ratio between the number of training and the number
      * of test data
+     * @throws java.lang.Exception
      */
     public void createCrossValidation(String cvFolder, int numFolds,
-            double trToDevRatio)
-            throws Exception {
+            double trToDevRatio) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = new ArrayList<Integer>();
         for (String dd : this.docIdList) {

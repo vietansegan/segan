@@ -220,6 +220,7 @@ public class SNLDA extends AbstractSampler {
      * @param docWords All documents
      * @param docIndices Indices of selected documents. If this is null, all
      * documents are considered.
+     * @param docResponses
      */
     public void train(int[][] docWords,
             ArrayList<Integer> docIndices,
@@ -1336,11 +1337,6 @@ public class SNLDA extends AbstractSampler {
                 selectedDocIndices.add(Integer.parseInt(line));
             }
             reader.close();
-        }
-
-        selectedDocIndices = new ArrayList<>();
-        for (int dd = 0; dd < 1000; dd++) {
-            selectedDocIndices.add(dd);
         }
 
         sampler.train(data.getWords(), selectedDocIndices, docResponses);
