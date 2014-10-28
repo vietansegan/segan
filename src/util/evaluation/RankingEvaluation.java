@@ -3,6 +3,7 @@ package util.evaluation;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -132,7 +133,7 @@ public class RankingEvaluation {
                 IOUtils.deleteFolderContent(tempFolder.getAbsolutePath());
                 tempFolder.delete();
             }
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while computing AUCs");
         }

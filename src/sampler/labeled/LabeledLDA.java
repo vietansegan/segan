@@ -40,8 +40,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     protected int L;
     protected int V;
     protected int D;
-    private DirMult[] doc_labels;
-    private DirMult[] label_words;
+    private DirMult[] docLabels;
+    private DirMult[] labelWords;
     private int[][] z;
     private ArrayList<String> labelVocab;
     private int numTokens;
@@ -138,7 +138,12 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     }
 
     public DirMult[] getTopicWordDistributions() {
-        return this.label_words;
+        return this.labelWords;
+    }
+
+    @Override
+    public String getCurrentState() {
+        return this.getSamplerFolderPath();
     }
 
     /**
@@ -220,9 +225,9 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("--- Initializing model structure ...");
         }
 
-        label_words = new DirMult[L];
+        labelWords = new DirMult[L];
         for (int ll = 0; ll < L; ll++) {
-            label_words[ll] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            labelWords[ll] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
         }
     }
 
@@ -231,9 +236,9 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("--- Initializing data structure ...");
         }
 
-        doc_labels = new DirMult[D];
+        docLabels = new DirMult[D];
         for (int d = 0; d < D; d++) {
-            doc_labels[d] = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
+            docLabels[d] = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
         }
 
         z = new int[D][];
@@ -249,21 +254,16 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
-                int[] docLabels = labels[d];
-                if (docLabels.length > 0) {
-                    z[d][n] = docLabels[rand.nextInt(docLabels.length)];
+                int[] dls = labels[d];
+                if (dls.length > 0) {
+                    z[d][n] = dls[rand.nextInt(dls.length)];
                 } else {
                     z[d][n] = rand.nextInt(L);
                 }
-                doc_labels[d].increment(z[d][n]);
-                label_words[z[d][n]].increment(words[d][n]);
+                docLabels[d].increment(z[d][n]);
+                labelWords[z[d][n]].increment(words[d][n]);
             }
         }
-    }
-
-    @Override
-    public String getCurrentState() {
-        return this.getSamplerFolderPath();
     }
 
     @Override
@@ -315,26 +315,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 System.out.println();
             }
 
-            if (iter % LAG == 0 && iter >= BURN_IN) {
-                if (paramOptimized) { // slice sampling
-                    if (verbose) {
-                        logln("*** *** Optimizing hyperparameters by slice sampling ...");
-                        logln("*** *** cur param:" + MiscUtils.listToString(hyperparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
-                    }
-
-                    sliceSample();
-                    ArrayList<Double> sparams = new ArrayList<Double>();
-                    for (double param : this.hyperparams) {
-                        sparams.add(param);
-                    }
-                    this.sampledParams.add(sparams);
-
-                    if (verbose) {
-                        logln("*** *** new param:" + MiscUtils.listToString(sparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
-                    }
-                }
+            if (paramOptimized && iter % LAG == 0 && iter >= BURN_IN) {
+                this.updateHyperparameters();
             }
 
             // store model
@@ -374,10 +356,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
                 if (removeFromModel) {
-                    label_words[z[d][n]].decrement(words[d][n]);
+                    labelWords[z[d][n]].decrement(words[d][n]);
                 }
                 if (removeFromData) {
-                    doc_labels[d].decrement(z[d][n]);
+                    docLabels[d].decrement(z[d][n]);
                 }
 
                 int sampledZ;
@@ -385,17 +367,17 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                     double[] probs = new double[labels[d].length];
                     for (int ii = 0; ii < labels[d].length; ii++) {
                         int k = labels[d][ii];
-                        probs[ii] = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
-                                * (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                / (label_words[k].getCountSum() + totalBeta);
+                        probs[ii] = (docLabels[d].getCount(k) + hyperparams.get(ALPHA))
+                                * (labelWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (labelWords[k].getCountSum() + totalBeta);
                     }
                     sampledZ = labels[d][SamplerUtils.scaleSample(probs)];
                 } else { // for documents without labels and for test documents
                     double[] probs = new double[L];
                     for (int ll = 0; ll < L; ll++) {
-                        probs[ll] = (doc_labels[d].getCount(ll) + hyperparams.get(ALPHA))
-                                * (label_words[ll].getCount(words[d][n]) + hyperparams.get(BETA))
-                                / (label_words[ll].getCountSum() + totalBeta);
+                        probs[ll] = (docLabels[d].getCount(ll) + hyperparams.get(ALPHA))
+                                * (labelWords[ll].getCount(words[d][n]) + hyperparams.get(BETA))
+                                / (labelWords[ll].getCountSum() + totalBeta);
                     }
                     sampledZ = SamplerUtils.scaleSample(probs);
                 }
@@ -406,10 +388,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 z[d][n] = sampledZ;
 
                 if (addToModel) {
-                    label_words[z[d][n]].increment(words[d][n]);
+                    labelWords[z[d][n]].increment(words[d][n]);
                 }
                 if (addToData) {
-                    doc_labels[d].increment(z[d][n]);
+                    docLabels[d].increment(z[d][n]);
                 }
             }
         }
@@ -433,7 +415,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 double[] logprobs = new double[L];
                 for (int l = 0; l < L; l++) {
                     logprobs[l] = docTopic.getLogLikelihood(l)
-                            + label_words[l].getLogLikelihood(newDoc[n]);
+                            + labelWords[l].getLogLikelihood(newDoc[n]);
                 }
                 newZ[n] = SamplerUtils.logMaxRescaleSample(logprobs);
 
@@ -448,11 +430,11 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     public double getLogLikelihood() {
         double docTopicLlh = 0;
         for (int d = 0; d < D; d++) {
-            docTopicLlh += doc_labels[d].getLogLikelihood();
+            docTopicLlh += docLabels[d].getLogLikelihood();
         }
         double topicWordLlh = 0;
         for (int l = 0; l < L; l++) {
-            topicWordLlh += label_words[l].getLogLikelihood();
+            topicWordLlh += labelWords[l].getLogLikelihood();
         }
 
         double llh = docTopicLlh + topicWordLlh;
@@ -471,10 +453,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
         double llh = 0;
         for (int d = 0; d < D; d++) {
-            llh += doc_labels[d].getLogLikelihood(newParams.get(ALPHA) * L, 1.0 / L);
+            llh += docLabels[d].getLogLikelihood(newParams.get(ALPHA) * L, 1.0 / L);
         }
         for (int l = 0; l < L; l++) {
-            llh += label_words[l].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
+            llh += labelWords[l].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
         }
         return llh;
     }
@@ -483,10 +465,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     public void updateHyperparameters(ArrayList<Double> newParams) {
         this.hyperparams = newParams;
         for (int d = 0; d < D; d++) {
-            this.doc_labels[d].setConcentration(this.hyperparams.get(ALPHA) * L);
+            this.docLabels[d].setConcentration(this.hyperparams.get(ALPHA) * L);
         }
         for (int l = 0; l < L; l++) {
-            this.label_words[l].setConcentration(this.hyperparams.get(BETA) * V);
+            this.labelWords[l].setConcentration(this.hyperparams.get(BETA) * V);
         }
     }
 
@@ -498,18 +480,18 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
     private void validateModel(String msg) {
         for (int l = 0; l < L; l++) {
-            this.label_words[l].validate(msg);
+            this.labelWords[l].validate(msg);
         }
     }
 
     private void validateData(String msg) {
         for (int d = 0; d < D; d++) {
-            this.doc_labels[d].validate(msg);
+            this.docLabels[d].validate(msg);
         }
 
         int total = 0;
         for (int d = 0; d < D; d++) {
-            total += doc_labels[d].getCountSum();
+            total += docLabels[d].getCountSum();
         }
         if (total != numTokens) {
             throw new RuntimeException("Token counts mismatch. "
@@ -560,7 +542,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 StringBuilder modelStrBuilder = new StringBuilder();
                 for (int k = 0; k < L; k++) {
                     modelStrBuilder.append(k).append("\n");
-                    modelStrBuilder.append(DirMult.output(label_words[k])).append("\n");
+                    modelStrBuilder.append(DirMult.output(labelWords[k])).append("\n");
                 }
                 modelStr = modelStrBuilder.toString();
             }
@@ -571,7 +553,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 StringBuilder assignStrBuilder = new StringBuilder();
                 for (int d = 0; d < D; d++) {
                     assignStrBuilder.append(d).append("\n");
-                    assignStrBuilder.append(DirMult.output(doc_labels[d])).append("\n");
+                    assignStrBuilder.append(DirMult.output(docLabels[d])).append("\n");
 
                     for (int n = 0; n < words[d].length; n++) {
                         assignStrBuilder.append(z[d][n]).append("\t");
@@ -632,6 +614,11 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
+    /**
+     * Input learned model.
+     *
+     * @param zipFilepath Input file
+     */
     private void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath);
@@ -647,7 +634,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 if (topicIdx != k) {
                     throw new RuntimeException("Indices mismatch when loading model");
                 }
-                label_words[k] = DirMult.input(reader.readLine());
+                labelWords[k] = DirMult.input(reader.readLine());
             }
             reader.close();
             validateModel("Loaded from " + zipFilepath);
@@ -658,6 +645,11 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
+    /**
+     * Input assignments.
+     *
+     * @param zipFilepath Input file
+     */
     private void inputAssignments(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath);
@@ -674,7 +666,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 if (docIdx != d) {
                     throw new RuntimeException("Indices mismatch when loading assignments");
                 }
-                doc_labels[d] = DirMult.input(reader.readLine());
+                docLabels[d] = DirMult.input(reader.readLine());
 
                 String[] sline = reader.readLine().split("\t");
                 for (int n = 0; n < words[d].length; n++) {
@@ -715,12 +707,12 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
             for (int kk = 0; kk < L; kk++) {
-                double[] distrs = label_words[kk].getDistribution();
+                double[] distrs = labelWords[kk].getDistribution();
                 String[] topWords = getTopWords(distrs, numTopWords);
                 writer.write("[" + kk
                         + ", " + labelVocab.get(kk)
                         + ", " + labelFreqs.getCount(kk)
-                        + ", " + label_words[kk].getCountSum()
+                        + ", " + labelWords[kk].getCountSum()
                         + "]");
                 for (String topWord : topWords) {
                     writer.write("\t" + topWord);
@@ -746,11 +738,11 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
         BufferedWriter writer = IOUtils.getBufferedWriter(file);
         for (int k = 0; k < L; k++) {
-            double[] distribution = this.label_words[k].getDistribution();
+            double[] distribution = this.labelWords[k].getDistribution();
             int[] topic = SamplerUtils.getSortedTopic(distribution);
             double score = topicCoherence.getCoherenceScore(topic);
             writer.write(k
-                    + "\t" + label_words[k].getCountSum()
+                    + "\t" + labelWords[k].getCountSum()
                     + "\t" + MiscUtils.formatDouble(score));
             for (int i = 0; i < topicCoherence.getNumTokens(); i++) {
                 writer.write("\t" + this.wordVocab.get(topic[i]));
@@ -788,7 +780,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
                 inputState(new File(reportFolder, filename).getAbsolutePath());
                 for (int d = 0; d < D; d++) {
-                    double[] docDist = doc_labels[d].getDistribution();
+                    double[] docDist = docLabels[d].getDistribution();
                     for (int ll = 0; ll < L; ll++) {
                         sumDists[d][ll] += docDist[ll];
                     }
@@ -880,7 +872,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
 
                 writer.write(filename);
                 for (int k = 0; k < L; k++) {
-                    pointTopics[k] = label_words[k].getDistribution();
+                    pointTopics[k] = labelWords[k].getDistribution();
                     int[] topic = SamplerUtils.getSortedTopic(pointTopics[k]);
                     double score = topicCoherence.getCoherenceScore(topic);
 
@@ -938,8 +930,8 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                 SparseVector[] topics = new SparseVector[L];
                 for (int ll = 0; ll < L; ll++) {
                     topics[ll] = new SparseVector();
-                    for (int v : label_words[ll].getSparseCounts().getIndices()) {
-                        double val = (double) label_words[ll].getCount(v) / label_words[ll].getCountSum();
+                    for (int v : labelWords[ll].getSparseCounts().getIndices()) {
+                        double val = (double) labelWords[ll].getCount(v) / labelWords[ll].getCountSum();
                         topics[ll].set(v, val);
                     }
                 }
@@ -1055,7 +1047,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             boolean removeFromData, boolean addToData) {
         double totalBeta = V * hyperparams.get(BETA);
         if (removeFromData) {
-            doc_labels[d].decrement(z[d][i]);
+            docLabels[d].decrement(z[d][i]);
         }
 
         int sampledZ;
@@ -1063,17 +1055,17 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             double[] probs = new double[labels[d].length];
             for (int ii = 0; ii < labels[d].length; ii++) {
                 int k = labels[d][ii];
-                probs[ii] = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA) * labels[d].length / L)
-                        * (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                        / (label_words[k].getCountSum() + totalBeta);
+                probs[ii] = (docLabels[d].getCount(k) + hyperparams.get(ALPHA) * labels[d].length / L)
+                        * (labelWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                        / (labelWords[k].getCountSum() + totalBeta);
             }
             sampledZ = labels[d][SamplerUtils.scaleSample(probs)];
         } else { // for documents without labels and for test documents
             double[] probs = new double[L];
             for (int ll = 0; ll < L; ll++) {
-                probs[ll] = (doc_labels[d].getCount(ll) + hyperparams.get(ALPHA))
-                        * (label_words[ll].getCount(words[d][n]) + hyperparams.get(BETA))
-                        / (label_words[ll].getCountSum() + totalBeta);
+                probs[ll] = (docLabels[d].getCount(ll) + hyperparams.get(ALPHA))
+                        * (labelWords[ll].getCount(words[d][n]) + hyperparams.get(BETA))
+                        / (labelWords[ll].getCountSum() + totalBeta);
             }
             sampledZ = SamplerUtils.scaleSample(probs);
         }
@@ -1084,7 +1076,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         z[d][i] = sampledZ;
 
         if (addToData) {
-            doc_labels[d].increment(z[d][i]);
+            docLabels[d].increment(z[d][i]);
         }
     }
 
@@ -1138,10 +1130,10 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("--- # test tokens = " + numTestTokens);
         }
 
-        doc_labels = new DirMult[D];
+        docLabels = new DirMult[D];
         z = new int[D][];
         for (int d = 0; d < D; d++) {
-            doc_labels[d] = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
+            docLabels[d] = new DirMult(L, hyperparams.get(ALPHA) * L, 1.0 / L);
             z[d] = new int[trainIndices[d].size()];
         }
 
@@ -1192,18 +1184,18 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                     if (labels[d].length > 0) {
                         for (int ii = 0; ii < labels[d].length; ii++) {
                             int k = labels[d][ii];
-                            double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
-                                    / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * labels[d].length);
-                            double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                    / (label_words[k].getCountSum() + totalBeta);
+                            double theta = (docLabels[d].getCount(k) + hyperparams.get(ALPHA))
+                                    / (docLabels[d].getCountSum() + hyperparams.get(ALPHA) * labels[d].length);
+                            double phi = (labelWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                    / (labelWords[k].getCountSum() + totalBeta);
                             val += theta * phi;
                         }
                     } else { // for documents without labels and for test documents
                         for (int k = 0; k < L; k++) {
-                            double theta = (doc_labels[d].getCount(k) + hyperparams.get(ALPHA))
-                                    / (doc_labels[d].getCountSum() + hyperparams.get(ALPHA) * L);
-                            double phi = (label_words[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                    / (label_words[k].getCountSum() + totalBeta);
+                            double theta = (docLabels[d].getCount(k) + hyperparams.get(ALPHA))
+                                    / (docLabels[d].getCountSum() + hyperparams.get(ALPHA) * L);
+                            double phi = (labelWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
+                                    / (labelWords[k].getCountSum() + totalBeta);
                             val += theta * phi;
                         }
                     }
@@ -1251,14 +1243,14 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
             logln("--- V = " + V);
             int docTopicCount = 0;
             for (int d = 0; d < D; d++) {
-                docTopicCount += doc_labels[d].getCountSum();
+                docTopicCount += docLabels[d].getCountSum();
             }
             int topicWordCount = 0;
-            for (DirMult label_word : label_words) {
+            for (DirMult label_word : labelWords) {
                 topicWordCount += label_word.getCountSum();
             }
-            logln("--- docTopics: " + doc_labels.length + ". " + docTopicCount);
-            logln("--- topicWords: " + label_words.length + ". " + topicWordCount);
+            logln("--- docTopics: " + docLabels.length + ". " + docTopicCount);
+            logln("--- topicWords: " + labelWords.length + ". " + topicWordCount);
         }
 
         // initialize assignments
@@ -1279,7 +1271,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
                     logln("--- iter = " + iter + " / " + this.testMaxIter);
                 }
                 for (int dd = 0; dd < D; dd++) {
-                    double[] predProbs = doc_labels[dd].getDistribution();
+                    double[] predProbs = docLabels[dd].getDistribution();
                     for (int ll = 0; ll < L; ll++) {
                         predictedScores[dd][ll] += predProbs[ll];
                     }

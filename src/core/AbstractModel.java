@@ -17,6 +17,9 @@ public abstract class AbstractModel {
     protected String name;
     protected boolean verbose = true;
 
+    public AbstractModel() {
+    }
+
     public AbstractModel(String name) {
         this.name = name;
     }

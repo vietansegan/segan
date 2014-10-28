@@ -14,14 +14,12 @@ import util.CLIUtils;
 import util.IOUtils;
 import util.StatUtils;
 import util.evaluation.Measurement;
-import util.evaluation.RankingPerformance;
 
 /**
  * @param <D> dataset
  * @author vietan
  */
-public abstract class AbstractExperiment<D extends AbstractDataset>
-        extends AbstractRunner {
+public abstract class AbstractExperiment<D extends AbstractDataset> extends AbstractRunner {
 
     public static final String PREDICTION_FILE = AbstractRegressor.PREDICTION_FILE;
     public static final String RESULT_FILE = AbstractRegressor.RESULT_FILE;
@@ -39,7 +37,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";
     public static final String MODEL_FILE = "model";
-    public static final String PERPLEXITY_FILE = "perplexity.txt";
+//    public static final String PERPLEXITY_FILE = "perplexity.txt";
+    public static final String PERPLEXITY_FILE = "perp.txt";
     public static final int UNOBSERVED = -1;
 
     public static int burn_in = 100;
@@ -168,7 +167,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                 continue;
             }
             if (verbose) {
-                System.out.println("--- Reading results from " + foldModelFolder);
+                logln("--- Reading results from " + foldModelFolder);
             }
 
             String[] modelFolders = foldModelFolder.list();
@@ -181,12 +180,13 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
             File foldSummary = new File(foldModelFolder, phase + SUMMARY_FILE);
             BufferedWriter writer = IOUtils.getBufferedWriter(foldSummary);
             if (verbose) {
-                System.out.println("--- Summarizing fold " + f + ". Writing to " + foldSummary);
+                logln("--- Summarizing fold " + f + ". Writing to " + foldSummary);
             }
 
             int count = 0;
             for (String mFolder : modelFolderList) {
-                File teResultFolder = new File(new File(foldModelFolder, mFolder), phase + RESULT_FOLDER);
+                File teResultFolder = new File(new File(foldModelFolder, mFolder),
+                        phase + RESULT_FOLDER);
                 if (!teResultFolder.exists()) {
                     continue;
                 }
@@ -205,18 +205,6 @@ public abstract class AbstractExperiment<D extends AbstractDataset>
                     measurements.add(m);
                 }
                 reader.close();
-
-                // read ranking measurement
-                File ndcgFile = new File(new File(teResultFolder, phase + RANKING_FOLDER),
-                        RankingPerformance.NDCGFile);
-                if (ndcgFile.exists()) {
-                    double[] ndcgs = RankingPerformance.inputNDCG(
-                            new File(new File(teResultFolder, phase + RANKING_FOLDER),
-                                    RankingPerformance.NDCGFile));
-                    measurements.add(new Measurement("NDCG@1", ndcgs[0]));
-                    measurements.add(new Measurement("NDCG@5", ndcgs[4]));
-                    measurements.add(new Measurement("NDCG@10", ndcgs[9]));
-                }
 
                 if (!modelNames.contains(mFolder)) {
                     modelNames.add(mFolder);

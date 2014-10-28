@@ -227,6 +227,7 @@ public class DirMult extends AbstractDiscreteFiniteLikelihoodModel implements Se
     /**
      * Return true if the Dirichlet is short-represented by a scalar, indicating
      * a symmetric Dirichlet distribution.
+     * @return 
      */
     public boolean isShortRepresented() {
         return this.center == null;

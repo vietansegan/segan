@@ -8,12 +8,12 @@ import util.StatUtils;
  */
 public class MinMaxNormalizer extends AbstractNormalizer {
 
-    private double oldMin;
-    private double oldMax;
-    private double newMin;
-    private double newMax;
-    private double oldDiff;
-    private double newDiff;
+    private final double oldMin;
+    private final double oldMax;
+    private final double newMin;
+    private final double newMax;
+    private final double oldDiff;
+    private final double newDiff;
 
     public MinMaxNormalizer(double[] data, double newMin, double newMax) {
         this.oldMin = StatUtils.min(data);

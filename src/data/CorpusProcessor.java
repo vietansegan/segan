@@ -3,6 +3,7 @@ package data;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,7 +71,7 @@ public class CorpusProcessor {
     private int[][] numericDocs;
     private int[][][] numericSentences;
     private String[][] rawSentences;
-    private Pattern p = Pattern.compile("\\p{Punct}");
+    private final Pattern p = Pattern.compile("\\p{Punct}");
 
     public CorpusProcessor(CorpusProcessor corp) {
         this(corp.unigramCountCutoff,
@@ -172,7 +173,7 @@ public class CorpusProcessor {
             SentenceModel sentenceModel = new SentenceModel(tokenizeSent);
             this.sentenceDetector = new SentenceDetectorME(sentenceModel);
             tokenizeSent.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             System.exit(1);
         }
@@ -241,7 +242,7 @@ public class CorpusProcessor {
             BufferedReader reader = IOUtils.getBufferedReader(filepath);
             this.vocabulary.add(reader.readLine());
             reader.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while loading vocab from " + filepath);
         }

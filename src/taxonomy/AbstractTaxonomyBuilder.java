@@ -3,6 +3,7 @@ package taxonomy;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Stack;
@@ -15,6 +16,7 @@ import util.IOUtils;
  */
 public abstract class AbstractTaxonomyBuilder {
 
+    // inputs
     protected int[][] labels;
     protected ArrayList<String> labelVocab;
     // internal
@@ -28,9 +30,9 @@ public abstract class AbstractTaxonomyBuilder {
         this.labels = labels;
         this.labelVocab = labVoc;
         labelFreqs = new int[labelVocab.size()];
-        for (int dd = 0; dd < labels.length; dd++) {
-            for (int ii = 0; ii < labels[dd].length; ii++) {
-                labelFreqs[labels[dd][ii]]++;
+        for (int[] label : labels) {
+            for (int ii = 0; ii < label.length; ii++) {
+                labelFreqs[label[ii]]++;
             }
         }
     }
@@ -75,8 +77,7 @@ public abstract class AbstractTaxonomyBuilder {
      */
     protected HashMap<String, Integer> getLabelPairFrequencies() {
         HashMap<String, Integer> pairFreqs = new HashMap<String, Integer>();
-        for (int d = 0; d < labels.length; d++) {
-            int[] docLabels = labels[d];
+        for (int[] docLabels : labels) {
             for (int ii = 0; ii < docLabels.length; ii++) {
                 for (int jj = 0; jj < docLabels.length; jj++) {
                     if (ii == jj) {
@@ -131,7 +132,7 @@ public abstract class AbstractTaxonomyBuilder {
                         + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing tree to "
                     + filepath);
@@ -157,7 +158,7 @@ public abstract class AbstractTaxonomyBuilder {
                         + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing tree to "
                     + filepath);
@@ -171,7 +172,7 @@ public abstract class AbstractTaxonomyBuilder {
                 writer.write(element + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing label vocab to "
                     + filepath);
@@ -187,7 +188,7 @@ public abstract class AbstractTaxonomyBuilder {
                 this.labelVocab.add(line);
             }
             reader.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing label vocab from "
                     + filepath);
@@ -242,7 +243,7 @@ public abstract class AbstractTaxonomyBuilder {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException | NumberFormatException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing tree from "
                     + filepath);

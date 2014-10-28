@@ -168,7 +168,7 @@ public abstract class AbstractSampler implements Serializable {
 
     protected String getIteratedTopicFile() {
         return "topwords-" + iter + ".txt";
-    }   
+    }
 
     public abstract void initialize();
 
@@ -421,6 +421,26 @@ public abstract class AbstractSampler implements Serializable {
         return newParams;
     }
 
+    protected void updateHyperparameters() {
+        if (verbose) {
+            logln("*** *** Optimizing hyperparameters by slice sampling ...");
+            logln("*** *** cur param:" + MiscUtils.listToString(hyperparams));
+            logln("*** *** new llh = " + this.getLogLikelihood());
+        }
+
+        sliceSample();
+        ArrayList<Double> sparams = new ArrayList<Double>();
+        for (double param : this.hyperparams) {
+            sparams.add(param);
+        }
+        this.sampledParams.add(sparams);
+
+        if (verbose) {
+            logln("*** *** new param:" + MiscUtils.listToString(sparams));
+            logln("*** *** new llh = " + this.getLogLikelihood());
+        }
+    }
+
     /**
      * Slice sampling for hyper-parameter optimization.
      */
@@ -495,6 +515,7 @@ public abstract class AbstractSampler implements Serializable {
 
     /**
      * Run multiple threads in parallel.
+     *
      * @param threads
      * @throws java.lang.Exception
      */

@@ -3,6 +3,7 @@ package sampler.labeled.baselines;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -167,6 +168,9 @@ public class TFIDFNN {
     public double[][] predict(int[][] newWords) {
         double[][] predictions = new double[newWords.length][];
         int stepSize = MiscUtils.getRoundStepSize(newWords.length, 10);
+        if (stepSize == 1) {
+            stepSize = 10;
+        }
         for (int dd = 0; dd < predictions.length; dd++) {
             if (dd % stepSize == 0) {
                 System.out.println("--- Predicting doc = " + dd + " / " + newWords.length);
@@ -200,6 +204,21 @@ public class TFIDFNN {
         return scores;
     }
 
+//    public SparseVector predict(int[] newWords) {
+//        SparseVector vec = new SparseVector(L);
+//        if(newWords.length == 0)
+//            return vec;
+//        SparseVector docVector = getFeatureVector(newWords);
+//        double newDocL2Norm = docVector.getL2Norm();
+//        for (int l = 0; l < L; l++) {
+//            if (labelVectors[l].size() > 0) { // skip topics that didn't have enough training data for
+//                double val = labelVectors[l].dotProduct(docVector)
+//                        / (labelL2Norms[l] * newDocL2Norm);
+//                vec.set(l, val);
+//            }
+//        }
+//        return vec;
+//    }
     public ArrayList<Integer> predictLabel(int[] newWords, int topK) {
         double[] scores = predict(newWords);
         ArrayList<RankingItem<Integer>> rank = new ArrayList<RankingItem<Integer>>();
@@ -232,7 +251,7 @@ public class TFIDFNN {
                 writer.write(this.idfs[v] + "\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing model to "
                     + predFile);
@@ -258,7 +277,7 @@ public class TFIDFNN {
             for (int ll = 0; ll < L; ll++) {
                 labelL2Norms[ll] = labelVectors[ll].getL2Norm();
             }
-        } catch (Exception e) {
+        } catch (IOException | NumberFormatException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing model from "
                     + predFile);
@@ -336,7 +355,7 @@ public class TFIDFNN {
             for (int ll = 0; ll < L; ll++) {
                 labelL2Norms[ll] = labelVectors[ll].getL2Norm();
             }
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing predictor from "
                     + predictorFile);
@@ -356,7 +375,7 @@ public class TFIDFNN {
                 writer.write("\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing predictions to "
                     + outputFile);
@@ -381,7 +400,7 @@ public class TFIDFNN {
                 }
             }
             reader.close();
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing predictions from "
                     + inputFile);
@@ -409,14 +428,14 @@ public class TFIDFNN {
                 }
                 writer.write(topicStr);
 
-                for (int ii = 0; ii < numTopWords; ii++) {
+                for (int ii = 0; ii < Math.min(numTopWords, rankWords.size()); ii++) {
                     RankingItem<Integer> item = rankWords.get(ii);
                     writer.write("\t" + wordVocab.get(item.getObject()));
                 }
                 writer.write("\n\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing top words to "
                     + outputFile);

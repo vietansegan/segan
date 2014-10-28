@@ -6,6 +6,7 @@ import core.AbstractSampler;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,7 +29,6 @@ import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
 import util.StatUtils;
-import util.evaluation.MimnoTopicCoherence;
 
 /**
  *
@@ -75,6 +75,14 @@ public class L2H extends AbstractSampler {
     private int numAccepts; // number of sampled nodes accepted
     private int[] labelFreqs;
     private double[] switchPrior;
+
+    public L2H() {
+        this.basename = "L2H";
+    }
+
+    public L2H(String basename) {
+        this.basename = basename;
+    }
 
     public void setLabelVocab(ArrayList<String> labelVocab) {
         this.labelVocab = labelVocab;
@@ -156,7 +164,6 @@ public class L2H extends AbstractSampler {
             logln("--- folder\t" + folder);
             logln("--- label vocab:\t" + L);
             logln("--- word vocab:\t" + V);
-
             logln("--- alpha:\t" + MiscUtils.formatDouble(alpha));
             logln("--- beta:\t" + MiscUtils.formatDouble(beta));
             logln("--- a0:\t" + MiscUtils.formatDouble(a0));
@@ -176,7 +183,7 @@ public class L2H extends AbstractSampler {
     protected void setName() {
         StringBuilder str = new StringBuilder();
         str.append(this.prefix)
-                .append("_L2H")
+                .append("_").append(basename)
                 .append("_K-").append(L)
                 .append("_B-").append(BURN_IN)
                 .append("_M-").append(MAX_ITER)
@@ -192,19 +199,38 @@ public class L2H extends AbstractSampler {
         this.name = str.toString();
     }
 
-    public void train(int[][] newWords, int[][] newLabels) {
-        this.words = newWords;
-        this.labels = newLabels;
-        this.D = this.words.length;
+    /**
+     * Set training data.
+     *
+     * @param docIndices Indices of selected documents
+     * @param words Document words
+     * @param labels Document labels
+     */
+    public void train(ArrayList<Integer> docIndices, int[][] words, int[][] labels) {
+        if (docIndices == null) {
+            docIndices = new ArrayList<>();
+            for (int dd = 0; dd < words.length; dd++) {
+                docIndices.add(dd);
+            }
+        }
+
+        this.D = docIndices.size();
+        this.words = new int[D][];
+        this.labels = new int[D][];
+        for (int ii = 0; ii < D; ii++) {
+            int dd = docIndices.get(ii);
+            this.words[ii] = words[dd];
+            this.labels[ii] = labels[dd];
+        }
         this.labelDocIndices = new HashMap<Integer, Set<Integer>>();
         for (int d = 0; d < D; d++) {
             for (int ll : labels[d]) {
-                Set<Integer> docIndices = this.labelDocIndices.get(ll);
-                if (docIndices == null) {
-                    docIndices = new HashSet<Integer>();
+                Set<Integer> docs = this.labelDocIndices.get(ll);
+                if (docs == null) {
+                    docs = new HashSet<Integer>();
                 }
-                docIndices.add(d);
-                this.labelDocIndices.put(ll, docIndices);
+                docs.add(d);
+                this.labelDocIndices.put(ll, docs);
             }
         }
 
@@ -401,8 +427,8 @@ public class L2H extends AbstractSampler {
         }
         int lda_burnin = 50;
         int lda_maxiter = 100;
-        int lda_samplelag = 5;
-        int lda_repInterval = 1;
+        int lda_samplelag = 10;
+        int lda_repInterval = 10;
         double lda_alpha = 0.1;
         double lda_beta = 0.1;
 
@@ -411,24 +437,17 @@ public class L2H extends AbstractSampler {
         llda.setVerbose(verbose);
         llda.setLog(false);
         llda.configure(folder,
-                V, L, lda_alpha, lda_beta, initState, false,
+                V, L, lda_alpha, lda_beta, InitialState.RANDOM, false,
                 lda_burnin, lda_maxiter, lda_samplelag, lda_repInterval);
-        // add the root label to all documents
-        int[][] tempLabels = new int[D][];
-        for (int dd = 0; dd < D; dd++) {
-            tempLabels[dd] = new int[labels[dd].length + 1];
-            System.arraycopy(labels[dd], 0, tempLabels[dd], 0, labels[dd].length);
-            tempLabels[dd][labels[dd].length] = labelVocab.size() - 1;
-        }
-        llda.train(null, words, tempLabels);
+        llda.train(null, words, labels);
         try {
-            File lldaZFile = new File(llda.getSamplerFolderPath(), "init.zip");
+            File lldaZFile = new File(llda.getSamplerFolderPath(), basename + ".zip");
             if (lldaZFile.exists()) {
-                llda.inputState(lldaZFile);
+                llda.inputState(lldaZFile, true, false);
             } else {
                 IOUtils.createFolder(llda.getSamplerFolderPath());
                 llda.sample();
-                llda.outputState(lldaZFile);
+                llda.outputState(lldaZFile, true, false);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -461,15 +480,17 @@ public class L2H extends AbstractSampler {
         if (verbose) {
             logln("Iterating ...");
         }
-        logLikelihoods = new ArrayList<Double>();
 
-        try {
-            if (report) {
-                IOUtils.createFolder(new File(getSamplerFolderPath(), ReportFolder));
+        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
+        if (report) {
+            if (this.wordVocab == null) {
+                throw new RuntimeException("The word vocab has not been assigned yet");
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while outputing to report folder");
+
+            if (this.labelVocab == null) {
+                throw new RuntimeException("The label vocab has not been assigned yet");
+            }
+            IOUtils.createFolder(reportFolderPath);
         }
 
         if (log && !isLogging()) {
@@ -499,7 +520,6 @@ public class L2H extends AbstractSampler {
 
             if (verbose && iter % REP_INTERVAL == 0) {
                 double loglikelihood = this.getLogLikelihood();
-                logLikelihoods.add(loglikelihood);
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
                         + "\t # tokens changed: " + numTokensChange
@@ -522,36 +542,16 @@ public class L2H extends AbstractSampler {
                 validate("iter " + iter);
             }
 
-            if (iter % LAG == 0 && iter >= BURN_IN) {
-                if (paramOptimized) { // slice sampling
-                    if (verbose) {
-                        logln("*** *** Optimizing hyperparameters by slice sampling ...");
-                        logln("*** *** cur param:" + MiscUtils.listToString(hyperparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
-                    }
-
-                    sliceSample();
-                    ArrayList<Double> sparams = new ArrayList<Double>();
-                    for (double param : this.hyperparams) {
-                        sparams.add(param);
-                    }
-                    this.sampledParams.add(sparams);
-
-                    if (verbose) {
-                        logln("*** *** new param:" + MiscUtils.listToString(sparams));
-                        logln("*** *** new llh = " + this.getLogLikelihood());
-                    }
-                }
-            }
-
             // store model
             if (report && iter > BURN_IN && iter % LAG == 0) {
-                outputState(new File(getReportFolderPath(), "iter-" + iter + ".zip"));
+                outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
+//                outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
             }
         }
 
         if (report) {
-            outputState(new File(getReportFolderPath(), "iter-" + iter + ".zip"));
+            outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
+//            outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -563,10 +563,13 @@ public class L2H extends AbstractSampler {
     }
 
     /**
-     * Update the structure of the tree. This is done by (1) proposing a new
-     * parent node for each node in the tree using the edge weights of the
-     * background graph, (2) accepting or rejecting the proposed new parent
-     * using Metropolis-Hastings.
+     * Update the structure of the tree. This is done by
+     *
+     * (1) proposing a new parent node for each node in the tree using the edge
+     * weights of the background graph,
+     *
+     * (2) accepting or rejecting the proposed new parent using
+     * Metropolis-Hastings.
      */
     private long updateTree() {
         long sTime = System.currentTimeMillis();
@@ -1298,56 +1301,88 @@ public class L2H extends AbstractSampler {
 
     @Override
     public void outputState(String filepath) {
+        outputState(filepath, true, true);
+    }
+
+    /**
+     * Output current state.
+     *
+     * @param filepath Output file
+     * @param outputModel Whether to output the model
+     * @param outputData Whether to output the assignments
+     */
+    public void outputState(File filepath, boolean outputModel, boolean outputData) {
+        this.outputState(filepath.getAbsolutePath(), outputModel, outputData);
+    }
+
+    /**
+     * Output current state.
+     *
+     * @param filepath Output file
+     * @param outputModel Whether to output the model
+     * @param outputData Whether to output the assignments
+     */
+    public void outputState(String filepath, boolean outputModel, boolean outputData) {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
+            logln("--- --- Outputing model? " + outputModel);
+            logln("--- --- Outputing assignments? " + outputData);
         }
         try {
             // model
-            StringBuilder modelStr = new StringBuilder();
-            for (int k = 0; k < nodes.length; k++) {
-                Node node = nodes[k];
-                modelStr.append(k)
-                        .append("\t").append(node.getIndex())
-                        .append("\t").append(node.getLevel())
-                        .append("\n");
-                for (int v = 0; v < node.topic.length; v++) {
-                    modelStr.append(node.topic[v]).append("\t");
+            String modelStr = null;
+            if (outputModel) {
+                StringBuilder mStr = new StringBuilder();
+                for (int k = 0; k < nodes.length; k++) {
+                    Node node = nodes[k];
+                    mStr.append(k)
+                            .append("\t").append(node.getIndex())
+                            .append("\t").append(node.getLevel())
+                            .append("\n");
+                    for (int v = 0; v < node.topic.length; v++) {
+                        mStr.append(node.topic[v]).append("\t");
+                    }
+                    mStr.append("\n");
                 }
-                modelStr.append("\n");
-            }
 
-            for (int k = 0; k < nodes.length; k++) {
-                modelStr.append(k);
-                if (nodes[k].getParent() == null) {
-                    modelStr.append("\t-1\n");
-                } else {
-                    modelStr.append("\t").append(nodes[k].getParent().id).append("\n");
+                for (int k = 0; k < nodes.length; k++) {
+                    mStr.append(k);
+                    if (nodes[k].getParent() == null) {
+                        mStr.append("\t-1\n");
+                    } else {
+                        mStr.append("\t").append(nodes[k].getParent().id).append("\n");
+                    }
                 }
-            }
 
-            for (int k = 0; k < nodes.length; k++) {
-                modelStr.append(k).append("\t")
-                        .append(SparseVector.output(inWeights[k])).append("\n");
+                for (int k = 0; k < nodes.length; k++) {
+                    mStr.append(k).append("\t")
+                            .append(SparseVector.output(inWeights[k])).append("\n");
+                }
+                modelStr = mStr.toString();
             }
 
             // data
-            StringBuilder assignStr = new StringBuilder();
-            for (int d = 0; d < D; d++) {
-                assignStr.append(d).append("\n");
-                assignStr.append(DirMult.output(docSwitches[d])).append("\n");
-                assignStr.append(SparseCount.output(docLabelCounts[d])).append("\n");
-                for (int n = 0; n < words[d].length; n++) {
-                    assignStr.append(z[d][n]).append("\t");
+            String assignStr = null;
+            if (outputData) {
+                StringBuilder asgnS = new StringBuilder();
+                for (int d = 0; d < D; d++) {
+                    asgnS.append(d).append("\n");
+                    asgnS.append(DirMult.output(docSwitches[d])).append("\n");
+                    asgnS.append(SparseCount.output(docLabelCounts[d])).append("\n");
+                    for (int n = 0; n < words[d].length; n++) {
+                        asgnS.append(z[d][n]).append("\t");
+                    }
+                    asgnS.append("\n");
+                    for (int n = 0; n < words[d].length; n++) {
+                        asgnS.append(x[d][n]).append("\t");
+                    }
+                    asgnS.append("\n");
                 }
-                assignStr.append("\n");
-                for (int n = 0; n < words[d].length; n++) {
-                    assignStr.append(x[d][n]).append("\t");
-                }
-                assignStr.append("\n");
+                assignStr = asgnS.toString();
             }
 
             // output to a compressed file
-            this.outputZipFile(filepath, modelStr.toString(), assignStr.toString());
+            this.outputZipFile(filepath, modelStr, assignStr);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing state to "
@@ -1357,20 +1392,51 @@ public class L2H extends AbstractSampler {
 
     @Override
     public void inputState(String filepath) {
+        inputState(filepath, true, true);
+    }
+
+    /**
+     * Input model state.
+     *
+     * @param filepath Output file
+     * @param inputModel Whether to input the model
+     * @param inputData Whether to input the assignments
+     */
+    public void inputState(File filepath, boolean inputModel, boolean inputData) {
+        this.inputState(filepath.getAbsolutePath(), inputModel, inputData);
+    }
+
+    /**
+     * Input model state.
+     *
+     * @param filepath Output file
+     * @param inputModel Whether to input the model
+     * @param inputData Whether to input the assignments
+     */
+    public void inputState(String filepath, boolean inputModel, boolean inputData) {
         if (verbose) {
-            logln("--- Reading state from " + filepath);
+            logln("--- Inputing state to " + filepath);
+            logln("--- --- Inputing model? " + inputModel);
+            logln("--- --- Inputing assignments? " + inputData);
         }
         try {
-            inputModel(filepath);
-
-            inputAssignments(filepath);
+            if (inputModel) {
+                inputModel(filepath);
+            }
+            if (inputData) {
+                inputAssignments(filepath);
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Excepion while inputing state from "
-                    + filepath);
+            throw new RuntimeException("Excepion while inputing from " + filepath);
         }
     }
 
+    /**
+     * Input learned model.
+     *
+     * @param zipFilepath Input file
+     */
     private void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath);
@@ -1378,7 +1444,6 @@ public class L2H extends AbstractSampler {
         try {
             // initialize
             this.nodes = new Node[L];
-//            this.inWeights = new SparseVector[L];
             String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
 
@@ -1422,25 +1487,6 @@ public class L2H extends AbstractSampler {
             for (int k = 0; k < L; k++) {
                 nodes[k].fillInactiveChildIndices();
             }
-
-            // edge weight
-//            String line;
-//            int count = 0;
-//            while((line = reader.readLine()) != null) {
-//                String[] sline = line.split("\t");
-//                if (Integer.parseInt(sline[0]) != count) {
-//                    throw new RuntimeException("Mismatch");
-//                }
-//                this.inWeights[count] = SparseVector.input(sline[1]);
-//                count ++;
-//            }
-//            for (int k = 0; k < L; k++) {
-//                String[] sline = reader.readLine().split("\t");
-//                if (Integer.parseInt(sline[0]) != k) {
-//                    throw new RuntimeException("Mismatch");
-//                }
-//                this.inWeights[k] = SparseVector.input(sline[1]);
-//            }
             reader.close();
         } catch (Exception e) {
             e.printStackTrace();
@@ -1453,6 +1499,11 @@ public class L2H extends AbstractSampler {
         }
     }
 
+    /**
+     * Input assignments.
+     *
+     * @param zipFilepath Input file
+     */
     private void inputAssignments(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading assignments from " + zipFilepath);
@@ -1496,14 +1547,16 @@ public class L2H extends AbstractSampler {
     /**
      * Print out the structure (number of observations at each level) of the
      * global tree.
+     *
+     * @return
      */
     public String printTreeStructure() {
         StringBuilder str = new StringBuilder();
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
 
-        SparseCount nodeCountPerLevel = new SparseCount();      // nodes
-        SparseCount obsCountPerLevel = new SparseCount();       // observation
+        SparseCount nodeCountPerLevel = new SparseCount(); // nodes
+        SparseCount obsCountPerLevel = new SparseCount();  // observation
 
         while (!stack.isEmpty()) {
             Node node = stack.pop();
@@ -1520,12 +1573,13 @@ public class L2H extends AbstractSampler {
         }
 
         for (int level : nodeCountPerLevel.getSortedIndices()) {
+            double tokenRatio = (double) obsCountPerLevel.getCount(level)
+                    / nodeCountPerLevel.getCount(level);
             str.append(">>> level ").append(level)
                     .append(". n: ").append(nodeCountPerLevel.getCount(level))
                     .append(". o: ").append(obsCountPerLevel.getCount(level))
-                    .append(" (").append((double) obsCountPerLevel.getCount(level)
-                            / nodeCountPerLevel.getCount(level)).append(")")
-                    .append("\n");
+                    .append(" (").append(MiscUtils.formatDouble(tokenRatio))
+                    .append(")").append("\n");
         }
         str.append(">>> >>> # nodes: ").append(nodeCountPerLevel.getCountSum()).append("\n");
         str.append(">>> >>> # obs  : ").append(obsCountPerLevel.getCountSum()).append("\n");
@@ -1536,6 +1590,7 @@ public class L2H extends AbstractSampler {
      * Print out the global tree.
      *
      * @param numTopWords Number of top words shown for each topic
+     * @return
      */
     public String printTree(int numTopWords) {
         StringBuilder str = new StringBuilder();
@@ -1591,127 +1646,24 @@ public class L2H extends AbstractSampler {
         return str.toString();
     }
 
-    public void outputGlobalTree(File outputFile, int numTopWords) throws Exception {
+    /**
+     * Write global tree to output file.
+     *
+     * @param outputFile
+     * @param numTopWords
+     */
+    public void outputGlobalTree(File outputFile, int numTopWords) {
         if (verbose) {
             logln("Outputing global tree to " + outputFile);
         }
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        writer.write(this.printTree(numTopWords));
-        writer.close();
-    }
-
-    public void outputLexicalCorrelations(File outputFile) throws Exception {
-        if (verbose) {
-            logln("Outputing lexical correlations to " + outputFile);
-        }
-
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-
-        double[][] avgTopics = new double[L - 1][V];
-        int numModels = 0;
         try {
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-                inputState(new File(reportFolder, filename).getAbsolutePath());
-                for (int ll = 0; ll < L - 1; ll++) {
-                    double[] topic = nodes[ll].topic;
-                    for (int v = 0; v < V; v++) {
-                        avgTopics[ll][v] += topic[v];
-                    }
-                }
-                numModels++;
-            }
-        } catch (Exception e) {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            writer.write(this.printTree(numTopWords));
+            writer.close();
+        } catch (IOException e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while outputing label "
-                    + "correlation to " + outputFile);
+            throw new RuntimeException("Exception while outputing to " + outputFile);
         }
-
-        for (int ll = 0; ll < avgTopics.length; ll++) {
-            for (int v = 0; v < V; v++) {
-                avgTopics[ll][v] /= numModels;
-            }
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int v = 0; v < V; v++) {
-            writer.write(v + "," + v + ":1 ");
-            for (int u = 0; u < v; u++) {
-                double score = 0.0;
-                for (int ll = 0; ll < avgTopics.length; ll++) {
-                    score += avgTopics[ll][v] * avgTopics[ll][u];
-                }
-                writer.write((u + L) + "," + (v + L) + ":" + score + " ");
-                writer.write((v + L) + "," + (u + L) + ":" + score + " ");
-            }
-        }
-        writer.write("\n");
-        writer.close();
-    }
-
-    public void outputLabelCorrelations(File outputFile) throws Exception {
-        if (verbose) {
-            logln("Outputing label correlations to " + outputFile);
-        }
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-
-        double[][] avgTopics = new double[L - 1][V];
-        int numModels = 0;
-        try {
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-                inputState(new File(reportFolder, filename).getAbsolutePath());
-                for (int ll = 0; ll < L - 1; ll++) {
-                    double[] topic = nodes[ll].topic;
-                    for (int v = 0; v < V; v++) {
-                        avgTopics[ll][v] += topic[v];
-                    }
-                }
-                numModels++;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while outputing label "
-                    + "correlation to " + outputFile);
-        }
-
-        for (int ll = 0; ll < avgTopics.length; ll++) {
-            for (int v = 0; v < V; v++) {
-                avgTopics[ll][v] /= numModels;
-            }
-        }
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (int ii = 0; ii < L - 1; ii++) {
-            writer.write(ii + "," + ii + ":1 ");
-            for (int jj = 0; jj < ii; jj++) {
-                double cosine = StatUtils.cosineSimilarity(avgTopics[ii], avgTopics[jj]);
-                if (cosine > 0.1) {
-                    writer.write(ii + "," + jj + ":" + cosine + " ");
-                    writer.write(jj + "," + ii + ":" + cosine + " ");
-                }
-//                double klDivij = StatisticsUtils.KLDivergenceAsymmetric(nodes[ii].topic, nodes[jj].topic);
-//                double klDivji = StatisticsUtils.KLDivergenceAsymmetric(nodes[jj].topic, nodes[ii].topic);
-//                writer.write(ii + "," + jj + ":" + klDivij + " ");
-//                writer.write(jj + "," + ii + ":" + klDivji + " ");
-            }
-        }
-        writer.write("\n");
-        writer.close();
     }
 
     // ******************* Start prediction ************************************
@@ -1719,7 +1671,6 @@ public class L2H extends AbstractSampler {
      * Sample test documents in parallel.
      *
      * @param newWords Test document
-     * @param numLabels Number of labels used for prediction
      * @param iterPredFolder Folder to store predictions using different models
      * @param sampler The configured sampler
      * @param initPredictions Initial predictions from TF-IDF
@@ -1736,8 +1687,7 @@ public class L2H extends AbstractSampler {
         try {
             IOUtils.createFolder(iterPredFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1766,7 +1716,9 @@ public class L2H extends AbstractSampler {
      *
      * @param stateFile File containing learned model
      * @param newWords Test document
-     * @param outputSamplingFolder Output file
+     * @param outputResultFile
+     * @param initPredictions
+     * @param topK
      */
     public void sampleNewDocuments(String stateFile,
             int[][] newWords,
@@ -1867,1140 +1819,7 @@ public class L2H extends AbstractSampler {
         }
         return cands;
     }
-
-    private Set<Integer> getCandidatesNew(double[] scores) {
-        Set<Integer> cands = new HashSet<Integer>();
-        ArrayList<RankingItem<Integer>> docRankLabels = MiscUtils.getRankingList(scores);
-        int maxNum = 10;
-        double minSimScore = 0.25;
-        int ii = 0;
-        while (true) {
-            RankingItem<Integer> item = docRankLabels.get(ii++);
-            if (item.getPrimaryValue() < minSimScore) {
-                break;
-            }
-            cands.add(item.getObject());
-            if (cands.size() == maxNum) {
-                break;
-            }
-        }
-        return cands;
-    }
-
-    public double[][] getTrainingExtendedLexiconFeatureVectors(int nTopWords) {
-        double[][] featVecs = null;
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-
-        double[][] thetas = new double[D][L - 1];
-        double[][] phis = new double[L - 1][V];
-        double[][] thetasSubtree = new double[D][L - 1];
-
-        int numModels = 0;
-        try {
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-                numModels++;
-                inputState(new File(reportFolder, filename).getAbsolutePath());
-
-                for (int d = 0; d < D; d++) {
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        double val = (double) docLabelCounts[d].getCount(ll) / words[d].length;
-                        if (val < 0.01) {
-                            val = 0.0;
-                        }
-                        thetas[d][ll] += val;
-                    }
-                }
-
-                for (int ll = 0; ll < L - 1; ll++) {
-                    for (int v = 0; v < V; v++) {
-                        phis[ll][v] += nodes[ll].topic[v];
-                    }
-                }
-            }
-
-            // average
-            for (int d = 0; d < D; d++) {
-                for (int ll = 0; ll < thetas[d].length; ll++) {
-                    thetas[d][ll] /= numModels;
-                }
-            }
-
-            for (int ll = 0; ll < phis.length; ll++) {
-                for (int v = 0; v < V; v++) {
-                    phis[ll][v] /= numModels;
-                }
-            }
-
-            ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[phis.length];
-            Set<Integer>[] labelTopWords = new Set[phis.length];
-            for (int ll = 0; ll < phis.length; ll++) {
-                labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
-
-                labelTopWords[ll] = new HashSet<Integer>();
-                for (int ii = 0; ii < nTopWords; ii++) {
-                    labelTopWords[ll].add(labelRankWords[ll].get(ii).getObject());
-                }
-            }
-
-            Set<Integer> labelSet = new HashSet<Integer>();
-            for (int ll = 0; ll < L - 1; ll++) {
-                labelSet.add(ll);
-            }
-
-//            featVecs = new double[thetas.length][V + thetas[0].length];
-            featVecs = new double[thetas.length][thetas[0].length * 2];
-            for (int dd = 0; dd < featVecs.length; dd++) {
-                int count = 0;
-//                double[] extFeatVec = getFeature(thetas[dd], labelRankWords, nTopWords, labelSet);
-//                for (int ii = 0; ii < extFeatVec.length; ii++) {
-//                    featVecs[dd][count++] = extFeatVec[ii];
-//                }
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                    featVecs[dd][count++] = thetas[dd][ll];
-                }
-
-                SparseCount sc = new SparseCount();
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                    for (int n = 0; n < words[dd].length; n++) {
-                        if (labelTopWords[ll].contains(words[dd][n])) {
-                            sc.increment(ll);
-                        }
-                    }
-                }
-                int sum = sc.getCountSum();
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                    int cc = sc.getCount(ll);
-                    if (cc == 0) {
-                        featVecs[dd][count] = 0.0;
-                    } else {
-                        featVecs[dd][count] = (double) sc.getCount(ll) / sum;
-                    }
-                    count++;
-                }
-
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting training feature vectors.");
-        }
-        return featVecs;
-    }
-
-    public double[][] getTestExtendedLexiconFeatureVectors(File iterPredFolder,
-            File reportFolder, int nTopWords) {
-        double[][] featVecs = null;
-        String[] filenames = iterPredFolder.list();
-        try {
-            double[][] thetas = new double[D][L - 1];
-            double[][] phis = new double[L - 1][V];
-            double[][] thetasSubtree = new double[D][L - 1];
-
-            int numModels = 0;
-            for (String filename : filenames) {
-                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
-                        new File(iterPredFolder, filename));
-                if (singlePreds[0].length != L - 1) {
-                    throw new RuntimeException("Mismatch");
-                }
-
-                numModels++;
-                inputModel(new File(reportFolder, filename.replaceAll("txt", "zip")).getAbsolutePath());
-
-                for (int d = 0; d < D; d++) {
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        double val = singlePreds[d][ll];
-                        if (val < 0.01) {
-                            val = 0.0;
-                        }
-                        thetas[d][ll] += val;
-                    }
-                }
-
-                for (int ll = 0; ll < L - 1; ll++) {
-                    for (int v = 0; v < V; v++) {
-                        phis[ll][v] += nodes[ll].topic[v];
-                    }
-                }
-            }
-
-            // average
-            for (int d = 0; d < D; d++) {
-                for (int ll = 0; ll < thetas[d].length; ll++) {
-                    thetas[d][ll] /= numModels;
-                }
-            }
-
-            for (int ll = 0; ll < phis.length; ll++) {
-                for (int v = 0; v < V; v++) {
-                    phis[ll][v] /= numModels;
-                }
-            }
-
-            ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[phis.length];
-            Set<Integer>[] labelTopWords = new Set[phis.length];
-            for (int ll = 0; ll < phis.length; ll++) {
-                labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
-
-                labelTopWords[ll] = new HashSet<Integer>();
-                for (int ii = 0; ii < nTopWords; ii++) {
-                    labelTopWords[ll].add(labelRankWords[ll].get(ii).getObject());
-                }
-            }
-
-            Set<Integer> labelSet = new HashSet<Integer>();
-            for (int ll = 0; ll < L - 1; ll++) {
-                labelSet.add(ll);
-            }
-
-            Set<Node>[] subtrees = new Set[L - 1];
-            for (int ll = 0; ll < L - 1; ll++) {
-                subtrees[ll] = getSubtree(nodes[ll]);
-            }
-
-//            featVecs = new double[thetas.length][V + thetas[0].length];
-            featVecs = new double[thetas.length][thetas[0].length * 2];
-            for (int dd = 0; dd < featVecs.length; dd++) {
-                int count = 0;
-//                double[] extFeatVec = getFeature(thetas[dd], labelRankWords, nTopWords, labelSet);
-//                for (int ii = 0; ii < extFeatVec.length; ii++) {
-//                    featVecs[dd][count++] = extFeatVec[ii];
-//                }
-                for (int ii = 0; ii < thetas[dd].length; ii++) {
-                    featVecs[dd][count++] = thetas[dd][ii];
-                }
-
-                // appear in top words
-                SparseCount sc = new SparseCount();
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                    for (int n = 0; n < words[dd].length; n++) {
-                        if (labelTopWords[ll].contains(words[dd][n])) {
-                            sc.increment(ll);
-                        }
-                    }
-                }
-                int sum = sc.getCountSum();
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                    int cc = sc.getCount(ll);
-                    if (cc == 0) {
-                        featVecs[dd][count] = 0.0;
-                    } else {
-                        featVecs[dd][count] = (double) sc.getCount(ll) / sum;
-                    }
-                    count++;
-                }
-
-                // appear in subtree
-                SparseCount subtreeCount = new SparseCount();
-                for (int ll = 0; ll < thetas[dd].length; ll++) {
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting test feature vectors.");
-        }
-        return featVecs;
-    }
-
-//    private boolean isInSubtreeTopWords(Set<Integer> subtree, Set<Integer>[] labelTopWords, )
-    private double[] getFeature(double[] docThetas,
-            ArrayList<RankingItem<Integer>>[] labelRankWords,
-            int nTopWords,
-            Set<Integer> labelSet) {
-        int numWords = labelRankWords[0].size();
-
-        double[] vec = new double[numWords];
-        for (int ll : labelSet) {
-            for (int ii = 0; ii < nTopWords; ii++) {
-                RankingItem<Integer> item = labelRankWords[ll].get(ii);
-                int wid = item.getObject();
-                double val = item.getPrimaryValue() * docThetas[ll];
-                vec[wid] += val;
-            }
-        }
-        return vec;
-    }
-
-    private double[][] getFeatures(double[][] thetas,
-            double[][] phis,
-            int nTopWords,
-            Set<Integer> labelSet) {
-        int numDocs = thetas.length;
-        int numLabels = phis.length;
-        int numWords = phis[0].length;
-
-        ArrayList<RankingItem<Integer>>[] labelRankWords = new ArrayList[numLabels];
-        for (int ll = 0; ll < numLabels; ll++) {
-            labelRankWords[ll] = MiscUtils.getRankingList(phis[ll]);
-        }
-
-        double[][] vec = new double[thetas.length][numWords];
-        for (int d = 0; d < numDocs; d++) {
-            for (int ll : labelSet) {
-                for (int ii = 0; ii < nTopWords; ii++) {
-                    RankingItem<Integer> item = labelRankWords[ll].get(ii);
-                    int wid = item.getObject();
-                    double val = item.getPrimaryValue() * thetas[d][ll];
-                    vec[d][wid] += val;
-                }
-            }
-        }
-        return vec;
-    }
-
-    public double[][] getTrainingHierarchicalFeatureVectors() {
-        double[][] featVecs = new double[D][L * 3 - 3];
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-        double[][] phis = new double[L - 1][V];
-        try {
-            int numModels = 0;
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-                numModels++;
-                inputState(new File(reportFolder, filename).getAbsolutePath());
-
-                Set<Node>[] subtrees = new Set[L - 1];
-                for (int ll = 0; ll < L - 1; ll++) {
-                    subtrees[ll] = getSubtree(nodes[ll]);
-                }
-
-                for (int d = 0; d < D; d++) {
-                    double[] empDist = new double[L - 1];
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        empDist[ll] = (double) docLabelCounts[d].getCount(ll) / words[d].length;
-                        if (empDist[ll] < 0.05) {
-                            empDist[ll] = 0.0;
-                        }
-                    }
-
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        Node node = nodes[ll];
-                        // per node 
-                        featVecs[d][ll] += empDist[ll];
-
-                        // per edge 
-//                        for (Node child : node.getChildren()) {
-//                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
-//                        }
-                        // per subtree
-//                        for (Node desc : subtrees[ll]) {
-//                            if (desc.id == ll) {
-//                                continue;
-//                            }
-//                            featVecs[d][1 * (L - 1) + ll] += empDist[desc.id];
-//                        }
-                    }
-                }
-            }
-
-            for (int d = 0; d < D; d++) {
-                for (int ii = 0; ii < featVecs[d].length; ii++) {
-                    featVecs[d][ii] /= numModels;
-                }
-            }
-
-//            for (int d = 0; d < D; d++) {
-//                for (int ii = 0; ii < featVecs[d].length; ii++) {
-//                    featVecs[d][ii] = Math.log(featVecs[d][ii] * words[d].length / numModels + 1);
-//                }
-//                for (int xx = 0; xx < 3; xx++) {
-//                    for (int ll = 0; ll < L - 1; ll++) {
-//                        featVecs[d][xx * (L - 1) + ll] *= labelIDFs[ll];
-//                    }
-//                }
-//            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting training feature vectors.");
-        }
-        return featVecs;
-    }
-
-    public double[][] getTestHierarchicalFeatureVectors(File iterPredFolder,
-            File reportFolder) {
-        double[][] featVecs = new double[D][3 * L - 3];
-        String[] filenames = iterPredFolder.list();
-        try {
-            int numModels = 0;
-            for (String filename : filenames) {
-                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
-                        new File(iterPredFolder, filename));
-                if (singlePreds[0].length != L - 1) {
-                    throw new RuntimeException("Mismatch");
-                }
-
-                numModels++;
-                inputModel(new File(reportFolder, filename.replaceAll("txt", "zip")).getAbsolutePath());
-                Set<Node>[] subtrees = new Set[L - 1];
-                for (int ll = 0; ll < L - 1; ll++) {
-                    subtrees[ll] = getSubtree(nodes[ll]);
-                }
-
-                for (int d = 0; d < D; d++) {
-                    double[] empDist = singlePreds[d];
-                    for (int ll = 0; ll < empDist.length; ll++) {
-                        if (empDist[ll] < 0.05) {
-                            empDist[ll] = 0.0;
-                        }
-                    }
-
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        Node node = nodes[ll];
-                        // per node 
-                        featVecs[d][ll] += empDist[ll];
-
-                        // per edge 
-//                        for (Node child : node.getChildren()) {
-//                            featVecs[d][L - 1 + ll] += (empDist[child.id]);
-//                        }
-                        // per subtree
-//                        for (Node desc : subtrees[ll]) {
-//                            if (desc.id == ll) {
-//                                continue;
-//                            }
-//                            featVecs[d][1 * (L - 1) + ll] += empDist[desc.id];
-//                        }
-                    }
-                }
-            }
-
-            for (int d = 0; d < D; d++) {
-                for (int ii = 0; ii < featVecs[d].length; ii++) {
-                    featVecs[d][ii] /= numModels;
-                }
-            }
-//            for (int d = 0; d < D; d++) {
-//                for (int ii = 0; ii < featVecs[d].length; ii++) {
-//                    featVecs[d][ii] = Math.log(featVecs[d][ii] * words[d].length / numModels + 1);
-//                }
-//                for (int xx = 0; xx < 3; xx++) {
-//                    for (int ll = 0; ll < L - 1; ll++) {
-//                        featVecs[d][xx * (L - 1) + ll] *= labelIDFs[ll];
-//                    }
-//                }
-//            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting test feature vectors.");
-        }
-        return featVecs;
-    }
-
-    private Set<Node> getSubtree(Node node) {
-        Set<Node> subtree = new HashSet<Node>();
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(node);
-        while (!stack.isEmpty()) {
-            Node n = stack.pop();
-            subtree.add(n);
-            for (Node c : n.getChildren()) {
-                stack.add(c);
-            }
-        }
-        return subtree;
-    }
-
-    public SparseVector[] getTrainingFeatureVectors() {
-        SparseVector[] featVecs = new SparseVector[D];
-        for (int d = 0; d < D; d++) {
-            featVecs[d] = new SparseVector();
-        }
-
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-        try {
-            int numModels = 0;
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-
-                inputState(new File(reportFolder, filename).getAbsolutePath());
-                for (int d = 0; d < D; d++) {
-                    for (int ll : docLabelCounts[d].getIndices()) {
-                        if (ll == L - 1) { // skip the root node
-                            continue;
-                        }
-                        int featIdx = ll + 1;
-                        featVecs[d].change(featIdx,
-                                (double) docLabelCounts[d].getCount(ll) / words[d].length);
-                    }
-                }
-                numModels++;
-            }
-
-            // average
-            for (int d = 0; d < D; d++) {
-                for (int featIdx : featVecs[d].getIndices()) {
-                    double avgVal = featVecs[d].get(featIdx) / numModels;
-                    featVecs[d].set(featIdx, avgVal);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting training feature vectors.");
-        }
-        return featVecs;
-    }
-
-    public SparseVector[] getTestFeatureVectors(File iterPredFolder) {
-        SparseVector[] featVecs = new SparseVector[D];
-        for (int d = 0; d < D; d++) {
-            featVecs[d] = new SparseVector();
-        }
-        double[][] sumDists = new double[D][L - 1];
-
-        String[] filenames = iterPredFolder.list();
-        try {
-            for (String filename : filenames) {
-                double[][] singlePreds = PredictionUtils.inputSingleModelClassifications(
-                        new File(iterPredFolder, filename));
-                if (singlePreds[0].length != L - 1) {
-                    throw new RuntimeException("Mismatch");
-                }
-                for (int d = 0; d < D; d++) {
-                    for (int ll = 0; ll < L - 1; ll++) {
-                        sumDists[d][ll] += singlePreds[d][ll];
-                    }
-                }
-            }
-
-            // average
-            for (int d = 0; d < D; d++) {
-                for (int ll = 0; ll < L - 1; ll++) {
-                    double val = sumDists[d][ll] / filenames.length;
-                    featVecs[d].set(ll + 1, val);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while getting test feature vectors.");
-        }
-
-        return featVecs;
-    }
-
-    // ================= Debug ================
-    public double[][] debugPrediction(String stateFile,
-            int[][] newWords,
-            int[][] newLabels,
-            String outputResultFile,
-            double[][] initPredictions, double scale) {
-        // input model
-        inputModel(stateFile);
-
-        // test data
-        this.words = newWords;
-        this.labels = newLabels;
-        this.D = this.words.length;
-
-        // normalize initial predicted scores
-        for (int d = 0; d < D; d++) {
-            double sum = StatUtils.sum(initPredictions[d]);
-            for (int ii = 0; ii < initPredictions[d].length; ii++) {
-                initPredictions[d][ii] /= sum;
-            }
-        }
-
-        double[][] predictedScores = new double[D][];
-        for (int d = 0; d < D; d++) {
-            predictedScores[d] = debugPredict(d, initPredictions[d], scale);
-        }
-        return predictedScores;
-    }
-
-    private double[] debugPredict(int d, double[] initPreds, double scale) {
-        double[] newPreds = new double[L - 1];
-        ArrayList<Node> leaves = new ArrayList<Node>();
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-            if (node.getChildren().isEmpty()) {
-                leaves.add(node);
-            }
-            for (Node child : node.getChildren()) {
-                stack.add(child);
-            }
-        }
-
-        // bottom-up smoothing to compute pseudo-counts from children
-        Queue<Node> queue = new LinkedList<Node>();
-        for (Node leaf : leaves) {
-            queue.add(leaf);
-        }
-        while (!queue.isEmpty()) {
-            Node node = queue.poll();
-            Node parent = node.getParent();
-            if (!node.isRoot() && !queue.contains(parent)) {
-                queue.add(parent);
-            }
-
-            if (!node.isRoot()) {
-                double currentScore = initPreds[node.id];
-
-                double addedScore = 0.0;
-                // from parent
-                if (!node.getParent().isRoot()) {
-                    double scoreFromParent = inWeights[node.id].get(node.getParent().id);
-                    addedScore += scoreFromParent * initPreds[node.getParent().id];
-                }
-
-                // from children
-                double maxChildScore = -1;
-                Node maxChild = null;
-                for (Node child : node.getChildren()) {
-                    double childScore = initPreds[child.id];
-                    if (maxChildScore < childScore) {
-                        maxChildScore = childScore;
-                        maxChild = child;
-                    }
-                }
-                if (maxChild != null) {
-                    double weight = inWeights[maxChild.id].get(node.id);
-                    addedScore += maxChildScore * weight;
-                }
-
-                // current score
-                newPreds[node.id] = scale * currentScore + (1 - scale) * addedScore;
-            }
-        }
-
-        if (d < 50) {
-            System.out.println("d = " + d);
-            for (int ll : labels[d]) {
-                System.out.println("TRUE: " + ll
-                        + ". " + nodes[ll].getPathString()
-                        + ". " + labelVocab.get(ll));
-            }
-            System.out.println();
-
-            ArrayList<RankingItem<Integer>> rankTFIDF = MiscUtils.getRankingList(initPreds);
-            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
-                RankingItem<Integer> item = rankTFIDF.get(ii);
-                System.out.println("TFIDF: " + truth(labels[d], item.getObject())
-                        + ". " + item.getObject()
-                        + ". " + nodes[item.getObject()].getPathString()
-                        + ". " + labelVocab.get(item.getObject())
-                        + ". " + item.getPrimaryValue());
-            }
-            System.out.println();
-
-            ArrayList<RankingItem<Integer>> predList = MiscUtils.getRankingList(newPreds);
-            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
-                RankingItem<Integer> item = predList.get(ii);
-                System.out.println("Pred: " + truth(labels[d], item.getObject())
-                        + ". " + item.getObject()
-                        + ". " + nodes[item.getObject()].getPathString()
-                        + ". " + labelVocab.get(item.getObject())
-                        + ". " + item.getPrimaryValue());
-            }
-            System.out.println();
-            System.out.println();
-        }
-
-        return newPreds;
-    }
-
-    public void sampleNewDocumentsDebug(String stateFile,
-            int[][] newWords, int[][] newLabels,
-            String outputResultFile,
-            double[][] initPredictions) {
-        if (verbose) {
-            System.out.println();
-            logln("Perform prediction using model from " + stateFile);
-            logln("--- Test burn-in: " + this.testBurnIn);
-            logln("--- Test max-iter: " + this.testMaxIter);
-            logln("--- Test sample-lag: " + this.testSampleLag);
-        }
-
-        // input model
-        inputModel(stateFile);
-
-        // test data
-        this.words = newWords;
-        this.labels = newLabels;
-        this.D = this.words.length;
-
-        // initialize data structure
-        this.z = new int[D][];
-        this.x = new int[D][];
-        this.docSwitches = new DirMult[D];
-        this.docLabelCounts = new SparseCount[D];
-        this.docMaskes = new Set[D];
-
-        for (int d = 0; d < D; d++) {
-            this.z[d] = new int[words[d].length];
-            this.x[d] = new int[words[d].length];
-            this.docSwitches[d] = new DirMult(
-                    new double[]{hyperparams.get(A_0), hyperparams.get(B_0)});
-            this.docLabelCounts[d] = new SparseCount();
-            this.docMaskes[d] = new HashSet<Integer>();
-
-            Set<Integer> cands = getCandidatesNew(initPredictions[d]);
-            for (int label : cands) {
-                Node node = nodes[label];
-                while (node != null) {
-                    docMaskes[d].add(node.id);
-                    node = node.getParent();
-                }
-            }
-        }
-
-        // debug
-        for (int d = 0; d < 20; d++) {
-            System.out.println("\n\nd = " + d);
-            for (int ll : labels[d]) {
-                System.out.println("TRUE: " + ll
-                        + ". " + nodes[ll].getPathString()
-                        + ". " + labelVocab.get(ll));
-            }
-            System.out.println();
-
-            ArrayList<RankingItem<Integer>> rankTFIDF = MiscUtils.getRankingList(initPredictions[d]);
-            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
-                RankingItem<Integer> item = rankTFIDF.get(ii);
-                System.out.println("TFIDF: " + truth(labels[d], item.getObject())
-                        + ". " + item.getObject()
-                        + ". " + nodes[item.getObject()].getPathString()
-                        + ". " + labelVocab.get(item.getObject())
-                        + ". " + item.getPrimaryValue());
-            }
-            System.out.println();
-
-//        for (int ll : docMaskes[d]) {
-//            System.out.println("Mask: " + ll
-//                    + ". " + nodes[ll].getPathString()
-//                    + ". " + labelVocab.get(ll));
-//        }
-//        System.out.println();
-            double[] predictedScores = new double[L - 1]; // exclude root
-            int count = 0;
-            for (iter = 0; iter < 5; iter++) {
-                for (int n = 0; n < words[d].length; n++) {
-                    if (iter == 0) {
-                        sampleXZMH(d, n, !REMOVE, !ADD, !REMOVE, ADD);
-                    } else {
-                        sampleXZMH(d, n, !REMOVE, !ADD, REMOVE, ADD);
-                    }
-                }
-                for (int ll = 0; ll < L - 1; ll++) {
-                    predictedScores[ll]
-                            += (double) docLabelCounts[d].getCount(ll) / words[d].length;
-                }
-                count++;
-
-//            System.out.println();
-//            System.out.println("iter = " + iter
-//                    + ". " + docSwitches[d].getCount(INSIDE)
-//                    + ". " + docSwitches[d].getCount(OUTSIDE));
-//            for (int k = 0; k < L; k++) {
-//                if (docLabelCounts[d].getCount(k) > 0) {
-//                    System.out.println("--- " + k
-//                            + ". " + nodes[k].getPathString()
-//                            + ". " + labelVocab.get(k)
-//                            + ". " + docLabelCounts[d].getCount(k));
-//                }
-//            }
-            }
-
-            for (int ll = 0; ll < L - 1; ll++) {
-                predictedScores[ll] /= count;
-            }
-            ArrayList<RankingItem<Integer>> predList = MiscUtils.getRankingList(predictedScores);
-            for (int ii = 0; ii < Math.max(labels[d].length, 15); ii++) {
-                RankingItem<Integer> item = predList.get(ii);
-                System.out.println("Pred: " + truth(labels[d], item.getObject())
-                        + ". " + item.getObject()
-                        + ". " + nodes[item.getObject()].getPathString()
-                        + ". " + labelVocab.get(item.getObject())
-                        + ". " + item.getPrimaryValue());
-            }
-        }
-    }
-
-    private boolean truth(int[] ls, int l) {
-        for (int ii = 0; ii < ls.length; ii++) {
-            if (ls[ii] == l) {
-                return true;
-            }
-        }
-        return false;
-    }
     // ******************* End prediction **************************************
-
-    // ******************* Start perplexity ************************************
-    private long sampleXZsExact_test(
-            boolean removeFromModel, boolean addToModel,
-            boolean removeFromData, boolean addToData,
-            ArrayList<Integer>[] trainIndices) {
-        numTokensChange = 0;
-        long sTime = System.currentTimeMillis();
-        for (int d = 0; d < D; d++) {
-            for (int ii = 0; ii < trainIndices[d].size(); ii++) {
-                int n = trainIndices[d].get(ii);
-                sampleXZExact_test(d, ii, n, removeFromModel, addToModel, removeFromData, addToData);
-            }
-        }
-        return System.currentTimeMillis() - sTime;
-    }
-
-    /**
-     * Sample x and z together for a token.
-     *
-     * @param d
-     * @param n
-     * @param removeFromModel
-     * @param addToModel
-     * @param removeFromData
-     * @param addToData
-     */
-    private void sampleXZExact_test(int d, int ii, int n,
-            boolean removeFromModel, boolean addToModel,
-            boolean removeFromData, boolean addToData) {
-        if (removeFromModel) {
-            nodes[z[d][ii]].getContent().decrement(words[d][n]);
-            nodes[z[d][ii]].removeToken(d, n);
-        }
-        if (removeFromData) {
-            docSwitches[d].decrement(x[d][ii]);
-            docLabelCounts[d].decrement(z[d][ii]);
-        }
-
-        double[] logprobs = new double[L];
-        for (int ll = 0; ll < L; ll++) {
-            boolean inside = docMaskes[d].contains(ll);
-            double xLlh;
-            double zLlh;
-            double wLlh = Math.log(nodes[ll].topic[words[d][n]]);
-
-            if (inside) {
-                xLlh = Math.log(docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0));
-                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
-                        / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size()));
-            } else {
-                xLlh = Math.log(docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0));
-                zLlh = Math.log((docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
-                        / (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size())));
-            }
-            logprobs[ll] = xLlh + zLlh + wLlh;
-        }
-        int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
-
-        if (sampledZ != z[d][ii]) {
-            numTokensChange++;
-        }
-        z[d][ii] = sampledZ;
-        if (docMaskes[d].contains(z[d][ii])) {
-            x[d][ii] = INSIDE;
-        } else {
-            x[d][ii] = OUTSIDE;
-        }
-
-        if (addToModel) {
-            nodes[z[d][ii]].getContent().increment(words[d][n]);
-            nodes[z[d][ii]].addToken(d, n);
-        }
-
-        if (addToData) {
-            docSwitches[d].increment(x[d][ii]);
-            docLabelCounts[d].increment(z[d][ii]);
-        }
-    }
-
-    /**
-     * Perform sampling for test documents to compute perplexity.
-     *
-     * @param stateFile File storing the state of a learned model
-     * @param newWords Words of test documents
-     * @param newLabels Labels of test documents
-     */
-    public double computePerplexity(String stateFile,
-            int[][] newWords, int[][] newLabels,
-            ArrayList<Integer>[] trainIndices,
-            ArrayList<Integer>[] testIndices) {
-        if (verbose) {
-            System.out.println();
-            logln("Computing perplexity using model from " + stateFile);
-            logln("--- Test burn-in: " + this.testBurnIn);
-            logln("--- Test max-iter: " + this.testMaxIter);
-            logln("--- Test sample-lag: " + this.testSampleLag);
-        }
-
-        // input model
-        inputModel(stateFile);
-
-        words = newWords;
-        labels = newLabels;
-        D = words.length;
-        docLabelCounts = new SparseCount[D];
-        int numTrainTokens = 0;
-        int numTestTokens = 0;
-
-        for (int d = 0; d < D; d++) {
-            numTokens += words[d].length;
-            numTrainTokens += trainIndices[d].size();
-            numTestTokens += testIndices[d].size();
-        }
-
-        if (verbose) {
-            logln("Test data:");
-            logln("--- D = " + D);
-            logln("--- # tokens = " + numTokens);
-            logln("--- # train tokens = " + numTrainTokens);
-            logln("--- # test tokens = " + numTestTokens);
-        }
-
-        this.z = new int[D][];
-        this.x = new int[D][];
-        this.docSwitches = new DirMult[D];
-        this.docLabelCounts = new SparseCount[D];
-        this.docMaskes = new Set[D];
-        for (int d = 0; d < D; d++) {
-            this.z[d] = new int[trainIndices[d].size()];
-            this.x[d] = new int[trainIndices[d].size()];
-            this.docSwitches[d] = new DirMult(new double[]{hyperparams.get(A_0),
-                hyperparams.get(B_0)});
-            this.docLabelCounts[d] = new SparseCount();
-            this.docMaskes[d] = new HashSet<Integer>();
-            if (labels != null) { // if labels are given during training time
-                updateMaskes(d);
-            }
-        }
-
-        ArrayList<Double> perplexities = new ArrayList<Double>();
-        if (verbose) {
-            logln("--- Sampling on test data ...");
-        }
-        for (iter = 0; iter < testMaxIter; iter++) {
-            if (iter % testSampleLag == 0) {
-                logln("--- --- iter " + iter + "/" + testMaxIter
-                        + " @ thread " + Thread.currentThread().getId());
-            }
-            if (iter == 0) {
-                sampleXZsExact_test(!REMOVE, !ADD, !REMOVE, ADD, trainIndices);
-            } else {
-                sampleXZsExact_test(!REMOVE, !ADD, REMOVE, ADD, trainIndices);
-            }
-
-            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
-                perplexities.add(computePerplexity(testIndices, stateFile + ".perp"));
-            }
-        }
-        double avgPerplexity = StatUtils.mean(perplexities);
-        return avgPerplexity;
-    }
-
-    /**
-     * Compute the perplexity of the current assignments.
-     */
-    private double computePerplexity(ArrayList<Integer>[] testIndices, String outFile) {
-        double totalLogprob = 0.0;
-        int numTestTokens = 0;
-        for (int d = 0; d < D; d++) {
-            numTestTokens += testIndices[d].size();
-        }
-
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(outFile);
-            for (int d = 0; d < D; d++) {
-                double docLogProb = 0.0;
-                for (int n : testIndices[d]) {
-                    double val = 0.0;
-                    for (int ll = 0; ll < L; ll++) {
-                        boolean inside = docMaskes[d].contains(ll);
-                        double pw = nodes[ll].topic[words[d][n]];
-                        double pz;
-                        double px;
-                        if (inside) {
-                            px = (docSwitches[d].getCount(INSIDE) + hyperparams.get(A_0))
-                                    / (docSwitches[d].getCountSum() + hyperparams.get(A_0) + hyperparams.get(B_0));
-                            pz = (docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
-                                    / (docSwitches[d].getCount(INSIDE) + hyperparams.get(ALPHA) * docMaskes[d].size());
-                        } else {
-                            px = (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(B_0))
-                                    / (docSwitches[d].getCountSum() + hyperparams.get(A_0) + hyperparams.get(B_0));
-                            pz = (docLabelCounts[d].getCount(ll) + hyperparams.get(ALPHA))
-                                    / (docSwitches[d].getCount(OUTSIDE) + hyperparams.get(ALPHA) * (L - docMaskes[d].size()));
-                        }
-                        val += pw * pz * px;
-                    }
-                    docLogProb += Math.log(val);
-                }
-                totalLogprob += docLogProb;
-                writer.write(d
-                        + "\t" + words[d].length
-                        + "\t" + testIndices[d].size()
-                        + "\t" + docLogProb + "\n");
-            }
-            writer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException();
-        }
-        double perplexity = Math.exp(-totalLogprob / numTestTokens);
-        return perplexity;
-    }
-
-    /**
-     * Static method to compute perplexity using multiple chains, each
-     * corresponds to using a learned model during training.
-     *
-     * @param newWords Words of test documents
-     * @param newLabels Labels of test documents
-     * @param iterPerplexityFolder Perplexity folder
-     * @param sampler The sample to propagate its configurations to multiple
-     * parallel samplers
-     */
-    public static void parallelPerplexity(int[][] newWords,
-            int[][] newLabels,
-            ArrayList<Integer>[] trainIndices,
-            ArrayList<Integer>[] testIndices,
-            File iterPerplexityFolder,
-            File resultFolder,
-            L2H sampler) {
-        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder not found. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-        try {
-            IOUtils.createFolder(iterPerplexityFolder);
-            ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-
-                File stateFile = new File(reportFolder, filename);
-                File partialResultFile = new File(iterPerplexityFolder,
-                        IOUtils.removeExtension(filename) + ".txt");
-                L2HPerplexityRunner runner = new L2HPerplexityRunner(sampler,
-                        newWords, newLabels, trainIndices, testIndices,
-                        stateFile.getAbsolutePath(),
-                        partialResultFile.getAbsolutePath());
-                Thread thread = new Thread(runner);
-                threads.add(thread);
-            }
-
-            // run MAX_NUM_PARALLEL_THREADS threads at a time
-            runThreads(threads);
-
-            // summarize multiple perplexities
-            String[] ppxFiles = iterPerplexityFolder.list();
-            ArrayList<Double> ppxs = new ArrayList<Double>();
-            for (String ppxFile : ppxFiles) {
-                double ppx = IOUtils.inputPerplexity(new File(iterPerplexityFolder, ppxFile));
-                ppxs.add(ppx);
-            }
-
-            // averaging
-            File ppxResultFile = new File(resultFolder, PerplexityFile);
-            IOUtils.outputPerplexities(ppxResultFile, ppxs);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while computing perplexity parallel test.");
-        }
-    }
-    // ******************* End perplexity **************************************
-
-    /**
-     * Compute topic coherence.
-     */
-    public double[][] computeAvgTopicCoherence(File file,
-            MimnoTopicCoherence topicCoherence) {
-        if (this.wordVocab == null) {
-            throw new RuntimeException("The word vocab has not been assigned yet");
-        }
-
-        if (verbose) {
-            logln("Outputing averaged topic coherence to file " + file);
-        }
-
-        File reportFolder = new File(getSamplerFolderPath(), ReportFolder);
-        if (!reportFolder.exists()) {
-            throw new RuntimeException("Report folder does not exist. " + reportFolder);
-        }
-        String[] filenames = reportFolder.list();
-        double[][] avgTopics = new double[L][V];
-        try {
-            BufferedWriter writer = IOUtils.getBufferedWriter(file.getAbsolutePath() + ".iter");
-            writer.write("Iteration");
-            for (int k = 0; k < L; k++) {
-                writer.write("\tTopic_" + k);
-            }
-            writer.write("\n");
-
-            // partial score
-            ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-                if (!filename.contains("zip")) {
-                    continue;
-                }
-                inputModel(new File(reportFolder, filename).getAbsolutePath());
-                double[][] pointTopics = new double[L][V];
-
-                writer.write(filename);
-                for (int k = 0; k < L; k++) {
-                    pointTopics[k] = nodes[k].topic;
-                    int[] topic = SamplerUtils.getSortedTopic(pointTopics[k]);
-                    double score = topicCoherence.getCoherenceScore(topic);
-
-                    writer.write("\t" + score);
-                }
-                writer.write("\n");
-                aggTopics.add(pointTopics);
-            }
-
-            // averaging
-            writer.write("Average");
-            ArrayList<Double> scores = new ArrayList<Double>();
-            for (int k = 0; k < L; k++) {
-                double[] avgTopic = new double[V];
-                for (int v = 0; v < V; v++) {
-                    for (int ii = 0; ii < aggTopics.size(); ii++) {
-                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
-                    }
-                }
-                int[] topic = SamplerUtils.getSortedTopic(avgTopic);
-                double score = topicCoherence.getCoherenceScore(topic);
-                writer.write("\t" + score);
-                if (!nodes[k].isRoot()) {
-                    scores.add(score);
-                }
-                avgTopics[k] = avgTopic;
-            }
-            writer.write("\n");
-            writer.close();
-
-            // output aggregated topic coherence scores
-            IOUtils.outputTopicCoherences(file, scores);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while sampling during test time.");
-        }
-        return avgTopics;
-    }
 
     class Node extends TreeNode<Node, SparseCount> {
 
@@ -3200,54 +2019,6 @@ public class L2H extends AbstractSampler {
                     .append(", #o = ").append(getContent().getCountSum())
                     .append("]");
             return str.toString();
-        }
-    }
-}
-
-class L2HPerplexityRunner implements Runnable {
-
-    L2H sampler;
-    int[][] newWords;
-    int[][] newLabels;
-    ArrayList<Integer>[] trainIndices;
-    ArrayList<Integer>[] testIndices;
-    String stateFile;
-    String outputFile;
-
-    public L2HPerplexityRunner(L2H sampler,
-            int[][] newWords,
-            int[][] newLabels,
-            ArrayList<Integer>[] trainIndices,
-            ArrayList<Integer>[] testIndices,
-            String stateFile,
-            String outputFile) {
-        this.sampler = sampler;
-        this.newWords = newWords;
-        this.newLabels = newLabels;
-        this.trainIndices = trainIndices;
-        this.testIndices = testIndices;
-        this.stateFile = stateFile;
-        this.outputFile = outputFile;
-    }
-
-    @Override
-    public void run() {
-        L2H testSampler = new L2H();
-        testSampler.setVerbose(true);
-        testSampler.setDebug(false);
-        testSampler.setLog(false);
-        testSampler.setReport(false);
-        testSampler.configure(sampler);
-        testSampler.setTestConfigurations(sampler.getBurnIn(),
-                sampler.getMaxIters(), sampler.getSampleLag());
-
-        try {
-            double perplexity = testSampler.computePerplexity(stateFile,
-                    newWords, newLabels, trainIndices, testIndices);
-            IOUtils.outputPerplexity(outputFile, perplexity);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException();
         }
     }
 }
