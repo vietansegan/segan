@@ -360,12 +360,8 @@ public class L2H extends AbstractSampler {
                     if (ii == jj) {
                         continue;
                     }
-                    Double weight = this.inWeights[docLabels[jj]].get(docLabels[ii]);
-                    if (weight == null) {
-                        this.inWeights[docLabels[jj]].set(docLabels[ii], 1.0);
-                    } else {
-                        this.inWeights[docLabels[jj]].set(docLabels[ii], weight + 1.0);
-                    }
+                    double weight = this.inWeights[docLabels[jj]].get(docLabels[ii]);
+                    this.inWeights[docLabels[jj]].set(docLabels[ii], weight + 1.0);
                 }
             }
         }
@@ -545,13 +541,13 @@ public class L2H extends AbstractSampler {
             // store model
             if (report && iter > BURN_IN && iter % LAG == 0) {
                 outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
-//                outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
+                outputGlobalTree(new File(reportFolderPath, getIteratedTopicFile()), 20);
             }
         }
 
         if (report) {
             outputState(new File(reportFolderPath, getIteratedStateFile()), true, false);
-//            outputTopicTopWords(new File(reportFolderPath, getIteratedTopicFile()), 20);
+            outputGlobalTree(new File(reportFolderPath, getIteratedTopicFile()), 20);
         }
 
         float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
@@ -650,29 +646,6 @@ public class L2H extends AbstractSampler {
                             + proposeParent.getLevel());
                 }
 
-//                if (verbose && debug) {
-//                    logln("Accept. iter = " + iter
-//                            + ". ratio: " + mhRatio
-//                            + ". node " + node.toString()
-//                            + ". " + labelVocab.get(node.id));
-//                    logln("Old parent: " + currentParent.toString() + ". " + labelVocab.get(currentParent.id));
-//                    logln("New parent: " + proposeParent.toString() + ". " + labelVocab.get(proposeParent.id));
-//                    String[] nodeTopWords = getTopWords(node.topic, 15);
-//                    String[] curParentTopWords = getTopWords(currentParent.topic, 15);
-//                    String[] newParentTopWords = getTopWords(proposeParent.topic, 15);
-//                    System.out.println("Node: " + MiscUtils.arrayToString(nodeTopWords));
-//                    System.out.println("Cur parent: " + MiscUtils.arrayToString(curParentTopWords));
-//                    System.out.println("New parent: " + MiscUtils.arrayToString(newParentTopWords));
-//                    logln("Current: " + MiscUtils.formatDouble(curPhiLogprob)
-//                            + ". " + MiscUtils.formatDouble(curXLogprob)
-//                            + ". " + MiscUtils.formatDouble(curZLogprob)
-//                            + ". " + MiscUtils.formatDouble(curLogprob));
-//                    logln("Propose: " + MiscUtils.formatDouble(newPhiLogprob)
-//                            + ". " + MiscUtils.formatDouble(newXLogprob)
-//                            + ". " + MiscUtils.formatDouble(newZLogprob)
-//                            + ". " + MiscUtils.formatDouble(newLogprob));
-//                    System.out.println();
-//                }
                 // remove current switch assignments
                 for (int d : subtreeDocs) {
                     docMaskes[d] = proposedMasks.get(d);
@@ -819,22 +792,6 @@ public class L2H extends AbstractSampler {
                 n = n.getParent();
             }
         }
-
-        // debug
-//        System.out.println("\n");
-//        for (int ll : labels[d]) {
-//            System.out.println("label: " + nodes[ll].toString());
-//        }
-//        System.out.println("Subtree root: " + subtreeRoot + ". " + nodes[subtreeRoot].toString());
-//        System.out.println("Propose parent: " + proposedParent.toString());
-//        for (int ii : subtree) {
-//            System.out.println("--- subtree node: " + nodes[ii].toString());
-//        }
-//
-//        System.out.println("Proposed mask");
-//        for (int ii : ppMask) {
-//            System.out.println(">>> ppm node: " + nodes[ii].toString());
-//        }
         return ppMask;
     }
 
@@ -868,26 +825,6 @@ public class L2H extends AbstractSampler {
         }
         int sampledIdx = SamplerUtils.scaleSample(candWeights);
         Node sampledNode = candNodes.get(sampledIdx);
-
-        // debug
-//        int ll = node.id;
-//        System.out.println("ll = " + ll
-//                + "\t size: " + candNodes.size()
-//                + "\t" + nodes[ll].toString()
-//                + "\t" + labelVocab.get(ll)
-//                + "\tcurpar: " + labelVocab.get(nodes[ll].getParent().id)
-//                + "\t" + inWeights[node.id].get(nodes[ll].getParent().id));
-//        for (int ii = 0; ii < candNodes.size(); ii++) {
-//            System.out.println("cand " + ii
-//                    + "\t" + candNodes.get(ii).toString()
-//                    + "\t" + candWeights.get(ii)
-//                    + "\t" + labelVocab.get(candNodes.get(ii).id));
-//        }
-//        System.out.println(">>> sampledIdx: " + sampledIdx
-//                + "\t" + sampledNode.toString()
-//                + "\t" + labelVocab.get(sampledNode.id)
-//                + "\t" + candWeights.get(sampledIdx));
-//        System.out.println();
         return sampledNode;
     }
 
@@ -1038,8 +975,8 @@ public class L2H extends AbstractSampler {
         }
         z[d][n] = pZ;
         x[d][n] = pX;
-        // accept or reject
 
+        // accept or reject
         if (docMaskes[d].contains(z[d][n])) {
             x[d][n] = INSIDE;
         } else {

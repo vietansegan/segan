@@ -129,6 +129,15 @@ public class LDA extends AbstractSampler {
     }
 
     /**
+     * Return the learned distribution over topics for each document.
+     *
+     * @return
+     */
+    public DirMult[] getDocTopics() {
+        return this.docTopics;
+    }
+
+    /**
      * Set training data.
      *
      * @param docWords All documents

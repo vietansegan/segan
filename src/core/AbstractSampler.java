@@ -75,6 +75,7 @@ public abstract class AbstractSampler implements Serializable {
     protected int testBurnIn = 50;
     protected int testMaxIter = 100;
     protected int testSampleLag = 5;
+    protected int testRepInterval = 5;
     protected String folder;
     protected String name;
     protected String basename;
@@ -128,6 +129,16 @@ public abstract class AbstractSampler implements Serializable {
             this.testBurnIn = tBurnIn;
             this.testMaxIter = tMaxIter;
             this.testSampleLag = tSampleLag;
+        }
+    }
+
+    public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag,
+            int tRepInt) {
+        if (tMaxIter < this.testMaxIter) {
+            this.testBurnIn = tBurnIn;
+            this.testMaxIter = tMaxIter;
+            this.testSampleLag = tSampleLag;
+            this.testRepInterval = tRepInt;
         }
     }
 

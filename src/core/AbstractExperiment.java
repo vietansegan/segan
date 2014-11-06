@@ -33,6 +33,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
     public static final String TRAIN_POSFIX = "_tr";
     public static final String DEV_POSFIX = "_de";
     public static final String TEST_POSFIX = "_te";
+    public static final String PARALLEL_POSFIX = "_p";
     public static final String RESULT_FOLDER = "result";
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";

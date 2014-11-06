@@ -54,6 +54,10 @@ public abstract class AbstractDiscreteFiniteLikelihoodModel
         return m;
     }
 
+    public void clear() {
+        this.observations = new SparseCount();
+    }
+
     public boolean isEmpty() {
         return this.observations.isEmpty();
     }

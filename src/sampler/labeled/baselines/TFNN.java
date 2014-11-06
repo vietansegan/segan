@@ -3,6 +3,7 @@ package sampler.labeled.baselines;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.zip.ZipEntry;
@@ -106,7 +107,7 @@ public class TFNN {
         SparseVector docVector = new SparseVector();
         for (int idx : typeCount.getIndices()) {
             double score = (double) typeCount.getCount(idx) / newWords.length;
-            docVector.set(idx + 1, score);
+            docVector.set(idx, score); // index used to start at 1
         }
 
         return docVector;
@@ -249,7 +250,7 @@ public class TFNN {
             for (int ll = 0; ll < L; ll++) {
                 labelL2Norms[ll] = labelVectors[ll].getL2Norm();
             }
-        } catch (Exception e) {
+        } catch (IOException | NumberFormatException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while inputing predictor from "
                     + predictorFile);
@@ -283,7 +284,7 @@ public class TFNN {
                 writer.write("\n\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing top words to "
                     + outputFile);

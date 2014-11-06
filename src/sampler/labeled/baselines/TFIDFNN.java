@@ -95,7 +95,7 @@ public class TFIDFNN {
             double tf = Math.log(typeCount.getCount(idx) + 1);
             double idf = idfs[idx];
             double tfidf = tf * idf;
-            docVector.set(idx + 1, tfidf); // index starts with 1
+            docVector.set(idx, tfidf); // index starts with 0 instead of 1
         }
 
         return docVector;
@@ -156,6 +156,25 @@ public class TFIDFNN {
         }
 
         computeLabelL2Norms();
+
+        // debug
+        for (int dd = 0; dd < words.length; dd++) {
+            for (int nn = 0; nn < words[dd].length; nn++) {
+                if (words[dd][nn] == V) {
+                    throw new RuntimeException("dd = " + dd
+                            + ". nn = " + nn);
+                }
+            }
+        }
+
+        // debug
+        for (int ll = 0; ll < L; ll++) {
+            for (int vv : labelVectors[ll].getIndices()) {
+                if (vv == V) {
+                    throw new RuntimeException("ll = " + ll + "\t" + vv);
+                }
+            }
+        }
     }
 
     protected void computeLabelL2Norms() {

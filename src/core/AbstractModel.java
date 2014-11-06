@@ -12,10 +12,9 @@ import util.evaluation.Measurement;
  *
  * @author vietan
  */
-public abstract class AbstractModel {
+public abstract class AbstractModel extends AbstractRunner {
 
     protected String name;
-    protected boolean verbose = true;
 
     public AbstractModel() {
     }
@@ -35,14 +34,6 @@ public abstract class AbstractModel {
     public abstract void output(File modelFile);
 
     public abstract void input(File modelFile);
-
-    public static void log(String msg) {
-        System.out.print("[LOG] " + msg);
-    }
-
-    public static void logln(String msg) {
-        System.out.println("[LOG] " + msg);
-    }
 
     public static void outputPerformances(File perfFile, ArrayList<Measurement> measurements) {
         System.out.println("Outputing performances to " + perfFile);
