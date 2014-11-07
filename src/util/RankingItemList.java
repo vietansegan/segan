@@ -12,7 +12,7 @@ import java.util.Set;
 
 public class RankingItemList<A> {
 
-    private ArrayList<RankingItem<A>> rankingItems;
+    private final ArrayList<RankingItem<A>> rankingItems;
 
     public RankingItemList() {
         this.rankingItems = new ArrayList<RankingItem<A>>();
@@ -20,6 +20,10 @@ public class RankingItemList<A> {
 
     public RankingItemList(ArrayList<RankingItem<A>> rankingItems) {
         this.rankingItems = rankingItems;
+    }
+
+    public void addRankingItem(A item, double value) {
+        this.rankingItems.add(new RankingItem<A>(item, value));
     }
 
     public void addRankingItem(RankingItem<A> rankingItem) {
