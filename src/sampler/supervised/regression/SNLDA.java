@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Stack;
 import optimization.RidgeLinearRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
@@ -24,6 +25,7 @@ import sampling.util.TreeNode;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
+import util.MismatchRuntimeException;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
@@ -835,6 +837,54 @@ public class SNLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
         }
+        
+        // model string
+        StringBuilder modelStr = new StringBuilder();
+        Stack<Node> stack = new Stack<>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            modelStr.append(Integer.toString(node.born)).append("\n");
+            modelStr.append(node.getPathString()).append("\n");
+            modelStr.append(node.eta).append("\n");
+            modelStr.append(node.pi).append("\n");
+            modelStr.append(SparseCount.output(node.tokenCounts)).append("\n");
+            modelStr.append(SparseCount.output(node.subtreeTokenCounts)).append("\n");
+            if (node.theta != null) {
+                modelStr.append(MiscUtils.arrayToString(node.theta));
+            }
+            modelStr.append("\n");
+            modelStr.append(DirMult.output(node.getContent())).append("\n");
+            for (Node child : node.getChildren()) {
+                stack.add(child);
+            }
+        }
+
+        // assignment string
+        StringBuilder assignStr = new StringBuilder();
+        for (int dd = 0; dd < z.length; dd++) {
+            for (int nn = 0; nn < z[dd].length; nn++) {
+                assignStr.append(dd)
+                        .append("\t").append(nn)
+                        .append("\t").append(z[dd][nn].getPathString()).append("\n");
+            }
+        }
+
+        try { // output to a compressed file
+            ArrayList<String> contentStrs = new ArrayList<>();
+            contentStrs.add(modelStr.toString());
+            contentStrs.add(assignStr.toString());
+
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(filepath));
+            ArrayList<String> entryFiles = new ArrayList<>();
+            entryFiles.add(filename + ModelFileExt);
+            entryFiles.add(filename + AssignmentFileExt);
+
+            this.outputZipFile(filepath, contentStrs, entryFiles);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + filepath);
+        }
     }
 
     @Override
@@ -842,6 +892,139 @@ public class SNLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Reading state from " + filepath);
         }
+        try {
+            inputModel(filepath);
+            inputAssignments(filepath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing from " + filepath);
+        }
+    }
+    
+    public void inputModel(String zipFilepath) {
+        if (verbose) {
+            logln("--- --- Loading model from " + zipFilepath);
+        }
+        try {
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
+            HashMap<String, Node> nodeMap = new HashMap<String, Node>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int born = Integer.parseInt(line);
+                String pathStr = reader.readLine();
+                double eta = Double.parseDouble(reader.readLine());
+                double pi = Double.parseDouble(reader.readLine());
+                SparseCount tokenCounts = SparseCount.input(reader.readLine());
+                SparseCount subtreeTokenCounts = SparseCount.input(reader.readLine());
+                line = reader.readLine().trim();
+                double[] theta = null;
+                if (!line.isEmpty()) {
+                    theta = MiscUtils.stringToDoubleArray(line);
+                }
+                DirMult topic = DirMult.input(reader.readLine());
+
+                // create node
+                int lastColonIndex = pathStr.lastIndexOf(":");
+                Node parent = null;
+                if (lastColonIndex != -1) {
+                    parent = nodeMap.get(pathStr.substring(0, lastColonIndex));
+                }
+                String[] pathIndices = pathStr.split(":");
+                int nodeIndex = Integer.parseInt(pathIndices[pathIndices.length - 1]);
+                int nodeLevel = pathIndices.length - 1;
+
+                Node node = new Node(born, nodeIndex, nodeLevel, topic, parent, eta);
+                node.pi = pi;
+                node.theta = theta;
+                node.tokenCounts = tokenCounts;
+                node.subtreeTokenCounts = subtreeTokenCounts;
+                node.setPhiHat(topic.getDistribution());
+
+                if (node.getLevel() == 0) {
+                    root = node;
+                }
+                if (parent != null) {
+                    parent.addChild(node.getIndex(), node);
+                }
+                nodeMap.put(pathStr, node);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading model from "
+                    + zipFilepath);
+        }
+    }
+    
+    /**
+     * Input a set of assignments.
+     *
+     * @param zipFilepath Compressed learned state file
+     */
+    public void inputAssignments(String zipFilepath) {
+        if (verbose) {
+            logln("--- --- Loading assignments from " + zipFilepath);
+        }
+        try {
+            z = new Node[D][];
+            for (int d = 0; d < D; d++) {
+                z[d] = new Node[words[d].length];
+            }
+
+            String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
+            BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + AssignmentFileExt);
+            for (int dd = 0; dd < z.length; dd++) {
+                for (int nn = 0; nn < z[dd].length; nn++) {
+                    String[] sline = reader.readLine().split("\t");
+                    if (dd != Integer.parseInt(sline[0])) {
+                        throw new MismatchRuntimeException(Integer.parseInt(sline[0]), dd);
+                    }
+                    if (nn != Integer.parseInt(sline[1])) {
+                        throw new MismatchRuntimeException(Integer.parseInt(sline[1]), nn);
+                    }
+                    String pathStr = sline[2];
+                    z[dd][nn] = getNode(pathStr);
+                }
+            }
+
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading assignments from "
+                    + zipFilepath);
+        }
+    }
+    
+    /**
+     * Parse the node path string.
+     *
+     * @param nodePath The node path string
+     * @return
+     */
+    public int[] parseNodePath(String nodePath) {
+        String[] ss = nodePath.split(":");
+        int[] parsedPath = new int[ss.length];
+        for (int i = 0; i < ss.length; i++) {
+            parsedPath[i] = Integer.parseInt(ss[i]);
+        }
+        return parsedPath;
+    }
+
+    /**
+     * Get a node in the tree given a parsed path
+     *
+     * @param parsedPath The parsed path
+     */
+    private Node getNode(int[] parsedPath) {
+        Node node = root;
+        for (int i = 1; i < parsedPath.length; i++) {
+            node = node.getChild(parsedPath[i]);
+        }
+        return node;
+    }
+
+    private Node getNode(String pathStr) {
+        return getNode(parseNodePath(pathStr));
     }
 
     /**
@@ -1065,6 +1248,9 @@ public class SNLDA extends AbstractSampler {
         protected double[] theta;
         protected double pi;
         protected double eta;
+        
+        // estimated topics after training, which is used for test
+        protected double[] phihat;
 
         public Node(int iter, int index, int level, DirMult content, Node parent,
                 double eta) {
@@ -1084,9 +1270,23 @@ public class SNLDA extends AbstractSampler {
             this.theta = new double[KK];
             Arrays.fill(this.theta, 1.0 / KK);
         }
+        
+        void setPhiHat(double[] ph) {
+            this.phihat = ph;
+        }
 
+        /**
+         * Get the probability of a word type given this node. During training,
+         * this probability is computed on-the-fly using counts and
+         * pseudo-counts. During test, it comes from the learned distribution.
+         *
+         * @param v word type
+         */
         double getPhi(int v) {
-            return getContent().getProbability(v);
+            if (this.phihat == null) {
+                return getContent().getProbability(v);
+            }
+            return phihat[v];
         }
 
         boolean isEmpty() {

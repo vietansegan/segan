@@ -244,6 +244,24 @@ public abstract class AbstractSampler implements Serializable {
         writer.close();
     }
 
+    protected void outputZipFile(String filepath,
+            ArrayList<String> contentStrs,
+            ArrayList<String> entryFiles) throws Exception {
+        if (contentStrs.size() != entryFiles.size()) {
+            throw new RuntimeException("Mismatch");
+        }
+        
+        ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
+        for (int ii = 0; ii < contentStrs.size(); ii++) {
+            ZipEntry modelEntry = new ZipEntry(entryFiles.get(ii));
+            writer.putNextEntry(modelEntry);
+            byte[] data = contentStrs.get(ii).getBytes();
+            writer.write(data, 0, data.length);
+            writer.closeEntry();
+        }
+        writer.close();
+    }
+
     public ArrayList<String> getWordVocab() {
         return this.wordVocab;
     }

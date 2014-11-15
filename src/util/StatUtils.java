@@ -3,6 +3,7 @@ package util;
 import java.util.ArrayList;
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
 import sampling.util.SparseCount;
+import util.normalizer.MinMaxNormalizer;
 
 /**
  *
@@ -16,6 +17,103 @@ public class StatUtils {
     public static final double c4 = 1.0 / 120;
     public static final double c6 = -1.0 / 252;
     private static final PearsonsCorrelation corr = new PearsonsCorrelation();
+
+    /**
+     * Scale the values of each feature to the range [0,1] and return the
+     * maximum value of each feature in the training data. Note that this only
+     * applies to positive feature values.
+     *
+     * Note the values of the training data should be positive.
+     *
+     * @param data Training data in a sparse format
+     * @param numFeatures Number of features
+     * @return An array storing the maximum value of each feature
+     */
+    public static double[] scaleTrainingData(SparseVector[] data, int numFeatures) {
+        int D = data.length;
+        double[] maxVals = new double[numFeatures];
+        for (int ii = 1; ii <= numFeatures; ii++) {
+            double maxVal = 0.0;
+            for (int d = 0; d < D; d++) {
+                Double val = data[d].get(ii);
+                if (val != null && val > maxVal) {
+                    maxVal = val;
+                }
+            }
+
+            // scale
+            for (int d = 0; d < D; d++) {
+                Double val = data[d].get(ii);
+                if (val != null) {
+                    data[d].set(ii, val / maxVal);
+                }
+            }
+
+            // store max value for each feature
+            maxVals[ii - 1] = maxVal;
+        }
+        return maxVals;
+    }
+
+    public static MinMaxNormalizer[] minmaxNormalizeTrainingData(
+            SparseVector[] data, int numFeats) {
+        int D = data.length;
+        MinMaxNormalizer[] norms = new MinMaxNormalizer[numFeats];
+        for (int ii = 0; ii < numFeats; ii++) {
+            double[] featVals = new double[D];
+            for (int dd = 0; dd < D; dd++) {
+                featVals[dd] = data[dd].get(ii);
+            }
+
+            if (min(featVals) == max(featVals)) {
+                norms[ii] = null;
+                continue;
+            }
+
+            norms[ii] = new MinMaxNormalizer(featVals, 0.0, 1.0);
+
+            // scale
+            double[] normVal = norms[ii].normalize(featVals);
+            for (int dd = 0; dd < D; dd++) {
+                data[dd].set(ii, normVal[dd]);
+            }
+        }
+        return norms;
+    }
+
+    /**
+     * Scale the value of the test data using the list of maximum values
+     * obtained from the training data. Note that this only applies to positive
+     * feature values.
+     *
+     * @param data Test data in a sparse format
+     * @param maxVals Array storing the maximum value of each feature in the
+     * training data
+     */
+    public static void scaleTestData(SparseVector[] data, double[] maxVals) {
+        for (SparseVector vec : data) {
+            for (int ii : vec.getIndices()) {
+                double maxVal = maxVals[ii - 1];
+                if (maxVal == 0) {
+                    vec.set(ii, 0.0);
+                } else {
+                    vec.set(ii, vec.get(ii) / maxVal);
+                }
+            }
+        }
+    }
+
+    public static void minmaxNormalizeTestData(SparseVector[] data, MinMaxNormalizer[] norms) {
+        for (int ii = 0; ii < norms.length; ii++) {
+            if (norms[ii] == null) {
+                continue;
+            }
+            for (int dd = 0; dd < data.length; dd++) {
+                double oriVal = data[dd].get(ii);
+                data[dd].set(ii, norms[ii].normalize(oriVal));
+            }
+        }
+    }
 
     public static double getL2Norm(double[] vector) {
         double sumSquare = 0.0;
@@ -125,6 +223,9 @@ public class StatUtils {
 
     /**
      * Compute the value of digamma function
+     *
+     * @param x
+     * @return
      */
     public static double digamma(double x) {
         double y, y2, sum = 0;
@@ -138,6 +239,10 @@ public class StatUtils {
 
     /**
      * Compute digamma difference
+     *
+     * @param x
+     * @param d
+     * @return
      */
     public static double digammaDiff(double x, int d) {
         double sum = 0;
@@ -161,6 +266,9 @@ public class StatUtils {
     /**
      * Compute the value of trigamma function See:
      * http://www.jstor.org/stable/2346249
+     *
+     * @param x
+     * @return
      */
     public static double trigamma(double x) {
         if (x < L1) {
@@ -176,6 +284,10 @@ public class StatUtils {
 
     /**
      * Compute trigamma difference
+     *
+     * @param x
+     * @param d
+     * @return
      */
     public static double trigammaDiff(double x, int d) {
         int tcutoff = 10;
@@ -441,6 +553,10 @@ public class StatUtils {
 
     /**
      * JS divergence
+     *
+     * @param p1
+     * @param p2
+     * @return
      */
     public static double JSDivergence(double[] p1, double[] p2) {
         double[] p = new double[p1.length];
@@ -465,6 +581,10 @@ public class StatUtils {
 
     /**
      * Asymmetric KL divergence
+     *
+     * @param p1
+     * @param p2
+     * @return
      */
     public static double KLDivergenceAsymmetric(double[] p1, double[] p2) {
         assert (p1.length == p2.length);
@@ -483,6 +603,10 @@ public class StatUtils {
 
     /**
      * Symmetric KL divergence
+     *
+     * @param dist_1
+     * @param dist_2
+     * @return
      */
     public static double KLDivergenceSymmetric(double[] dist_1, double[] dist_2) {
         double a_kl_12 = KLDivergenceAsymmetric(dist_1, dist_2);
@@ -492,6 +616,9 @@ public class StatUtils {
 
     /**
      * Normalize to a distribution in which the sum of all the elements is 1
+     *
+     * @param values
+     * @return
      */
     public static double[] normalize(double[] values) {
         double sum = sum(values);
@@ -504,6 +631,9 @@ public class StatUtils {
 
     /**
      * Compute the entropy of a discrete distribution
+     *
+     * @param distribution
+     * @return
      */
     public static double entropy(double[] distribution) {
         double entropy = 0;

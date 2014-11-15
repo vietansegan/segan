@@ -14,6 +14,8 @@ import java.util.TreeSet;
  * The content of the node can be any object.
  *
  * @author vietan
+ * @param <N>
+ * @param <C>
  */
 public class TreeNode<N extends TreeNode, C>
         implements Comparable<TreeNode<N, C>>, Serializable {
@@ -58,7 +60,7 @@ public class TreeNode<N extends TreeNode, C>
 
         this.inactiveChildren = new TreeSet<Integer>();
         for (int i = 0; i < maxChildIndex; i++) {
-            if (!isChild(i)) {
+            if (!hasChild(i)) {
                 this.inactiveChildren.add(i);
             }
         }
@@ -96,7 +98,7 @@ public class TreeNode<N extends TreeNode, C>
      * @param childIndex The index of the child node to be removed
      */
     public void removeChild(int childIndex) {
-        if (!this.isChild(childIndex)) {
+        if (!this.hasChild(childIndex)) {
             throw new RuntimeException("Child " + childIndex + " does not exist. "
                     + "In node " + this.toString());
         }
@@ -106,6 +108,7 @@ public class TreeNode<N extends TreeNode, C>
 
     /**
      * Get the next available child index
+     * @return 
      */
     public int getNextChildIndex() {
         if (this.inactiveChildren.isEmpty()) {
@@ -116,6 +119,7 @@ public class TreeNode<N extends TreeNode, C>
 
     /**
      * Return the unique path string for each node in the tree
+     * @return 
      */
     public String getPathString() {
         if (this.isRoot()) {
@@ -147,7 +151,7 @@ public class TreeNode<N extends TreeNode, C>
         return this.children.isEmpty();
     }
 
-    public boolean isChild(int childIndex) {
+    public boolean hasChild(int childIndex) {
         return this.children.containsKey(childIndex);
     }
 

@@ -3158,7 +3158,7 @@ public class SHLDAOld extends AbstractSampler implements Regressor<ResponseTextD
             }
 
             for (int i = 0; i < maxChildIndex; i++) {
-                if (!inactiveChildren.contains(i) && !isChild(i)) {
+                if (!inactiveChildren.contains(i) && !hasChild(i)) {
                     throw new RuntimeException(msg + ". Child inactive indices"
                             + " have not been updated. Node: " + this.toString()
                             + ". Index " + i + " is neither active nor inactive");
