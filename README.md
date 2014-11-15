@@ -108,6 +108,12 @@ Example cmd:
 ```
 java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SNLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/model-supervised  --Ks 15,4 --burnIn 50 --maxIter 100 --sampleLag 25 --report 5 --init random --alphas 0.1,0.1 --betas 1.0,0.5,0.1 --gamma-means 0.2,0.2 --gamma-scales 100,10 --rho 1.0 --mu 0.0 --sigma 2.5 -v -d -z
 ```
+- `Ks`: The branching factors of the hierarchy. Default: [15, 4], i.e., the root node has 15 children nodes and each 1st-level node has 4 children nodes. This will given a tree of L=3 levels.
+- `alphas`: Dirichlet parameters of distribution over children nodes at each level. Default: [0.1, 0.1]. Array length = L-1.
+- `betas`: Dirichlet parameters of topics at each level. Default: [1.0, 0.5, 0.1]. Array length = L.
+- `gamma-means`: Means of the Beta priors at each level, specifying the prior probability that a token will stay at the current node. Default: [0.2, 0.2]. Array length = L-1.
+- `gamma-scales`: Scales of the Beta priors. Default: [100, 10]. Array length = L-1.
+- `rho`, `mu` and `signa` are similar to those in SLDA.
 
 # Binary SLDA
 SLDA for a set of documents, each of which is associated with a binary response variable (0 or 1). 
