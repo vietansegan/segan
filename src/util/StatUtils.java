@@ -3,7 +3,9 @@ package util;
 import java.util.ArrayList;
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
 import sampling.util.SparseCount;
+import util.normalizer.AbstractNormalizer;
 import util.normalizer.MinMaxNormalizer;
+import util.normalizer.ZNormalizer;
 
 /**
  *
@@ -55,16 +57,24 @@ public class StatUtils {
         return maxVals;
     }
 
+    /**
+     * Obtain min-max normalizers from training data.
+     *
+     * @param data Training data from which the normalizers are obtained
+     * @param numFeatures Number of features
+     * @return
+     */
     public static MinMaxNormalizer[] minmaxNormalizeTrainingData(
-            SparseVector[] data, int numFeats) {
+            SparseVector[] data, int numFeatures) {
         int D = data.length;
-        MinMaxNormalizer[] norms = new MinMaxNormalizer[numFeats];
-        for (int ii = 0; ii < numFeats; ii++) {
+        MinMaxNormalizer[] norms = new MinMaxNormalizer[numFeatures];
+        for (int ii = 0; ii < numFeatures; ii++) {
             double[] featVals = new double[D];
             for (int dd = 0; dd < D; dd++) {
                 featVals[dd] = data[dd].get(ii);
             }
 
+            // skip uninformed feature
             if (min(featVals) == max(featVals)) {
                 norms[ii] = null;
                 continue;
@@ -76,6 +86,40 @@ public class StatUtils {
             double[] normVal = norms[ii].normalize(featVals);
             for (int dd = 0; dd < D; dd++) {
                 data[dd].set(ii, normVal[dd]);
+            }
+        }
+        return norms;
+    }
+
+    /**
+     * Obtain z-normalizers from training data.
+     *
+     * @param data
+     * @param numFeatures
+     * @return
+     */
+    public static ZNormalizer[] zNormalizeTrainingData(SparseVector[] data,
+            int numFeatures) {
+        int D = data.length;
+        ZNormalizer[] norms = new ZNormalizer[numFeatures];
+        for (int ii = 0; ii < numFeatures; ii++) {
+            double[] featVals = new double[D];
+            for (int dd = 0; dd < D; dd++) {
+                featVals[dd] = data[dd].get(ii);
+            }
+
+            // uninformed feature
+            if (min(featVals) == max(featVals)) {
+                norms[ii] = null;
+                continue;
+            }
+
+            norms[ii] = new ZNormalizer(featVals);
+
+            // scale
+            double[] normVals = norms[ii].normalize(featVals);
+            for (int dd = 0; dd < D; dd++) {
+                data[dd].set(ii, normVals[dd]);
             }
         }
         return norms;
@@ -103,14 +147,22 @@ public class StatUtils {
         }
     }
 
-    public static void minmaxNormalizeTestData(SparseVector[] data, MinMaxNormalizer[] norms) {
+    /**
+     * Normalize data given the normalizers. The normalizers are usually
+     * obtained from the training data, and this method is to normalize test
+     * data.
+     *
+     * @param data Data to be normalized
+     * @param norms Pre-learned normalizers
+     */
+    public static void minmaxNormalizeTestData(SparseVector[] data,
+            AbstractNormalizer[] norms) {
         for (int ii = 0; ii < norms.length; ii++) {
             if (norms[ii] == null) {
                 continue;
             }
-            for (int dd = 0; dd < data.length; dd++) {
-                double oriVal = data[dd].get(ii);
-                data[dd].set(ii, norms[ii].normalize(oriVal));
+            for (SparseVector vec : data) {
+                vec.set(ii, norms[ii].normalize(vec.get(ii)));
             }
         }
     }
