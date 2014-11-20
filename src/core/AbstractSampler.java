@@ -93,6 +93,7 @@ public abstract class AbstractSampler implements Serializable {
     protected boolean verbose = true;
     protected boolean log = true;
     protected boolean report = false;
+    protected boolean isReporting;
     protected BufferedWriter logger;
     protected static CommandLineParser parser;
     protected static Options options;
@@ -125,7 +126,7 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
-        if (tMaxIter < this.testMaxIter) {
+        if (tMaxIter <= this.testMaxIter) {
             this.testBurnIn = tBurnIn;
             this.testMaxIter = tMaxIter;
             this.testSampleLag = tSampleLag;
@@ -134,7 +135,7 @@ public abstract class AbstractSampler implements Serializable {
 
     public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag,
             int tRepInt) {
-        if (tMaxIter < this.testMaxIter) {
+        if (tMaxIter <= this.testMaxIter) {
             this.testBurnIn = tBurnIn;
             this.testMaxIter = tMaxIter;
             this.testSampleLag = tSampleLag;

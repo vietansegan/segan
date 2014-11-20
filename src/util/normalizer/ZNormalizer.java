@@ -1,5 +1,8 @@
 package util.normalizer;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
 import util.MiscUtils;
 import util.StatUtils;
 
@@ -9,8 +12,8 @@ import util.StatUtils;
  */
 public class ZNormalizer extends AbstractNormalizer {
 
-    private double mean;
-    private double stdev;
+    private final double mean;
+    private final double stdev;
 
     public ZNormalizer(double[] data) {
         this.mean = StatUtils.mean(data);
@@ -48,8 +51,19 @@ public class ZNormalizer extends AbstractNormalizer {
         return denormValues;
     }
 
+    public static String output(ZNormalizer norm) {
+        return norm.mean + "\t" + norm.stdev;
+    }
+
+    public static ZNormalizer input(String str) {
+        String[] sstr = str.split("\t");
+        double mean = Double.parseDouble(sstr[0]);
+        double stdv = Double.parseDouble(sstr[1]);
+        return new ZNormalizer(mean, stdv);
+    }
+
     public static void main(String[] args) {
-        double[] data = {2.02, 2.33, 2.99, 6.85, 9.20, 8.80, 7.50, 6.00, 5.85, 
+        double[] data = {2.02, 2.33, 2.99, 6.85, 9.20, 8.80, 7.50, 6.00, 5.85,
             3.85, 4.85, 3.85, 2.22, 1.45, 1.34};
         ZNormalizer n = new ZNormalizer(data);
         System.out.println("mean = " + n.mean);

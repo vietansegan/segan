@@ -293,7 +293,7 @@ public class LDA extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            boolean isReporting = isReporting();
+            isReporting = isReporting();
             numTokensChanged = 0;
             if (isReporting) {
                 // store llh after every iteration

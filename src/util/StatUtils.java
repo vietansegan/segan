@@ -155,7 +155,7 @@ public class StatUtils {
      * @param data Data to be normalized
      * @param norms Pre-learned normalizers
      */
-    public static void minmaxNormalizeTestData(SparseVector[] data,
+    public static void normalizeTestData(SparseVector[] data,
             AbstractNormalizer[] norms) {
         for (int ii = 0; ii < norms.length; ii++) {
             if (norms[ii] == null) {

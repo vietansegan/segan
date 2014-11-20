@@ -6,6 +6,7 @@ import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import sampling.likelihood.DirMult;
 import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
+import util.MismatchRuntimeException;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
@@ -215,7 +217,7 @@ public class SLDA extends AbstractSampler {
         }
 
         iter = INIT;
-        initializeModelStructure();
+        initializeModelStructure(null);
         initializeDataStructure();
         initializeAssignments();
         updateTopicRegressionParameters(); // optimize regression parameters
@@ -231,10 +233,45 @@ public class SLDA extends AbstractSampler {
         }
     }
 
-    protected void initializeModelStructure() {
+    /**
+     * Initialized with seeded distributions.
+     *
+     * @param topicWordPrior Word distribution for each topic
+     */
+    public void initialize(double[][] topicWordPrior) {
+        if (verbose) {
+            logln("Initializing ...");
+        }
+
+        iter = INIT;
+        initializeModelStructure(topicWordPrior);
+        initializeDataStructure();
+        initializeAssignments();
+        updateTopicRegressionParameters(); // optimize regression parameters
+
+        if (debug) {
+            validate("Initialized");
+        }
+
+        if (verbose) {
+            logln("--- Done initializing. " + getCurrentState());
+            getLogLikelihood();
+            evaluateRegressPrediction(responses, docRegressMeans);
+        }
+    }
+
+    protected void initializeModelStructure(double[][] topics) {
+        if (topics != null && topics.length != K) {
+            throw new MismatchRuntimeException(topics.length, K);
+        }
+
         topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
-            topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            if (topics != null) { // seeded prior
+                topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, topics[k]);
+            } else { // uninformed prior
+                topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            }
         }
 
         regParams = new double[K];
@@ -445,7 +482,6 @@ public class SLDA extends AbstractSampler {
     protected void sampleZs(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData,
             boolean observe) {
-        double totalBeta = V * hyperparams.get(BETA);
         for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
                 if (removeFromModel) {
@@ -459,8 +495,7 @@ public class SLDA extends AbstractSampler {
                 double[] logprobs = new double[K];
                 for (int k = 0; k < K; k++) {
                     logprobs[k] = Math.log(docTopics[dd].getCount(k) + hyperparams.get(ALPHA))
-                            + Math.log((topicWords[k].getCount(words[dd][nn]) + hyperparams.get(BETA))
-                                    / (topicWords[k].getCountSum() + totalBeta));
+                            + Math.log(topicWords[k].getProbability(words[dd][nn]));
                     if (observe) {
                         double mean = docRegressMeans[dd] + regParams[k] / words[dd].length;
                         logprobs[k] += StatUtils.logNormalProbability(responses[dd], mean, sqrtRho);
@@ -572,12 +607,14 @@ public class SLDA extends AbstractSampler {
     public double getLogLikelihood(ArrayList<Double> newParams) {
         double wordLlh = 0.0;
         for (int k = 0; k < K; k++) {
-            wordLlh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
+            wordLlh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V,
+                    topicWords[k].getCenterVector());
         }
 
         double topicLlh = 0.0;
         for (int dd = 0; dd < D; dd++) {
-            topicLlh += docTopics[dd].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
+            topicLlh += docTopics[dd].getLogLikelihood(newParams.get(ALPHA) * K,
+                    docTopics[dd].getCenterVector());
         }
 
         double responseLlh = 0.0;
@@ -679,7 +716,7 @@ public class SLDA extends AbstractSampler {
 
         try {
             // initialize
-            this.initializeModelStructure();
+            this.initializeModelStructure(null);
 
             String filename = IOUtils.removeExtension(IOUtils.getFilename(zipFilepath));
             BufferedReader reader = IOUtils.getBufferedReader(zipFilepath, filename + ModelFileExt);
@@ -761,7 +798,7 @@ public class SLDA extends AbstractSampler {
                 writer.write("\n\n");
             }
             writer.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while outputing top words to "
                     + file);
@@ -803,6 +840,7 @@ public class SLDA extends AbstractSampler {
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
+        addOption("prior-topic-file", "File containing prior topics");
 
         // data output
         addOption("output-folder", "Output folder");
@@ -910,8 +948,14 @@ public class SLDA extends AbstractSampler {
             reader.close();
         }
 
+        double[][] priorTopics = null;
+        if (cmd.hasOption("prior-topic-file")) {
+            String priorTopicFile = cmd.getOptionValue("prior-topic-file");
+            priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
+        }
+
         sampler.train(data.getWords(), selectedDocIndices, docResponses);
-        sampler.initialize();
+        sampler.initialize(priorTopics);
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
     }

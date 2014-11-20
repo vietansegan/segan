@@ -52,4 +52,23 @@ public class MinMaxNormalizer extends AbstractNormalizer {
         }
         return normValues;
     }
+
+    public static String output(MinMaxNormalizer norm) {
+        if (norm == null) {
+            return "null";
+        }
+        return norm.oldMin + "\t" + norm.oldMax + "\t" + norm.newMin + "\t" + norm.newMax;
+    }
+
+    public static MinMaxNormalizer input(String str) {
+        if (str.equals("null")) {
+            return null;
+        }
+        String[] sstr = str.split("\t");
+        double oldMin = Double.parseDouble(sstr[0]);
+        double oldMax = Double.parseDouble(sstr[1]);
+        double newMin = Double.parseDouble(sstr[2]);
+        double newMax = Double.parseDouble(sstr[3]);
+        return new MinMaxNormalizer(oldMin, oldMax, newMin, newMax);
+    }
 }

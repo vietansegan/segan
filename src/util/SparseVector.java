@@ -33,6 +33,16 @@ public class SparseVector implements Serializable {
         this.dim = other.getDimension();
     }
 
+    public SparseVector(double[] vec) {
+        this.values = new HashMap<>();
+        this.dim = vec.length;
+        for (int ii = 0; ii < vec.length; ii++) {
+            if (vec[ii] != 0) {
+                this.values.put(ii, vec[ii]);
+            }
+        }
+    }
+
     public void setDimension(int dim) {
         this.dim = dim;
     }
