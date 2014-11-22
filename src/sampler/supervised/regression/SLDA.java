@@ -805,6 +805,13 @@ public class SLDA extends AbstractSampler {
         }
     }
 
+    public void outputPosterior(File my_file) {
+	double[][] postTops = new double[K][];
+	for (int i = 0; i < K; i++) 
+	    postTops[i] = topicWords[i].getDistribution();
+	IOUtils.output2DArray(my_file, postTops);
+    }
+
     public static String getHelpString() {
         return "java -cp 'dist/segan.jar' " + SLDA.class.getName() + " -help";
     }
@@ -958,6 +965,7 @@ public class SLDA extends AbstractSampler {
         sampler.initialize(priorTopics);
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+	sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
     }
 
     public static void main(String[] args) {

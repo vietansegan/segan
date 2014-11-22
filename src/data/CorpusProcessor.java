@@ -240,7 +240,9 @@ public class CorpusProcessor {
         try {
             this.vocabulary = new ArrayList<String>();
             BufferedReader reader = IOUtils.getBufferedReader(filepath);
-            this.vocabulary.add(reader.readLine());
+	    String line;
+	    while ((line = reader.readLine()) != null)
+		this.vocabulary.add(line.trim());
             reader.close();
         } catch (IOException e) {
             e.printStackTrace();
