@@ -338,9 +338,11 @@ public class IOUtils {
             File folder = new File(dir);
             if (folder.isDirectory()) {
                 String[] children = folder.list();
-                for (int i = 0; i < children.length; i++) {
-                    File tempF = new File(dir, children[i]);
-                    tempF.delete();
+                if (children != null) {
+                    for (String child : children) {
+                        File tempF = new File(dir, child);
+                        tempF.delete();
+                    }
                 }
             }
         } catch (Exception e) {

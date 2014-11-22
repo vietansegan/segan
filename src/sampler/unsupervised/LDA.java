@@ -448,10 +448,12 @@ public class LDA extends AbstractSampler {
         }
         double llh = 0;
         for (int d = 0; d < D; d++) {
-            llh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K, 1.0 / K);
+            llh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K, 
+                    docTopics[d].getCenterVector());
         }
         for (int k = 0; k < K; k++) {
-            llh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 1.0 / V);
+            llh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 
+                    topicWords[k].getCenterVector());
         }
         return llh;
     }

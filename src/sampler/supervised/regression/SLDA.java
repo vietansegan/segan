@@ -1,6 +1,7 @@
 package sampler.supervised.regression;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
+import core.AbstractExperiment;
 import core.AbstractSampler;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
@@ -21,6 +22,7 @@ import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.MismatchRuntimeException;
+import util.PredictionUtils;
 import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
@@ -68,6 +70,23 @@ public class SLDA extends AbstractSampler {
 
     public SLDA(String bname) {
         this.basename = bname;
+    }
+
+    public void configure(SLDA sampler) {
+        this.configure(sampler.folder,
+                sampler.V,
+                sampler.K,
+                sampler.hyperparams.get(ALPHA),
+                sampler.hyperparams.get(BETA),
+                sampler.rho,
+                sampler.mu,
+                sampler.sigma,
+                sampler.initState,
+                sampler.paramOptimized,
+                sampler.BURN_IN,
+                sampler.MAX_ITER,
+                sampler.LAG,
+                sampler.REP_INTERVAL);
     }
 
     public void configure(
@@ -171,13 +190,13 @@ public class SLDA extends AbstractSampler {
     }
 
     /**
-     * Set training data.
+     * Set up data.
      *
      * @param docWords All documents
      * @param docIndices Indices of documents under consideration
-     * @param docResponses Responses of all documents
+     * @param docResponses Responses of all documents, null if test data
      */
-    public void train(int[][] docWords, ArrayList<Integer> docIndices,
+    public void setupData(int[][] docWords, ArrayList<Integer> docIndices,
             double[] docResponses) {
         this.docIndices = docIndices;
         if (this.docIndices == null) { // add all documents
@@ -188,11 +207,16 @@ public class SLDA extends AbstractSampler {
         }
         this.D = this.docIndices.size();
         this.words = new int[D][];
-        this.responses = new double[D]; // responses of considered documents
+        this.responses = null;
+        if (docResponses != null) { // null if test data
+            this.responses = new double[D]; // responses of considered documents
+        }
         this.numTokens = 0;
         for (int ii = 0; ii < D; ii++) {
             int dd = this.docIndices.get(ii);
-            this.responses[ii] = docResponses[dd];
+            if (docResponses != null) {
+                this.responses[ii] = docResponses[dd];
+            }
             this.words[ii] = docWords[dd];
             this.numTokens += this.words[ii].length;
         }
@@ -200,14 +224,99 @@ public class SLDA extends AbstractSampler {
         if (verbose) {
             logln("--- # documents:\t" + D);
             logln("--- # tokens:\t" + numTokens);
-            logln("--- responses:");
-            logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
-            logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
-            int[] histogram = StatUtils.bin(responses, 10);
-            for (int ii = 0; ii < histogram.length; ii++) {
-                logln("--- --- " + ii + "\t" + histogram[ii]);
+            if (docResponses != null) {
+                logln("--- responses:");
+                logln("--- --- mean\t" + MiscUtils.formatDouble(StatUtils.mean(responses)));
+                logln("--- --- stdv\t" + MiscUtils.formatDouble(StatUtils.standardDeviation(responses)));
+                int[] histogram = StatUtils.bin(responses, 10);
+                for (int ii = 0; ii < histogram.length; ii++) {
+                    logln("--- --- " + ii + "\t" + histogram[ii]);
+                }
             }
         }
+    }
+
+    /**
+     * Set up training data.
+     *
+     * @param docWords All documents
+     * @param docIndices Indices of documents under consideration
+     * @param docResponses Responses of all documents
+     */
+    public void train(int[][] docWords, ArrayList<Integer> docIndices,
+            double[] docResponses) {
+        setupData(docWords, docIndices, docResponses);
+    }
+
+    /**
+     * Set up test data.
+     *
+     * @param docWords Test documents
+     * @param docIndices Indices of test documents
+     * @param stateFile File storing trained model
+     * @param predictionFile File storing predictions at different test
+     * iterations using the given trained model
+     * @return Prediction on all documents using the given model
+     */
+    public double[] test(int[][] docWords, ArrayList<Integer> docIndices,
+            File stateFile, File predictionFile) {
+        setTestConfigurations(BURN_IN, MAX_ITER, LAG);
+        inputModel(stateFile.toString());
+        setupData(docWords, docIndices, null);
+        initializeDataStructure();
+
+        // store predictions at different test iterations
+        ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
+
+        // sample topic assignments for test document
+        for (iter = 0; iter < this.testMaxIter; iter++) {
+            numTokensChanged = 0;
+            isReporting = verbose && iter % testRepInterval == 0;
+            if (isReporting) {
+                String str = "Iter " + iter + "/" + testMaxIter
+                        + ". current thread: " + Thread.currentThread().getId();
+                if (iter < BURN_IN) {
+                    logln("--- Burning in. " + str);
+                } else {
+                    logln("--- Sampling. " + str);
+                }
+            }
+
+            if (iter == 0) {
+                sampleZs(!REMOVE, !ADD, !REMOVE, ADD, !OBSERVED);
+            } else {
+                sampleZs(!REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
+            }
+
+            if (isReporting) {
+                logln("--- --- # tokens: " + numTokens
+                        + ". # token changed: " + numTokensChanged
+                        + ". change ratio: " + (double) numTokensChanged / numTokens
+                        + "\n");
+                System.out.println();
+            }
+
+            // store prediction (on all documents) at a test iteration
+            if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
+                double[] predResponses = new double[D];
+                System.arraycopy(docRegressMeans, 0, predResponses, 0, D);
+                predResponsesList.add(predResponses);
+            }
+        }
+
+        // store predictions if necessary
+        if (predictionFile != null) {
+            PredictionUtils.outputSingleModelRegressions(predictionFile, predResponsesList);
+        }
+
+        // average over all stored predictions
+        double[] predictions = new double[D];
+        for (int dd = 0; dd < D; dd++) {
+            for (int ii = 0; ii < predResponsesList.size(); ii++) {
+                predictions[dd] += predResponsesList.get(ii)[dd] / predResponsesList.size();
+            }
+        }
+        return predictions;
     }
 
     @Override
@@ -812,6 +921,51 @@ public class SLDA extends AbstractSampler {
 	IOUtils.output2DArray(my_file, postTops);
     }
 
+    /**
+     * Run Gibbs sampling on test data using multiple models learned which are
+     * stored in the ReportFolder. The runs on multiple models are parallel.
+     *
+     * @param newWords Words of new documents
+     * @param newDocIndices Indices of test documents
+     * @param iterPredFolder Output folder
+     * @param sampler The configured sampler
+     */
+    public static void parallelTest(int[][] newWords,
+            ArrayList<Integer> newDocIndices,
+            File iterPredFolder,
+            SLDA sampler) {
+        File reportFolder = new File(sampler.getSamplerFolderPath(), ReportFolder);
+        if (!reportFolder.exists()) {
+            throw new RuntimeException("Report folder not found. " + reportFolder);
+        }
+        String[] filenames = reportFolder.list();
+        try {
+            IOUtils.createFolder(iterPredFolder);
+            ArrayList<Thread> threads = new ArrayList<Thread>();
+            for (String filename : filenames) { // all learned models
+                if (!filename.contains("zip")) {
+                    continue;
+                }
+
+                File stateFile = new File(reportFolder, filename);
+                File partialResultFile = new File(iterPredFolder,
+                        IOUtils.removeExtension(filename) + ".txt");
+                SLDATestRunner runner = new SLDATestRunner(sampler,
+                        newWords, newDocIndices, stateFile.getAbsolutePath(),
+                        partialResultFile.getAbsolutePath());
+                Thread thread = new Thread(runner);
+                threads.add(thread);
+            }
+
+            // run MAX_NUM_PARALLEL_THREADS threads at a time
+            runThreads(threads);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while sampling during parallel test.");
+        }
+    }
+
     public static String getHelpString() {
         return "java -cp 'dist/segan.jar' " + SLDA.class.getName() + " -help";
     }
@@ -849,6 +1003,10 @@ public class SLDA extends AbstractSampler {
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
         addOption("prior-topic-file", "File containing prior topics");
 
+        // predictions
+        addOption("prediction-folder", "Folder containing predictions");
+        addOption("evaluation-folder", "Folder containing evaluations");
+
         // data output
         addOption("output-folder", "Output folder");
 
@@ -863,6 +1021,11 @@ public class SLDA extends AbstractSampler {
         addOption("sigma", "Sigma");
         addOption("K", "Number of topics");
         addOption("num-top-words", "Number of top words per topic");
+
+        // running
+        options.addOption("train", false, "Train");
+        options.addOption("test", false, "Test");
+        options.addOption("parallel", false, "Parallel");
 
         // configurations
         addOption("init", "Initialization");
@@ -961,11 +1124,46 @@ public class SLDA extends AbstractSampler {
             priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
         }
 
-        sampler.train(data.getWords(), selectedDocIndices, docResponses);
-        sampler.initialize(priorTopics);
-        sampler.iterate();
-        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-	sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+        if (cmd.hasOption("train")) {
+            sampler.train(data.getWords(), selectedDocIndices, docResponses);
+            sampler.initialize(priorTopics);
+            sampler.iterate();
+            sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+	    sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+        }
+
+        if (cmd.hasOption("test")) {
+            File predictionFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "prediction-folder", "predictions"));
+            IOUtils.createFolder(predictionFolder);
+
+            File evaluationFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "evaluation-folder", "evaluations"));
+            IOUtils.createFolder(evaluationFolder);
+
+            double[] predictions;
+            if (cmd.hasOption("parallel")) { // predict using all models
+                File iterPredFolder = new File(sampler.getSamplerFolderPath(), "iter-preds");
+                IOUtils.createFolder(iterPredFolder);
+                SLDA.parallelTest(data.getWords(), selectedDocIndices, iterPredFolder, sampler);
+                predictions = PredictionUtils.evaluateRegression(
+                        iterPredFolder, evaluationFolder, data.getDocIds(),
+                        docResponses);
+            } else { // predict using the final model
+                predictions = sampler.test(data.getWords(), selectedDocIndices,
+                        sampler.getFinalStateFile(), null);
+            }
+
+            // output predictions and results
+            PredictionUtils.outputRegressionPredictions(
+                    new File(predictionFolder,
+                            AbstractExperiment.PREDICTION_FILE),
+                    data.getDocIds(), docResponses, predictions);
+            PredictionUtils.outputRegressionResults(
+                    new File(evaluationFolder,
+                            AbstractExperiment.RESULT_FILE), docResponses,
+                    predictions);
+        }
     }
 
     public static void main(String[] args) {
@@ -991,6 +1189,47 @@ public class SLDA extends AbstractSampler {
             long eTime = (System.currentTimeMillis() - sTime) / 1000;
             System.out.println("Elapsed time: " + eTime + "s");
             System.out.println("End time: " + df.format(dateobj));
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+        }
+    }
+}
+
+class SLDATestRunner implements Runnable {
+
+    SLDA sampler;
+    int[][] newWords;
+    ArrayList<Integer> newDocIndices;
+    String stateFile;
+    String outputFile;
+
+    public SLDATestRunner(SLDA sampler,
+            int[][] newWords,
+            ArrayList<Integer> newDocIndices,
+            String stateFile,
+            String outputFile) {
+        this.sampler = sampler;
+        this.newWords = newWords;
+        this.newDocIndices = newDocIndices;
+        this.stateFile = stateFile;
+        this.outputFile = outputFile;
+    }
+
+    @Override
+    public void run() {
+        SLDA testSampler = new SLDA();
+        testSampler.setVerbose(true);
+        testSampler.setDebug(false);
+        testSampler.setLog(false);
+        testSampler.setReport(false);
+        testSampler.configure(sampler);
+        testSampler.setTestConfigurations(sampler.getBurnIn(),
+                sampler.getMaxIters(), sampler.getSampleLag());
+
+        try {
+            testSampler.test(newWords, newDocIndices, new File(stateFile),
+                    new File(outputFile));
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException();

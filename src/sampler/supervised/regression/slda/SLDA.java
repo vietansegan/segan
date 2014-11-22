@@ -28,7 +28,8 @@ import util.evaluation.MimnoTopicCoherence;
 import util.evaluation.RegressionEvaluation;
 
 /**
- *
+ * This is obsolete. Use sampler.supervised.regression.SLDA instead.
+ * 
  * @author vietan
  */
 public class SLDA extends AbstractSampler implements Regressor<ResponseTextDataset> {
