@@ -276,7 +276,8 @@ public class SLDA extends AbstractSampler {
             numTokensChanged = 0;
             isReporting = verbose && iter % testRepInterval == 0;
             if (isReporting) {
-                String str = "Iter " + iter + "/" + testMaxIter;
+                String str = "Iter " + iter + "/" + testMaxIter
+                        + ". current thread: " + Thread.currentThread().getId();
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
                 } else {
@@ -998,6 +999,10 @@ public class SLDA extends AbstractSampler {
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
         addOption("prior-topic-file", "File containing prior topics");
 
+        // predictions
+        addOption("prediction-folder", "Folder containing predictions");
+        addOption("evaluation-folder", "Folder containing evaluations");
+
         // data output
         addOption("output-folder", "Output folder");
 
@@ -1133,9 +1138,11 @@ public class SLDA extends AbstractSampler {
 
             double[] predictions;
             if (cmd.hasOption("parallel")) { // predict using all models
-                SLDA.parallelTest(data.getWords(), selectedDocIndices, predictionFolder, sampler);
+                File iterPredFolder = new File(sampler.getSamplerFolderPath(), "iter-preds");
+                IOUtils.createFolder(iterPredFolder);
+                SLDA.parallelTest(data.getWords(), selectedDocIndices, iterPredFolder, sampler);
                 predictions = PredictionUtils.evaluateRegression(
-                        predictionFolder, evaluationFolder, data.getDocIds(),
+                        iterPredFolder, evaluationFolder, data.getDocIds(),
                         docResponses);
             } else { // predict using the final model
                 predictions = sampler.test(data.getWords(), selectedDocIndices,
