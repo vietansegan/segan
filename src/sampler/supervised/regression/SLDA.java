@@ -276,11 +276,7 @@ public class SLDA extends AbstractSampler {
             numTokensChanged = 0;
             isReporting = verbose && iter % testRepInterval == 0;
             if (isReporting) {
-                // store llh after every iteration
-                double loglikelihood = this.getLogLikelihood();
-                logLikelihoods.add(loglikelihood);
-                String str = "Iter " + iter + "/" + testMaxIter
-                        + "\n" + getCurrentState();
+                String str = "Iter " + iter + "/" + testMaxIter;
                 if (iter < BURN_IN) {
                     logln("--- Burning in. " + str);
                 } else {
@@ -1140,19 +1136,20 @@ public class SLDA extends AbstractSampler {
                 SLDA.parallelTest(data.getWords(), selectedDocIndices, predictionFolder, sampler);
                 predictions = PredictionUtils.evaluateRegression(
                         predictionFolder, evaluationFolder, data.getDocIds(),
-                        data.getResponses());
+                        docResponses);
             } else { // predict using the final model
                 predictions = sampler.test(data.getWords(), selectedDocIndices,
                         sampler.getFinalStateFile(), null);
             }
 
+            // output predictions and results
             PredictionUtils.outputRegressionPredictions(
                     new File(predictionFolder,
                             AbstractExperiment.PREDICTION_FILE),
-                    data.getDocIds(), data.getResponses(), predictions);
+                    data.getDocIds(), docResponses, predictions);
             PredictionUtils.outputRegressionResults(
                     new File(evaluationFolder,
-                            AbstractExperiment.RESULT_FILE), data.getResponses(),
+                            AbstractExperiment.RESULT_FILE), docResponses,
                     predictions);
         }
     }
