@@ -226,6 +226,53 @@ public class BinarySLDA extends AbstractSampler {
         }
     }
 
+    /**
+     * Initialized with seeded distributions.
+     *
+     * @param topicWordPrior Word distribution for each topic
+     */
+    public void initialize(double[][] topicWordPrior) {
+        if (verbose) {
+            logln("Initializing ...");
+        }
+
+        iter = INIT;
+        initializeModelStructure(topicWordPrior);
+        initializeDataStructure();
+        initializeAssignments();
+        updateLambdas();
+
+        if (debug) {
+            validate("Initialized");
+        }
+
+        if (verbose) {
+            logln("--- Done initializing. " + getCurrentState());
+            getLogLikelihood();
+            evaluatePerformances();
+        }
+    }
+
+    protected void initializeModelStructure(double[][] topics) {
+        if (topics != null && topics.length != K) {
+            throw new IllegalArgumentException("Mismatch: " + topics.length + ", " + K);
+        }
+
+        topicWords = new DirMult[K];
+        for (int k = 0; k < K; k++) {
+            if (topics != null) { // seeded prior
+                topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, topics[k]);
+            } else { // uninformed prior
+                topicWords[k] = new DirMult(V, hyperparams.get(BETA) * V, 1.0 / V);
+            }
+        }
+
+        lambdas = new double[K];
+        for (int k = 0; k < K; k++) {
+            lambdas[k] = SamplerUtils.getGaussian(mean, sigma);
+        }
+    }
+
     private void initializeModelStructure() {
         topicWords = new DirMult[K];
         for (int k = 0; k < K; k++) {
@@ -974,6 +1021,10 @@ public class BinarySLDA extends AbstractSampler {
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
+        addOption("prior-topic-file", "File containing prior topics");
+        // predictions
+        addOption("prediction-folder", "Folder containing predictions");
+        addOption("evaluation-folder", "Folder containing evaluations");
 
         // data output
         addOption("output-folder", "Output folder");
@@ -988,6 +1039,9 @@ public class BinarySLDA extends AbstractSampler {
         addOption("sigma", "Sigma");
         addOption("K", "Number of topics");
         addOption("num-top-words", "Number of top words per topic");
+
+        options.addOption("train", false, "Train");
+        options.addOption("test", false, "Test");
 
         // configurations
         addOption("init", "Initialization");
@@ -1072,10 +1126,53 @@ public class BinarySLDA extends AbstractSampler {
             reader.close();
         }
 
-        sampler.train(data.getWords(), selectedDocIndices, data.getSingleLabels());
-        sampler.initialize();
-        sampler.iterate();
-        sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        double[][] priorTopics = null;
+        if (cmd.hasOption("prior-topic-file")) {
+            String priorTopicFile = cmd.getOptionValue("prior-topic-file");
+            priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
+        }
+
+	if (cmd.hasOption("train")) {
+	    System.out.println("here");
+	    sampler.train(data.getWords(), selectedDocIndices, data.getSingleLabels());
+	    sampler.initialize(priorTopics);
+	    sampler.iterate();
+	    sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+	}
+
+        if (cmd.hasOption("test")) {
+            File predictionFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "prediction-folder", "predictions"));
+            IOUtils.createFolder(predictionFolder);
+
+            File evaluationFolder = new File(sampler.getSamplerFolderPath(),
+                    CLIUtils.getStringArgument(cmd, "evaluation-folder", "evaluations"));
+            IOUtils.createFolder(evaluationFolder);
+
+            double[] predictions;
+	    /*predictions = sampler.test(data.getWords(), selectedDocIndices,
+	    			       sampler.getFinalStateFile(), null);
+
+            // output predictions and results
+	    int numDocs = selectedDocIndices.size();
+	    String[] selectedIds = new String[numDocs];
+	    double[] responses = new double[numDocs];
+	    for (int q = 0; q < numDocs; q++) {
+		int index = selectedDocIndices.get(q);
+		selectedIds[q] = data.getDocIds()[index];
+		responses[q] = docResponses[index];
+	    }
+	       
+
+            PredictionUtils.outputRegressionPredictions(
+                    new File(predictionFolder,
+                            AbstractExperiment.PREDICTION_FILE),
+                    selectedIds, responses, predictions);
+            PredictionUtils.outputRegressionResults(
+                    new File(evaluationFolder,
+                            AbstractExperiment.RESULT_FILE), responses,
+			    predictions);*/
+        }
     }
 
     public static void main(String[] args) {

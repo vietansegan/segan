@@ -991,6 +991,14 @@ public class SLDA extends AbstractSampler {
                 + "-v -d -z";
     }
 
+    private static int findIndex(String[] set, String q) {
+	for (int i = 0; i < set.length; i++)
+	    if (set[i].equals(q))
+		return i;
+	System.out.println(q);
+	return -1;
+    }
+    
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -1109,11 +1117,12 @@ public class SLDA extends AbstractSampler {
             BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
             String line;
             while ((line = reader.readLine()) != null) {
-                int docIdx = Integer.parseInt(line);
+		//int docIdx = findIndex(data.getDocIds(), line.trim());
+		int docIdx = Integer.parseInt(line);
                 if (docIdx >= data.getDocIds().length) {
                     throw new RuntimeException("Out of bound. Doc index " + docIdx);
                 }
-                selectedDocIndices.add(Integer.parseInt(line));
+                selectedDocIndices.add(docIdx);
             }
             reader.close();
         }
@@ -1155,13 +1164,23 @@ public class SLDA extends AbstractSampler {
             }
 
             // output predictions and results
+	    int numDocs = selectedDocIndices.size();
+	    String[] selectedIds = new String[numDocs];
+	    double[] responses = new double[numDocs];
+	    for (int q = 0; q < numDocs; q++) {
+		int index = selectedDocIndices.get(q);
+		selectedIds[q] = data.getDocIds()[index];
+		responses[q] = docResponses[index];
+	    }
+	       
+
             PredictionUtils.outputRegressionPredictions(
                     new File(predictionFolder,
                             AbstractExperiment.PREDICTION_FILE),
-                    data.getDocIds(), docResponses, predictions);
+                    selectedIds, responses, predictions);
             PredictionUtils.outputRegressionResults(
                     new File(evaluationFolder,
-                            AbstractExperiment.RESULT_FILE), docResponses,
+                            AbstractExperiment.RESULT_FILE), responses,
                     predictions);
         }
     }

@@ -517,6 +517,13 @@ public class LDA extends AbstractSampler {
         }
     }
 
+    public void outputPosterior(File my_file) {
+	double[][] postTops = new double[K][];
+	for (int i = 0; i < K; i++) 
+	    postTops[i] = topicWords[i].getDistribution();
+	IOUtils.output2DArray(my_file, postTops);
+    }
+
     @Override
     public void outputState(String filepath) {
         if (verbose) {
@@ -656,6 +663,7 @@ public class LDA extends AbstractSampler {
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
+        addOption("prior-topic-file", "File containing prior topics");
 
         // data output
         addOption("output-folder", "Output folder");
@@ -750,10 +758,17 @@ public class LDA extends AbstractSampler {
             reader.close();
         }
 
+        double[][] priorTopics = null;
+        if (cmd.hasOption("prior-topic-file")) {
+            String priorTopicFile = cmd.getOptionValue("prior-topic-file");
+            priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
+        }
+
         sampler.train(data.getWords(), selectedDocIndices);
-        sampler.initialize();
+        sampler.initialize(null, priorTopics);
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+	sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
     }
 
     public static void main(String[] args) {
