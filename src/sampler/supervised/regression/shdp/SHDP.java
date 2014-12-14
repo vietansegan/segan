@@ -670,7 +670,6 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
 //        for (SHDPDish dish : globalRestaurant.getTables()) {
 //            obsLlh += dish.getContent().getLogLikelihood();
 //        }
-
         double dishRegLlh = 0.0;
         for (int idx : topicWords.getIndices()) {
             dishRegLlh += StatUtils.logNormalProbability(
@@ -877,7 +876,7 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -892,23 +891,28 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < sortedTopics.size(); ii++) {
-            int k = sortedTopics.get(ii).getObject();
-            Topic component = topicWords.getComponent(k);
-            double[] distrs = component.topic.getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + component.topic.getCountSum()
-                    + ", " + MiscUtils.formatDouble(component.regParam)
-                    + ", " + sbpWeights.get(k)
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int ii = 0; ii < sortedTopics.size(); ii++) {
+                int k = sortedTopics.get(ii).getObject();
+                Topic component = topicWords.getComponent(k);
+                double[] distrs = component.topic.getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + component.topic.getCountSum()
+                        + ", " + MiscUtils.formatDouble(component.regParam)
+                        + ", " + sbpWeights.get(k)
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     /**

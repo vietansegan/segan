@@ -653,7 +653,7 @@ public class HDP extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -669,20 +669,25 @@ public class HDP extends AbstractSampler {
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (RankingItem<Integer> sortedTopic : sortedTopics) {
-            int k = sortedTopic.getObject();
-            Topic topic = topicWords.getComponent(k);
-            double[] distrs = topic.phi.getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k + ", " + topic.born
-                    + ", " + topic.phi.getCountSum() + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (RankingItem<Integer> sortedTopic : sortedTopics) {
+                int k = sortedTopic.getObject();
+                Topic topic = topicWords.getComponent(k);
+                double[] distrs = topic.phi.getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k + ", " + topic.born
+                        + ", " + topic.phi.getCountSum() + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     class Topic {

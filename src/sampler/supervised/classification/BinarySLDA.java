@@ -6,6 +6,7 @@ import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -56,9 +57,6 @@ public class BinarySLDA extends AbstractSampler {
     protected DirMult[] topicWords;
     protected double[] lambdas; // label regression parameters
     private double[] docLabelDotProds;
-    // internal
-    private int numTokensChanged = 0;
-    private int numTokens = 0;
     private Set<Integer> positives;
 
     public BinarySLDA() {
@@ -805,7 +803,8 @@ public class BinarySLDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    @Override
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -820,21 +819,26 @@ public class BinarySLDA extends AbstractSampler {
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < K; ii++) {
-            int k = sortedTopics.get(ii).getObject();
-            double[] distrs = topicWords[k].getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + topicWords[k].getCountSum()
-                    + ", " + MiscUtils.formatDouble(lambdas[k])
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int ii = 0; ii < K; ii++) {
+                int k = sortedTopics.get(ii).getObject();
+                double[] distrs = topicWords[k].getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + topicWords[k].getCountSum()
+                        + ", " + MiscUtils.formatDouble(lambdas[k])
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public void test(int[][] newWords, File iterPredFolder) {
@@ -1132,13 +1136,13 @@ public class BinarySLDA extends AbstractSampler {
             priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
         }
 
-	if (cmd.hasOption("train")) {
-	    System.out.println("here");
-	    sampler.train(data.getWords(), selectedDocIndices, data.getSingleLabels());
-	    sampler.initialize(priorTopics);
-	    sampler.iterate();
-	    sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-	}
+        if (cmd.hasOption("train")) {
+            System.out.println("here");
+            sampler.train(data.getWords(), selectedDocIndices, data.getSingleLabels());
+            sampler.initialize(priorTopics);
+            sampler.iterate();
+            sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
+        }
 
         if (cmd.hasOption("test")) {
             File predictionFolder = new File(sampler.getSamplerFolderPath(),
@@ -1150,28 +1154,28 @@ public class BinarySLDA extends AbstractSampler {
             IOUtils.createFolder(evaluationFolder);
 
             double[] predictions;
-	    /*predictions = sampler.test(data.getWords(), selectedDocIndices,
-	    			       sampler.getFinalStateFile(), null);
+            /*predictions = sampler.test(data.getWords(), selectedDocIndices,
+             sampler.getFinalStateFile(), null);
 
-            // output predictions and results
-	    int numDocs = selectedDocIndices.size();
-	    String[] selectedIds = new String[numDocs];
-	    double[] responses = new double[numDocs];
-	    for (int q = 0; q < numDocs; q++) {
-		int index = selectedDocIndices.get(q);
-		selectedIds[q] = data.getDocIds()[index];
-		responses[q] = docResponses[index];
-	    }
+             // output predictions and results
+             int numDocs = selectedDocIndices.size();
+             String[] selectedIds = new String[numDocs];
+             double[] responses = new double[numDocs];
+             for (int q = 0; q < numDocs; q++) {
+             int index = selectedDocIndices.get(q);
+             selectedIds[q] = data.getDocIds()[index];
+             responses[q] = docResponses[index];
+             }
 	       
 
-            PredictionUtils.outputRegressionPredictions(
-                    new File(predictionFolder,
-                            AbstractExperiment.PREDICTION_FILE),
-                    selectedIds, responses, predictions);
-            PredictionUtils.outputRegressionResults(
-                    new File(evaluationFolder,
-                            AbstractExperiment.RESULT_FILE), responses,
-			    predictions);*/
+             PredictionUtils.outputRegressionPredictions(
+             new File(predictionFolder,
+             AbstractExperiment.PREDICTION_FILE),
+             selectedIds, responses, predictions);
+             PredictionUtils.outputRegressionResults(
+             new File(evaluationFolder,
+             AbstractExperiment.RESULT_FILE), responses,
+             predictions);*/
         }
     }
 

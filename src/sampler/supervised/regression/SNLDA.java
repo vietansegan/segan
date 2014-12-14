@@ -60,8 +60,6 @@ public class SNLDA extends AbstractSampler {
     Node[][] z;
     Node root;
     // internal
-    private int numTokens;
-    private int numTokensChanged;
     private int numTokensAccepted;
     private double[] background;
     private double[] docMeans;
@@ -478,7 +476,7 @@ public class SNLDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
             numTokensAccepted = 0;
-            boolean isReporting = isReporting();
+            isReporting = isReporting();
 
             if (isReporting) {
                 // store llh after every iteration
@@ -498,7 +496,6 @@ public class SNLDA extends AbstractSampler {
             long etaTime = updateEtas();
 
             if (isReporting) {
-                logln(printGlobalTree() + "\n");
                 logln("--- --- Time (s). sample topic: " + topicTime
                         + ". update eta: " + etaTime);
                 logln("--- --- # tokens: " + numTokens
@@ -837,7 +834,7 @@ public class SNLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Outputing current state to " + filepath);
         }
-        
+
         // model string
         StringBuilder modelStr = new StringBuilder();
         Stack<Node> stack = new Stack<>();
@@ -900,7 +897,7 @@ public class SNLDA extends AbstractSampler {
             throw new RuntimeException("Exception while inputing from " + filepath);
         }
     }
-    
+
     public void inputModel(String zipFilepath) {
         if (verbose) {
             logln("--- --- Loading model from " + zipFilepath);
@@ -955,7 +952,7 @@ public class SNLDA extends AbstractSampler {
                     + zipFilepath);
         }
     }
-    
+
     /**
      * Input a set of assignments.
      *
@@ -994,7 +991,7 @@ public class SNLDA extends AbstractSampler {
                     + zipFilepath);
         }
     }
-    
+
     /**
      * Parse the node path string.
      *
@@ -1175,6 +1172,7 @@ public class SNLDA extends AbstractSampler {
      * @param outputFile The output file
      * @param numWords Number of top words
      */
+    @Override
     public void outputTopicTopWords(File outputFile, int numWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1248,7 +1246,7 @@ public class SNLDA extends AbstractSampler {
         protected double[] theta;
         protected double pi;
         protected double eta;
-        
+
         // estimated topics after training, which is used for test
         protected double[] phihat;
 
@@ -1270,7 +1268,7 @@ public class SNLDA extends AbstractSampler {
             this.theta = new double[KK];
             Arrays.fill(this.theta, 1.0 / KK);
         }
-        
+
         void setPhiHat(double[] ph) {
             this.phihat = ph;
         }

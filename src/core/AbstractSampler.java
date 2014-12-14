@@ -52,6 +52,9 @@ public abstract class AbstractSampler implements Serializable {
     public static final int PROPOSAL_INDEX = 0;
     public static final int ACTUAL_INDEX = 1;
 
+    public int numTokens;
+    public int numTokensChanged;
+
     public static enum InitialState {
 
         RANDOM, SEEDED, FORWARD, PRESET, PRIOR
@@ -198,6 +201,90 @@ public abstract class AbstractSampler implements Serializable {
 
     public abstract void inputState(String filepath);
 
+    public void metaIterate() {
+        if (verbose) {
+            logln("Iterating ...");
+        }
+        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
+        try {
+            if (report) {
+                IOUtils.createFolder(reportFolderPath);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while creating report folder."
+                    + " " + reportFolderPath);
+        }
+
+        if (log && !isLogging()) {
+            openLogger();
+        }
+
+        logln(getClass().toString());
+        startTime = System.currentTimeMillis();
+
+        for (iter = 0; iter < MAX_ITER; iter++) {
+            isReporting = isReporting();
+            if (isReporting) {
+                logln(getCurrentState());
+            }
+
+            iterate();
+
+            // parameter optimization
+            if (iter % LAG == 0 && iter > BURN_IN) {
+                if (paramOptimized) { // slice sampling
+                    sliceSample();
+                    ArrayList<Double> sparams = new ArrayList<Double>();
+                    for (double param : this.hyperparams) {
+                        sparams.add(param);
+                    }
+                    this.sampledParams.add(sparams);
+
+                    if (verbose) {
+                        for (double p : sparams) {
+                            System.out.println(p);
+                        }
+                    }
+                }
+            }
+
+            if (debug) {
+                validate("iter " + iter);
+            }
+
+            // store model
+            if (report && iter > BURN_IN && iter % LAG == 0) {
+                outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+                outputTopicTopWords(new File(reportFolderPath,
+                        "iter-" + iter + "-" + TopWordFile), 15);
+            }
+        }
+
+        if (report) { // output the final model
+            outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
+            outputTopicTopWords(new File(reportFolderPath,
+                    "iter-" + iter + "-" + TopWordFile), 15);
+        }
+
+        float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
+        logln("Total runtime iterating: " + ellapsedSeconds + " seconds");
+
+        if (log && isLogging()) {
+            closeLogger();
+        }
+    }
+
+    /**
+     * Output learned topics.
+     *
+     * @param file Output file
+     * @param numTopWords Number of top words
+     */
+    public void outputTopicTopWords(File file, int numTopWords) {
+
+    }
+
     public String getCurrentState() {
         StringBuilder str = new StringBuilder();
         return str.toString();
@@ -251,7 +338,7 @@ public abstract class AbstractSampler implements Serializable {
         if (contentStrs.size() != entryFiles.size()) {
             throw new RuntimeException("Mismatch");
         }
-        
+
         ZipOutputStream writer = IOUtils.getZipOutputStream(filepath);
         for (int ii = 0; ii < contentStrs.size(); ii++) {
             ZipEntry modelEntry = new ZipEntry(entryFiles.get(ii));
@@ -445,8 +532,8 @@ public abstract class AbstractSampler implements Serializable {
 
     protected ArrayList<Double> cloneHyperparameters() {
         ArrayList<Double> newParams = new ArrayList<Double>();
-        for (int i = 0; i < this.hyperparams.size(); i++) {
-            newParams.add(this.hyperparams.get(i));
+        for (Double hyperparam : this.hyperparams) {
+            newParams.add(hyperparam);
         }
         return newParams;
     }
@@ -475,6 +562,9 @@ public abstract class AbstractSampler implements Serializable {
      * Slice sampling for hyper-parameter optimization.
      */
     protected void sliceSample() {
+        if (hyperparams == null) { // no hyperparameter to optimize
+            return;
+        }
         int dim = hyperparams.size();
         double[] lefts = new double[dim];
         double[] rights = new double[dim];

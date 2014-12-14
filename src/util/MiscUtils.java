@@ -64,6 +64,26 @@ public class MiscUtils {
         return str.toString();
     }
 
+    public static double[] getIDFs(int[][] words, ArrayList<Integer> docIndices, int V) {
+        int D = docIndices.size();
+        int[] dfs = new int[V];
+        for (int dd : docIndices) {
+            Set<Integer> uniqueWords = new HashSet<Integer>();
+            for (int nn = 0; nn < words[dd].length; nn++) {
+                uniqueWords.add(words[dd][nn]);
+            }
+            for (int uw : uniqueWords) {
+                dfs[uw]++;
+            }
+        }
+
+        double[] idfs = new double[V];
+        for (int vv = 0; vv < V; vv++) {
+            idfs[vv] = Math.log(D) - Math.log(dfs[vv] + 1);
+        }
+        return idfs;
+    }
+
     public static double[] getIDFs(int[][] words, int V) {
         int D = words.length;
         int[] dfs = new int[V];
@@ -259,5 +279,14 @@ public class MiscUtils {
 
     public static String formatDouble(double value) {
         return formatter.format(value);
+    }
+
+    public static String formatDouble(double value, int n) {
+        StringBuilder str = new StringBuilder("###.");
+        for (int nn = 0; nn < n; nn++) {
+            str.append("#");
+        }
+        NumberFormat newFormatter = new DecimalFormat(str.toString());
+        return newFormatter.format(value);
     }
 }

@@ -981,7 +981,7 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], 
+            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d],
                     Math.sqrt(hyperparams.get(RHO)));
         }
 
@@ -1016,7 +1016,7 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         double resLlh = 0.0;
         double[] regValues = getRegressionValues();
         for (int d = 0; d < D; d++) {
-            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d], 
+            resLlh += StatUtils.logNormalProbability(responses[d], regValues[d],
                     Math.sqrt(newParams.get(RHO)));
         }
 
@@ -1266,8 +1266,7 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
         }
     }
 
-    public void outputTopicTopWords(File outputFile, int numWords)
-            throws Exception {
+    public void outputTopicTopWords(File outputFile, int numWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -1276,20 +1275,25 @@ public class SHDP_CRF extends AbstractSampler implements Regressor<ResponseTextD
             System.out.println("Outputing top words to file " + outputFile);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-        for (SHDPDish dish : globalRestaurant.getTables()) {
-            String[] topWords = getTopWords(dish.getContent().getDistribution(), numWords);
-            writer.write("[" + dish.getIndex()
-                    + ", " + dish.getIterationCreated()
-                    + ", " + dish.getNumCustomers()
-                    + ", " + MiscUtils.formatDouble(dish.getRegressionParameter())
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            for (SHDPDish dish : globalRestaurant.getTables()) {
+                String[] topWords = getTopWords(dish.getContent().getDistribution(), numWords);
+                writer.write("[" + dish.getIndex()
+                        + ", " + dish.getIterationCreated()
+                        + ", " + dish.getNumCustomers()
+                        + ", " + MiscUtils.formatDouble(dish.getRegressionParameter())
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + outputFile);
         }
-        writer.close();
     }
 
     public void outputTopicCoherence(

@@ -477,7 +477,7 @@ public class RecursiveLDA extends AbstractSampler {
         inputModel(filepath);
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -486,46 +486,51 @@ public class RecursiveLDA extends AbstractSampler {
             System.out.println("Outputing topics to file " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        Stack<RLDA> stack = new Stack<RLDA>();
-        stack.add(rootLDA);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            Stack<RLDA> stack = new Stack<RLDA>();
+            stack.add(rootLDA);
 
-        while (!stack.isEmpty()) {
-            RLDA node = stack.pop();
-            stack.addAll(Arrays.asList(node.getChildren()));
+            while (!stack.isEmpty()) {
+                RLDA node = stack.pop();
+                stack.addAll(Arrays.asList(node.getChildren()));
 
-            int level = node.getLevel();
-            if (node.getParent() != null) {
-                double[] parentTopics = node.getParent().getTopicWords()[node.getIndex()].getDistribution();
-                String[] parentTopWords = getTopWords(parentTopics, numTopWords);
-                for (int l = 0; l < level; l++) {
-                    writer.write("\t");
-                }
-                writer.write("[" + node.getPathString()
-                        + ": " + node.getParent().getTopicWords()[node.getIndex()].getCountSum() + "]");
-                for (String tw : parentTopWords) {
-                    writer.write(" " + tw);
-                }
-                writer.write("\n");
-            }
-
-            if (node.numChildren == 0) {
-                DirMult[] topics = node.getTopicWords();
-                for (int k = 0; k < topics.length; k++) {
-                    String[] topWords = getTopWords(topics[k].getDistribution(), numTopWords);
-                    for (int l = 0; l < level + 1; l++) {
+                int level = node.getLevel();
+                if (node.getParent() != null) {
+                    double[] parentTopics = node.getParent().getTopicWords()[node.getIndex()].getDistribution();
+                    String[] parentTopWords = getTopWords(parentTopics, numTopWords);
+                    for (int l = 0; l < level; l++) {
                         writer.write("\t");
                     }
-                    writer.write("[" + node.getPathString() + ":" + k
-                            + ":" + topics[k].getCountSum() + "]");
-                    for (String tw : topWords) {
+                    writer.write("[" + node.getPathString()
+                            + ": " + node.getParent().getTopicWords()[node.getIndex()].getCountSum() + "]");
+                    for (String tw : parentTopWords) {
                         writer.write(" " + tw);
                     }
                     writer.write("\n");
                 }
+
+                if (node.numChildren == 0) {
+                    DirMult[] topics = node.getTopicWords();
+                    for (int k = 0; k < topics.length; k++) {
+                        String[] topWords = getTopWords(topics[k].getDistribution(), numTopWords);
+                        for (int l = 0; l < level + 1; l++) {
+                            writer.write("\t");
+                        }
+                        writer.write("[" + node.getPathString() + ":" + k
+                                + ":" + topics[k].getCountSum() + "]");
+                        for (String tw : topWords) {
+                            writer.write(" " + tw);
+                        }
+                        writer.write("\n");
+                    }
+                }
             }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public String printSummary() {

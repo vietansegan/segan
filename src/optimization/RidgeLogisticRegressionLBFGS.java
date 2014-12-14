@@ -56,9 +56,9 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         double lprior = 0.0;
         for (int kk = 0; kk < K; kk++) {
             double diff = params[kk] - getMean(kk);
-            lprior -= diff * diff / (2 * getVariance(kk));
+            lprior -= 0.5 * diff * diff / getVariance(kk);
         }
-        return (llh + lprior) / N;
+        return (llh + lprior);
     }
 
     @Override
@@ -79,7 +79,7 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         }
 
         for (int k = 0; k < K; k++) {
-            gradient[k] = (llhGrad[k] + lpGrad[k]) / N;
+            gradient[k] = (llhGrad[k] + lpGrad[k]);
         }
     }
     

@@ -12,6 +12,7 @@ import java.util.HashMap;
 import regression.AbstractRegressor;
 import util.CLIUtils;
 import util.IOUtils;
+import util.RankingItem;
 import util.StatUtils;
 import util.evaluation.Measurement;
 
@@ -277,8 +278,8 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         // average
         if (measureNames != null) {
             for (String measure : measureNames) {
-                writer.write(measure + "\n");
-                writer.write("Model\tNum-folds\tAverage\tStdv\n");
+                ArrayList<RankingItem<String>> rankModels = new ArrayList<>();
+                HashMap<String, ArrayList<Double>> modelVals = new HashMap<>();
                 for (String model : modelNames) {
                     ArrayList<Double> vals = new ArrayList<Double>();
                     for (HashMap<String, ArrayList<Measurement>> result : results) {
@@ -296,10 +297,22 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
                     }
 
                     double avg = StatUtils.mean(vals);
+                    rankModels.add(new RankingItem<String>(model, avg));
+                    modelVals.put(model, vals);
+
+                }
+                Collections.sort(rankModels);
+
+                writer.write(measure + "\n");
+                writer.write("Model\tNum-folds\tAverage\tStdv\n");
+                for (int ii = 0; ii < rankModels.size(); ii++) {
+                    RankingItem<String> rankModel = rankModels.get(ii);
+                    String model = rankModel.getObject();
+                    ArrayList<Double> vals = modelVals.get(model);
                     double std = StatUtils.standardDeviation(vals);
                     writer.write(model
                             + "\t" + vals.size()
-                            + "\t" + avg
+                            + "\t" + rankModel.getPrimaryValue()
                             + "\t" + std
                             + "\n");
                 }

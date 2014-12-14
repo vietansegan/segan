@@ -554,7 +554,7 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -563,31 +563,36 @@ public class TwoLevelHierSegLDA extends AbstractSampler {
             logln("Outputing topics to file " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            double[] firstTopic = first_topic_words[k].getDistribution();
-            String[] firstTopWords = getTopWords(firstTopic, numTopWords);
-            writer.write("[" + k
-                    + ", " + first_topic_words[k].getCountSum()
-                    + "]");
-            for (String topWord : firstTopWords) {
-                writer.write(" " + topWord);
-            }
-            writer.write("\n\n");
-
-            for (int l = 0; l < L; l++) {
-                double[] secondTopic = second_topic_words[k][l].getDistribution();
-                String[] secondTopWords = getTopWords(secondTopic, numTopWords);
-                writer.write("\t[" + l
-                        + ", " + second_topic_words[k][l].getCountSum()
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int k = 0; k < K; k++) {
+                double[] firstTopic = first_topic_words[k].getDistribution();
+                String[] firstTopWords = getTopWords(firstTopic, numTopWords);
+                writer.write("[" + k
+                        + ", " + first_topic_words[k].getCountSum()
                         + "]");
-                for (String topWord : secondTopWords) {
+                for (String topWord : firstTopWords) {
                     writer.write(" " + topWord);
                 }
                 writer.write("\n\n");
+
+                for (int l = 0; l < L; l++) {
+                    double[] secondTopic = second_topic_words[k][l].getDistribution();
+                    String[] secondTopWords = getTopWords(secondTopic, numTopWords);
+                    writer.write("\t[" + l
+                            + ", " + second_topic_words[k][l].getCountSum()
+                            + "]");
+                    for (String topWord : secondTopWords) {
+                        writer.write(" " + topWord);
+                    }
+                    writer.write("\n\n");
+                }
             }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public static String getHelpString() {

@@ -43,8 +43,6 @@ public class SLDA extends AbstractSampler {
     protected double[][] v;         // L x K
     protected double[][] scores;    // D x L
     // internal
-    private int numTokens;
-    private int numTokensChanged;
     private int numLabels;
     // info
     protected ArrayList<String> labelVocab;
@@ -187,8 +185,7 @@ public class SLDA extends AbstractSampler {
 
         try {
             IOUtils.createFolder(iterPredFolder);
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -465,7 +462,7 @@ public class SLDA extends AbstractSampler {
                 for (int k = 0; k < K; k++) {
                     logprobs[k] = Math.log(docTopics[d].getCount(k) + hyperparams.get(ALPHA))
                             + Math.log((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                            / (topicWords[k].getCountSum() + totalBeta));
+                                    / (topicWords[k].getCountSum() + totalBeta));
 
                     if (labels != null) {
                         double totalScore = 0.0;
@@ -506,7 +503,7 @@ public class SLDA extends AbstractSampler {
                                 + ". n = " + n
                                 + ". " + MiscUtils.formatDouble((docTopics[d].getCount(k) + hyperparams.get(ALPHA)))
                                 + ". " + MiscUtils.formatDouble((topicWords[k].getCount(words[d][n]) + hyperparams.get(BETA))
-                                / (topicWords[k].getCountSum() + totalBeta))
+                                        / (topicWords[k].getCountSum() + totalBeta))
                                 + ". " + (labelLlh)
                                 + ". " + logprobs[k]);
                     }
@@ -534,7 +531,7 @@ public class SLDA extends AbstractSampler {
 
     private long updateVs() {
         long sTime = System.currentTimeMillis();
-        
+
         // debug
         printLabelLogLikelihood();
 
@@ -559,7 +556,7 @@ public class SLDA extends AbstractSampler {
         }
 
         updateScores();
-        
+
         // debug
         printLabelLogLikelihood();
 
@@ -568,10 +565,9 @@ public class SLDA extends AbstractSampler {
 
     private long updateManualVs() {
         long sTime = System.currentTimeMillis();
-        
+
         // debug
 //        printLabelLogLikelihood();
-        
         // precompute
         SparseVector[] expDocDotProds = new SparseVector[D];
         double[] docNorms = new double[D];
@@ -618,10 +614,9 @@ public class SLDA extends AbstractSampler {
         }
 
         updateScores();
-        
+
         // debug
 //        printLabelLogLikelihood();
-        
         return System.currentTimeMillis() - sTime;
     }
 
@@ -657,8 +652,8 @@ public class SLDA extends AbstractSampler {
             }
 
             int topicWordCount = 0;
-            for (int k = 0; k < topicWords.length; k++) {
-                topicWordCount += topicWords[k].getCountSum();
+            for (DirMult topicWord : topicWords) {
+                topicWordCount += topicWord.getCountSum();
             }
 
             logln("--- docTopics: " + docTopics.length + ". " + docTopicCount);
@@ -677,8 +672,8 @@ public class SLDA extends AbstractSampler {
                 docTopicCount += docTopics[d].getCountSum();
             }
             int topicWordCount = 0;
-            for (int k = 0; k < topicWords.length; k++) {
-                topicWordCount += topicWords[k].getCountSum();
+            for (DirMult topicWord : topicWords) {
+                topicWordCount += topicWord.getCountSum();
             }
             logln("--- docTopics: " + docTopics.length + ". " + docTopicCount);
             logln("--- topicWords: " + topicWords.length + ". " + topicWordCount);
@@ -716,7 +711,7 @@ public class SLDA extends AbstractSampler {
         PredictionUtils.outputSingleModelClassifications(
                 new File(outputResultFile), predictedScores);
     }
-    
+
     private void printLabelLogLikelihood() {
         double labelLlh = 0.0;
         for (int d = 0; d < D; d++) {
@@ -741,7 +736,7 @@ public class SLDA extends AbstractSampler {
             }
         }
         paramPrior /= 2 * sigma;
-        
+
         logln("label = " + MiscUtils.formatDouble(labelLlh)
                 + ". param = " + MiscUtils.formatDouble(paramPrior));
     }
@@ -937,7 +932,8 @@ public class SLDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    @Override
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -946,20 +942,24 @@ public class SLDA extends AbstractSampler {
             logln("Outputing per-topic top words to " + file);
         }
 
-
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int k = 0; k < K; k++) {
-            double[] distrs = topicWords[k].getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + topicWords[k].getCountSum()
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int k = 0; k < K; k++) {
+                double[] distrs = topicWords[k].getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + topicWords[k].getCountSum()
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     /**
@@ -1004,8 +1004,7 @@ public class SLDA extends AbstractSampler {
         try {
             IOUtils.createFolder(iterPredFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1031,7 +1030,7 @@ public class SLDA extends AbstractSampler {
 
     class Objective implements Optimizable.ByGradientValue {
 
-        private double[] parameters;
+        private final double[] parameters;
 
         public Objective(double[][] curParams) {
             parameters = new double[L * K];

@@ -50,7 +50,6 @@ public class OWLQNLogisticRegression extends AbstractLinearModel {
             System.out.println("--- # features: " + designMatrix[0].getDimension());
         }
         OWLQN minimizer = new OWLQN();
-        OWLQN.biasParameters.add(0);
         minimizer.setQuiet(quiet);
         minimizer.setMaxIters(maxIters);
         DiffFunc diffFunction = new DiffFunc(designMatrix, responses, l2);

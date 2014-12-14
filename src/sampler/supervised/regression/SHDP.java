@@ -67,8 +67,6 @@ public class SHDP extends AbstractSampler {
     protected double[] docRegressMeans;
     protected SparseVector[] designMatrix;
     // internal
-    private int numTokens;
-    private int numTokensChange;
     private double uniform;
 
     public SHDP() {
@@ -383,7 +381,7 @@ public class SHDP extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            numTokensChange = 0;
+            numTokensChanged = 0;
 
             long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
             long weightTime = sampleGlobalWeights();
@@ -426,8 +424,8 @@ public class SHDP extends AbstractSampler {
             if (isReporting()) {
                 evaluateRegressPrediction(responses, docRegressMeans);
                 logln("--- --- # tokens: " + numTokens
-                        + ". # token changed: " + numTokensChange
-                        + ". change ratio: " + (double) numTokensChange / numTokens
+                        + ". # token changed: " + numTokensChanged
+                        + ". change ratio: " + (double) numTokensChanged / numTokens
                         + "\n");
                 System.out.println();
             }
@@ -501,8 +499,8 @@ public class SHDP extends AbstractSampler {
                     indices.add(k);
                     double docTopicProb = docTopics[ii].getCount(k)
                             + hyperparams.get(ALPHA_LOCAL) * globalWeights.get(k);
-                    double topicWordProb =
-                            (topicWords.getComponent(k).phi.getCount(words[dd][nn])
+                    double topicWordProb
+                            = (topicWords.getComponent(k).phi.getCount(words[dd][nn])
                             + hyperparams.get(BETA))
                             / (topicWords.getComponent(k).phi.getCountSum() + totalBeta);
                     double logprob = Math.log(docTopicProb * topicWordProb);
@@ -544,7 +542,7 @@ public class SHDP extends AbstractSampler {
                 int newZ = indices.get(sampledIdx);
 
                 if (curZ != newZ) {
-                    numTokensChange++;
+                    numTokensChanged++;
                 }
 
                 boolean newTopic = false;
@@ -833,7 +831,8 @@ public class SHDP extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    @Override
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -848,22 +847,27 @@ public class SHDP extends AbstractSampler {
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < sortedTopics.size(); ii++) {
-            int k = sortedTopics.get(ii).getObject();
-            Topic topic = topicWords.getComponent(k);
-            double[] distrs = topic.phi.getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + topic.born
-                    + ", " + MiscUtils.formatDouble(topic.param)
-                    + ", " + topic.phi.getCountSum() + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (RankingItem<Integer> sortedTopic : sortedTopics) {
+                int k = sortedTopic.getObject();
+                Topic topic = topicWords.getComponent(k);
+                double[] distrs = topic.phi.getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + topic.born
+                        + ", " + MiscUtils.formatDouble(topic.param)
+                        + ", " + topic.phi.getCountSum() + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     class Topic {
@@ -881,7 +885,7 @@ public class SHDP extends AbstractSampler {
 
     class Topics {
 
-        private HashMap<Integer, Topic> actives;
+        private final HashMap<Integer, Topic> actives;
         private SortedSet<Integer> inactives;
 
         public Topics() {

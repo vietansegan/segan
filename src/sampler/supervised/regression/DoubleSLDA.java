@@ -516,8 +516,8 @@ public class DoubleSLDA extends AbstractSampler {
 
         double[] logprobs = new double[K];
         for (int k = 0; k < K; k++) {
-            logprobs[k] =
-                    docTopics[d].getLogLikelihood(k)
+            logprobs[k]
+                    = docTopics[d].getLogLikelihood(k)
                     + topicWords[k].getLogLikelihood(words[d][n]);
             if (observe) {
                 double responseMean = docResponseDotProds[d] + etas[k] / (words[d].length);
@@ -816,7 +816,7 @@ public class DoubleSLDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -831,22 +831,27 @@ public class DoubleSLDA extends AbstractSampler {
         }
         Collections.sort(sortedTopics);
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        for (int ii = 0; ii < K; ii++) {
-            int k = sortedTopics.get(ii).getObject();
-            double[] distrs = topicWords[k].getDistribution();
-            String[] topWords = getTopWords(distrs, numTopWords);
-            writer.write("[" + k
-                    + ", " + topicWords[k].getCountSum()
-                    + ", " + MiscUtils.formatDouble(etas[k])
-                    + ", " + MiscUtils.formatDouble(lambdas[k])
-                    + "]");
-            for (String topWord : topWords) {
-                writer.write("\t" + topWord);
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            for (int ii = 0; ii < K; ii++) {
+                int k = sortedTopics.get(ii).getObject();
+                double[] distrs = topicWords[k].getDistribution();
+                String[] topWords = getTopWords(distrs, numTopWords);
+                writer.write("[" + k
+                        + ", " + topicWords[k].getCountSum()
+                        + ", " + MiscUtils.formatDouble(etas[k])
+                        + ", " + MiscUtils.formatDouble(lambdas[k])
+                        + "]");
+                for (String topWord : topWords) {
+                    writer.write("\t" + topWord);
+                }
+                writer.write("\n\n");
             }
-            writer.write("\n\n");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public File getIterationPredictionFolder() {

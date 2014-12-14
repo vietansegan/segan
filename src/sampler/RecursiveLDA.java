@@ -515,7 +515,6 @@ public class RecursiveLDA extends AbstractSampler {
             while ((line = reader.readLine()) != null) {
                 String pathStr = line;
 
-
                 // create node
                 int lastColonIndex = pathStr.lastIndexOf(":");
                 RLDA parent = null;
@@ -528,13 +527,11 @@ public class RecursiveLDA extends AbstractSampler {
                 int nodeLevel = pathIndices.length - 1;
                 RLDA node = new RLDA(nodeIndex, nodeLevel, null, parent);
 
-
                 DirMult[] topics = new DirMult[Ks[nodeLevel]];
                 for (int k = 0; k < Ks[nodeLevel]; k++) {
                     topics[k] = DirMult.input(reader.readLine());
                 }
                 node.topic_words = topics;
-
 
                 if (node.getLevel() == 0) {
                     rootLDA = node;
@@ -553,7 +550,7 @@ public class RecursiveLDA extends AbstractSampler {
         }
     }
 
-    public void outputTopicTopWords(File file, int numTopWords) throws Exception {
+    public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
         }
@@ -562,58 +559,63 @@ public class RecursiveLDA extends AbstractSampler {
             System.out.println("Outputing topics to file " + file);
         }
 
-        BufferedWriter writer = IOUtils.getBufferedWriter(file);
-        if (hasBackground()) {
-            double[] bgTopic = rootLDA.getTopics()[BACKGROUND].getDistribution();
-            String[] bgWords = getTopWords(bgTopic, numTopWords);
-            writer.write("[Background: " + rootLDA.getTopics()[BACKGROUND].getCountSum() + "]");
-            for (String tw : bgWords) {
-                writer.write(" " + tw);
-            }
-            writer.write("\n");
-        }
-
-        Stack<RLDA> stack = new Stack<RLDA>();
-        stack.add(rootLDA);
-
-        while (!stack.isEmpty()) {
-            RLDA node = stack.pop();
-            for (RLDA child : node.getChildren()) {
-                stack.add(child);
-            }
-
-            int level = node.getLevel();
-            if (node.getParent() != null) {
-                double[] parentTopics = node.getParent().getTopics()[node.getIndex()].getDistribution();
-                String[] parentTopWords = getTopWords(parentTopics, numTopWords);
-                for (int l = 0; l < level; l++) {
-                    writer.write("\t");
-                }
-                writer.write("[" + node.getPathString()
-                        + ": " + node.getParent().getTopics()[node.getIndex()].getCountSum() + "]");
-                for (String tw : parentTopWords) {
+        try {
+            BufferedWriter writer = IOUtils.getBufferedWriter(file);
+            if (hasBackground()) {
+                double[] bgTopic = rootLDA.getTopics()[BACKGROUND].getDistribution();
+                String[] bgWords = getTopWords(bgTopic, numTopWords);
+                writer.write("[Background: " + rootLDA.getTopics()[BACKGROUND].getCountSum() + "]");
+                for (String tw : bgWords) {
                     writer.write(" " + tw);
                 }
                 writer.write("\n");
             }
 
-            if (node.getChildren().isEmpty()) {
-                DirMult[] topics = node.getTopics();
-                for (int k = 0; k < topics.length; k++) {
-                    String[] topWords = getTopWords(topics[k].getDistribution(), numTopWords);
-                    for (int l = 0; l < level + 1; l++) {
+            Stack<RLDA> stack = new Stack<RLDA>();
+            stack.add(rootLDA);
+
+            while (!stack.isEmpty()) {
+                RLDA node = stack.pop();
+                for (RLDA child : node.getChildren()) {
+                    stack.add(child);
+                }
+
+                int level = node.getLevel();
+                if (node.getParent() != null) {
+                    double[] parentTopics = node.getParent().getTopics()[node.getIndex()].getDistribution();
+                    String[] parentTopWords = getTopWords(parentTopics, numTopWords);
+                    for (int l = 0; l < level; l++) {
                         writer.write("\t");
                     }
-                    writer.write("[" + node.getPathString() + ":" + k
-                            + ":" + topics[k].getCountSum() + "]");
-                    for (String tw : topWords) {
+                    writer.write("[" + node.getPathString()
+                            + ": " + node.getParent().getTopics()[node.getIndex()].getCountSum() + "]");
+                    for (String tw : parentTopWords) {
                         writer.write(" " + tw);
                     }
                     writer.write("\n");
                 }
+
+                if (node.getChildren().isEmpty()) {
+                    DirMult[] topics = node.getTopics();
+                    for (int k = 0; k < topics.length; k++) {
+                        String[] topWords = getTopWords(topics[k].getDistribution(), numTopWords);
+                        for (int l = 0; l < level + 1; l++) {
+                            writer.write("\t");
+                        }
+                        writer.write("[" + node.getPathString() + ":" + k
+                                + ":" + topics[k].getCountSum() + "]");
+                        for (String tw : topWords) {
+                            writer.write(" " + tw);
+                        }
+                        writer.write("\n");
+                    }
+                }
             }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + file);
         }
-        writer.close();
     }
 
     public static void main(String[] args) {

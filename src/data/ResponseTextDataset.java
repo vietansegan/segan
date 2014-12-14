@@ -149,6 +149,7 @@ public class ResponseTextDataset extends TextDataset {
      * @param trToDevRatio Ratio between the number of training and the number
      * of test data
      * @param numClasses Number of discrete classes for stratified sampling
+     * @throws java.lang.Exception
      */
     public void createCrossValidation(String cvFolder, int numFolds,
             double trToDevRatio, int numClasses) throws Exception {
@@ -246,6 +247,8 @@ public class ResponseTextDataset extends TextDataset {
      * Load train/development/test data in a cross validation fold.
      *
      * @param fold The given fold
+     * @return 
+     * @throws java.lang.Exception
      */
     public static ResponseTextDataset[] loadCrossValidationFold(Fold fold) throws Exception {
         ResponseTextDataset[] foldData = new ResponseTextDataset[3];

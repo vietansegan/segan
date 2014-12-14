@@ -429,7 +429,7 @@ public class NLDA extends AbstractSampler {
         for (iter = 0; iter < MAX_ITER; iter++) {
             numTokensChanged = 0;
             numTokensAccepted = 0;
-            boolean isReporting = isReporting();
+            isReporting = isReporting();
 
             if (isReporting) {
                 // store llh after every iteration

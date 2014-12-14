@@ -50,11 +50,23 @@ public class OWLQNLinearRegression extends AbstractLinearModel {
             System.out.println("--- # features: " + designMatrix[0].getDimension());
         }
         OWLQN minimizer = new OWLQN();
-        OWLQN.biasParameters.add(0);
         minimizer.setQuiet(quiet);
         minimizer.setMaxIters(maxIters);
         DiffFunc diffFunction = new DiffFunc(designMatrix, responses, l2);
         double[] initParams = new double[K];
+        this.weights = minimizer.minimize(diffFunction, initParams, l1);
+    }
+
+    public void train(SparseVector[] designMatrix, double[] responses, double[] initParams) {
+        if (verbose) {
+            System.out.println("Training ...");
+            System.out.println("--- # instances: " + designMatrix.length + ". " + responses.length);
+            System.out.println("--- # features: " + designMatrix[0].getDimension());
+        }
+        OWLQN minimizer = new OWLQN();
+        minimizer.setQuiet(quiet);
+        minimizer.setMaxIters(maxIters);
+        DiffFunc diffFunction = new DiffFunc(designMatrix, responses, l2);
         this.weights = minimizer.minimize(diffFunction, initParams, l1);
     }
 

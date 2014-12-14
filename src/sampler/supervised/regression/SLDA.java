@@ -60,8 +60,6 @@ public class SLDA extends AbstractSampler {
     protected double[] docRegressMeans;
     protected SparseVector[] designMatrix;
     // internal
-    protected int numTokensChanged;
-    protected int numTokens;
     protected double sqrtRho;
 
     public SLDA() {
@@ -312,8 +310,8 @@ public class SLDA extends AbstractSampler {
         // average over all stored predictions
         double[] predictions = new double[D];
         for (int dd = 0; dd < D; dd++) {
-            for (int ii = 0; ii < predResponsesList.size(); ii++) {
-                predictions[dd] += predResponsesList.get(ii)[dd] / predResponsesList.size();
+            for (double[] predResponses : predResponsesList) {
+                predictions[dd] += predResponses[dd] / predResponsesList.size();
             }
         }
         return predictions;
@@ -876,6 +874,7 @@ public class SLDA extends AbstractSampler {
         }
     }
 
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -915,10 +914,11 @@ public class SLDA extends AbstractSampler {
     }
 
     public void outputPosterior(File my_file) {
-	double[][] postTops = new double[K][];
-	for (int i = 0; i < K; i++) 
-	    postTops[i] = topicWords[i].getDistribution();
-	IOUtils.output2DArray(my_file, postTops);
+        double[][] postTops = new double[K][];
+        for (int i = 0; i < K; i++) {
+            postTops[i] = topicWords[i].getDistribution();
+        }
+        IOUtils.output2DArray(my_file, postTops);
     }
 
     /**
@@ -992,13 +992,15 @@ public class SLDA extends AbstractSampler {
     }
 
     private static int findIndex(String[] set, String q) {
-	for (int i = 0; i < set.length; i++)
-	    if (set[i].equals(q))
-		return i;
-	System.out.println(q);
-	return -1;
+        for (int i = 0; i < set.length; i++) {
+            if (set[i].equals(q)) {
+                return i;
+            }
+        }
+        System.out.println(q);
+        return -1;
     }
-    
+
     private static void addOpitions() throws Exception {
         parser = new BasicParser();
         options = new Options();
@@ -1117,8 +1119,8 @@ public class SLDA extends AbstractSampler {
             BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
             String line;
             while ((line = reader.readLine()) != null) {
-		//int docIdx = findIndex(data.getDocIds(), line.trim());
-		int docIdx = Integer.parseInt(line);
+                //int docIdx = findIndex(data.getDocIds(), line.trim());
+                int docIdx = Integer.parseInt(line);
                 if (docIdx >= data.getDocIds().length) {
                     throw new RuntimeException("Out of bound. Doc index " + docIdx);
                 }
@@ -1138,7 +1140,7 @@ public class SLDA extends AbstractSampler {
             sampler.initialize(priorTopics);
             sampler.iterate();
             sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-	    sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+            sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
         }
 
         if (cmd.hasOption("test")) {
@@ -1164,15 +1166,21 @@ public class SLDA extends AbstractSampler {
             }
 
             // output predictions and results
-	    int numDocs = selectedDocIndices.size();
-	    String[] selectedIds = new String[numDocs];
-	    double[] responses = new double[numDocs];
-	    for (int q = 0; q < numDocs; q++) {
-		int index = selectedDocIndices.get(q);
-		selectedIds[q] = data.getDocIds()[index];
-		responses[q] = docResponses[index];
-	    }
-	       
+            String[] selectedIds;
+            double[] responses;
+            if (selectedDocIndices == null) {
+                selectedIds = data.getDocIds();
+                responses = docResponses;
+            } else {
+                int numDocs = selectedDocIndices.size();
+                selectedIds = new String[numDocs];
+                responses = new double[numDocs];
+                for (int q = 0; q < numDocs; q++) {
+                    int index = selectedDocIndices.get(q);
+                    selectedIds[q] = data.getDocIds()[index];
+                    responses[q] = docResponses[index];
+                }
+            }
 
             PredictionUtils.outputRegressionPredictions(
                     new File(predictionFolder,
