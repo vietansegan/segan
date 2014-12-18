@@ -406,12 +406,16 @@ public class SNLDA extends AbstractSampler {
 
     @Override
     public void initialize() {
+        initialize(null);
+    }
+
+    public void initialize(double[][] priorTopics) {
         if (verbose) {
             logln("Initializing ...");
         }
         iter = INIT;
         isReporting = true;
-        initializeModelStructure();
+        initializeModelStructure(priorTopics);
         initializeDataStructure();
         initializeAssignments();
         updateEtas();
@@ -428,7 +432,7 @@ public class SNLDA extends AbstractSampler {
     /**
      * Initialize the topics at each node by running LDA recursively.
      */
-    protected void initializeModelStructure() {
+    protected void initializeModelStructure(double[][] priorTopics) {
         if (verbose) {
             logln("--- Initializing model structure using Recursive LDA ...");
         }
@@ -458,6 +462,9 @@ public class SNLDA extends AbstractSampler {
             } else {
                 if (verbose) {
                     logln("--- --- Recursive LDA not found. Running RecursiveLDA ...");
+                }
+                if (priorTopics != null) {
+                    rlda.setPriorTopics(priorTopics);
                 }
                 rlda.initialize();
                 rlda.iterate();
@@ -1540,7 +1547,7 @@ public class SNLDA extends AbstractSampler {
     public static String getExampleCmd() {
         String example = new String();
 
-        example += "For continuous responses:";
+        example += "For continuous responses:\n";
         example += "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
                 + "--dataset amazon-data "
                 + "--word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc "
@@ -1561,8 +1568,8 @@ public class SNLDA extends AbstractSampler {
                 + "--mu 0.0 "
                 + "--sigma 2.5 "
                 + "-v -d -z";
-        example += "\n";
-        example += "For continuous responses:";
+        example += "\n\n";
+        example += "For continuous responses:\n";
         example += "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
                 + "--dataset amazon-data "
                 + "--word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc "
@@ -1595,6 +1602,7 @@ public class SNLDA extends AbstractSampler {
         addOption("word-file", "Document word file");
         addOption("info-file", "Document info file");
         addOption("selected-docs-file", "(Optional) Indices of selected documents");
+        addOption("prior-topic-file", "File containing prior topics");
 
         // data output
         addOption("output-folder", "Output folder");
@@ -1700,6 +1708,12 @@ public class SNLDA extends AbstractSampler {
         // data output
         String outputFolder = cmd.getOptionValue("output-folder");
 
+        double[][] priorTopics = null;
+        if (cmd.hasOption("prior-topic-file")) {
+            String priorTopicFile = cmd.getOptionValue("prior-topic-file");
+            priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
+        }
+
         SNLDA sampler = new SNLDA();
         sampler.setVerbose(cmd.hasOption("v"));
         sampler.setDebug(cmd.hasOption("d"));
@@ -1748,7 +1762,7 @@ public class SNLDA extends AbstractSampler {
             sampler.train(contData.getWords(), null, docResponses);
         }
 
-        sampler.initialize();
+        sampler.initialize(priorTopics);
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
     }
