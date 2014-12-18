@@ -17,6 +17,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
+import sampler.unsupervised.LDA;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -200,6 +201,54 @@ public abstract class AbstractSampler implements Serializable {
     public abstract void outputState(String filepath);
 
     public abstract void inputState(String filepath);
+
+    /**
+     * Run LDA.
+     *
+     * @param words Document
+     * @param K Number of topics
+     * @param V Vocabulary size
+     */
+    public LDA runLDA(int[][] words, int K, int V) {
+        int lda_burnin = 250;
+        int lda_maxiter = 500;
+        int lda_samplelag = 25;
+        LDA lda = new LDA();
+        lda.setDebug(false);
+        lda.setVerbose(verbose);
+        lda.setLog(false);
+        double lda_alpha = 0.1;
+        double lda_beta = 0.1;
+
+        lda.configure(folder, V, K, lda_alpha, lda_beta, InitialState.RANDOM, false,
+                lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
+
+        try {
+            File ldaFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
+            lda.train(words, null);
+            if (ldaFile.exists()) {
+                if (verbose) {
+                    logln("--- --- LDA file exists. Loading from " + ldaFile);
+                }
+                lda.inputState(ldaFile);
+            } else {
+                if (verbose) {
+                    logln("--- --- LDA not found. Running LDA ...");
+                }
+                lda.initialize();
+                lda.iterate();
+                IOUtils.createFolder(lda.getSamplerFolderPath());
+                lda.outputState(ldaFile);
+                lda.setWordVocab(wordVocab);
+                lda.outputTopicTopWords(new File(lda.getSamplerFolderPath(), TopWordFile), 20);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while running LDA for initialization");
+        }
+        setLog(log);
+        return lda;
+    }
 
     public void metaIterate() {
         if (verbose) {

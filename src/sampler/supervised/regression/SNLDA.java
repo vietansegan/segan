@@ -2,6 +2,7 @@ package sampler.supervised.regression;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import core.AbstractSampler;
+import data.LabelTextDataset;
 import data.ResponseTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -14,8 +15,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Stack;
 import optimization.RidgeLinearRegressionLBFGS;
+import optimization.RidgeLogisticRegressionLBFGS;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.RecursiveLDA;
@@ -38,6 +42,8 @@ import util.normalizer.ZNormalizer;
  */
 public class SNLDA extends AbstractSampler {
 
+    public static final int POSITVE = 1;
+    public static final int NEGATIVE = -1;
     // hyperparameters for fixed-height tree
     protected double[] alphas;          // [L-1]
     protected double[] betas;           // [L]
@@ -49,7 +55,8 @@ public class SNLDA extends AbstractSampler {
 
     // inputs
     protected int[][] words; // all words
-    protected double[] responses; // [D]: responses of selected documents
+    protected double[] responses; // [D] continous responses
+    protected int[] labels; // [D] binary responses
     protected ArrayList<Integer> docIndices; // indices of docs under consideration
     protected int V;    // vocabulary size
     protected int[] Ks; // [L-1]: number of children per node at each level
@@ -63,6 +70,8 @@ public class SNLDA extends AbstractSampler {
     private int numTokensAccepted;
     private double[] background;
     private double[] docMeans;
+    private boolean isBinary;
+    private Set<Integer> positives;
 
     public SNLDA() {
         this.basename = "SNLDA";
@@ -72,7 +81,93 @@ public class SNLDA extends AbstractSampler {
         this.basename = bname;
     }
 
-    public void configure(String folder,
+    public void configureBinary(String folder,
+            int V, int[] Ks,
+            double[] alphas,
+            double[] betas,
+            double[] gamma_means,
+            double[] gamma_scales,
+            double mu,
+            double sigma,
+            InitialState initState,
+            boolean paramOpt,
+            int burnin, int maxiter, int samplelag, int repInt) {
+        if (verbose) {
+            logln("Configuring ...");
+        }
+        this.folder = folder;
+        this.V = V;
+        this.Ks = Ks;
+        this.L = this.Ks.length + 1;
+
+        this.alphas = alphas;
+        this.betas = betas;
+        this.gamma_means = gamma_means;
+        this.gamma_scales = gamma_scales;
+        this.mu = mu;
+        this.sigma = sigma;
+
+        this.hyperparams = new ArrayList<Double>();
+        this.sampledParams = new ArrayList<ArrayList<Double>>();
+        this.sampledParams.add(cloneHyperparameters());
+
+        this.BURN_IN = burnin;
+        this.MAX_ITER = maxiter;
+        this.LAG = samplelag;
+        this.REP_INTERVAL = repInt;
+
+        this.initState = initState;
+        this.paramOptimized = paramOpt;
+        this.prefix += initState.toString();
+        this.isBinary = true;
+
+        this.setName();
+
+        if (verbose) {
+            logln("--- V = " + V);
+            logln("--- Ks = " + MiscUtils.arrayToString(this.Ks));
+            logln("--- folder\t" + folder);
+            logln("--- alphas:\t" + MiscUtils.arrayToString(alphas));
+            logln("--- betas:\t" + MiscUtils.arrayToString(betas));
+            logln("--- gamma means:\t" + MiscUtils.arrayToString(gamma_means));
+            logln("--- gamma scales:\t" + MiscUtils.arrayToString(gamma_scales));
+            logln("--- rho:\t" + MiscUtils.formatDouble(rho));
+            logln("--- mu:\t" + MiscUtils.formatDouble(mu));
+            logln("--- sigma:\t" + MiscUtils.formatDouble(sigma));
+            logln("--- burn-in:\t" + BURN_IN);
+            logln("--- max iter:\t" + MAX_ITER);
+            logln("--- sample lag:\t" + LAG);
+            logln("--- report interval:\t" + REP_INTERVAL);
+            logln("--- paramopt:\t" + paramOptimized);
+            logln("--- initialize:\t" + this.initState);
+        }
+
+        if (this.alphas.length != L - 1) {
+            throw new RuntimeException("Local alphas: "
+                    + MiscUtils.arrayToString(this.alphas)
+                    + ". Length should be " + (L - 1));
+        }
+
+        if (this.betas.length != L) {
+            throw new RuntimeException("Betas: "
+                    + MiscUtils.arrayToString(this.betas)
+                    + ". Length should be " + (L));
+        }
+
+        if (this.gamma_means.length != L - 1) {
+            throw new RuntimeException("Gamma means: "
+                    + MiscUtils.arrayToString(this.gamma_means)
+                    + ". Length should be " + (L - 1));
+        }
+
+        if (this.gamma_scales.length != L - 1) {
+            throw new RuntimeException("Gamma scales: "
+                    + MiscUtils.arrayToString(this.gamma_scales)
+                    + ". Length should be " + (L - 1));
+        }
+    }
+
+    public void configureContinuous(String folder,
             int V, int[] Ks,
             double[] alphas,
             double[] betas,
@@ -112,6 +207,7 @@ public class SNLDA extends AbstractSampler {
         this.initState = initState;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
+        this.isBinary = false;
 
         this.setName();
 
@@ -186,6 +282,7 @@ public class SNLDA extends AbstractSampler {
         str.append("_m-").append(MiscUtils.formatDouble(mu));
         str.append("_s-").append(MiscUtils.formatDouble(sigma));
         str.append("_opt-").append(this.paramOptimized);
+        str.append("_bin-").append(this.isBinary);
         this.name = str.toString();
     }
 
@@ -264,12 +361,56 @@ public class SNLDA extends AbstractSampler {
         }
     }
 
+    public void train(int[][] docWords,
+            ArrayList<Integer> docIndices,
+            int[] docLabels) {
+        this.docIndices = docIndices;
+        if (this.docIndices == null) { // add all documents
+            this.docIndices = new ArrayList<>();
+            for (int dd = 0; dd < docWords.length; dd++) {
+                this.docIndices.add(dd);
+            }
+        }
+        this.numTokens = 0;
+        this.D = this.docIndices.size();
+        this.words = new int[D][];
+        this.labels = new int[D];
+        this.positives = new HashSet<Integer>();
+        this.background = new double[V];
+        for (int ii = 0; ii < D; ii++) {
+            int dd = this.docIndices.get(ii);
+            this.words[ii] = docWords[dd];
+            this.labels[ii] = docLabels[dd];
+            if (this.labels[ii] == POSITVE) {
+                this.positives.add(ii);
+            }
+            this.numTokens += this.words[ii].length;
+            for (int nn = 0; nn < this.words[ii].length; nn++) {
+                this.background[words[ii][nn]]++;
+            }
+        }
+        for (int vv = 0; vv < V; vv++) {
+            this.background[vv] /= this.numTokens;
+        }
+
+        if (verbose) {
+            logln("--- # all docs:\t" + words.length);
+            logln("--- # selected docs:\t" + D);
+            logln("--- # tokens:\t" + numTokens);
+            logln("--- responses:");
+            int posCount = this.positives.size();
+            logln("--- --- # postive: " + posCount + " (" + ((double) posCount / D) + ")");
+            logln("--- --- # negative: " + (D - posCount));
+        }
+    }
+
     @Override
     public void initialize() {
         if (verbose) {
             logln("Initializing ...");
         }
         iter = INIT;
+        isReporting = true;
         initializeModelStructure();
         initializeDataStructure();
         initializeAssignments();
@@ -304,7 +445,7 @@ public class SNLDA extends AbstractSampler {
             rlda_betas[ll] = this.betas[ll + 1];
         }
         rlda.configure(folder, V, Ks, rlda_alphas, rlda_betas,
-                initState, paramOptimized,
+                InitialState.RANDOM, false,
                 rlda_burnin, rlda_maxiter, rlda_samplelag, rlda_samplelag);
         try {
             File rldaFile = new File(rlda.getSamplerFolderPath(), basename + ".zip");
@@ -604,8 +745,7 @@ public class SNLDA extends AbstractSampler {
 
         int KK = curNode.getNumChildren();
         double[] probs = new double[KK + 1];
-        double norm = curNode.subtreeTokenCounts.getCount(dd)
-                - curNode.tokenCounts.getCount(dd) + lAlpha * KK;
+        double norm = curNode.getPassingCount(dd) + lAlpha * KK;
         for (Node child : curNode.getChildren()) {
             int kk = child.getIndex();
             double pathprob = (child.subtreeTokenCounts.getCount(dd)
@@ -719,8 +859,22 @@ public class SNLDA extends AbstractSampler {
 
     private double getResponseLogLikelihood(int dd, Node node) {
         double aMean = docMeans[dd] + node.eta / this.words[dd].length;
-        double resLLh = StatUtils.logNormalProbability(responses[dd], aMean, Math.sqrt(rho));
+        double resLLh;
+        if (isBinary) {
+            resLLh = getLabelLogLikelihood(labels[dd], aMean);
+        } else {
+            resLLh = StatUtils.logNormalProbability(responses[dd], aMean, Math.sqrt(rho));
+        }
         return resLLh;
+    }
+
+    private double getLabelLogLikelihood(int label, double dotProb) {
+        double logNorm = Math.log(Math.exp(dotProb) + 1);
+        if (label == POSITVE) {
+            return dotProb - logNorm;
+        } else {
+            return -logNorm;
+        }
     }
 
     /**
@@ -755,31 +909,47 @@ public class SNLDA extends AbstractSampler {
             etas[kk] = nodeList.get(kk).eta;
         }
 
-        RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
-                responses, etas, designMatrix, rho, mu, sigma);
-
-        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
         boolean converged = false;
-        try {
-            converged = optimizer.optimize();
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        if (isBinary) {
+            RidgeLogisticRegressionLBFGS optimizable = new RidgeLogisticRegressionLBFGS(
+                    labels, etas, designMatrix, mu, sigma);
+            LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+            try {
+                converged = optimizer.optimize();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
+            // update regression parameters
+            for (int kk = 0; kk < N; kk++) {
+                nodeList.get(kk).eta = optimizable.getParameter(kk);
+            }
+        } else {
+            RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
+                    responses, etas, designMatrix, rho, mu, sigma);
+            LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+
+            try {
+                converged = optimizer.optimize();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
+            // update regression parameters
+            for (int kk = 0; kk < N; kk++) {
+                nodeList.get(kk).eta = optimizable.getParameter(kk);
+            }
         }
 
-        if (isReporting()) {
-            logln("--- converged? " + converged);
-        }
-
-        // update regression parameters
-        for (int kk = 0; kk < N; kk++) {
-            nodeList.get(kk).eta = optimizable.getParameter(kk);
-        }
         // update document means
         for (int dd = 0; dd < D; dd++) {
             docMeans[dd] = 0.0;
             for (int kk : designMatrix[dd].getIndices()) {
                 docMeans[dd] += designMatrix[dd].get(kk) * nodeList.get(kk).eta;
             }
+        }
+        if (isReporting) {
+            logln("--- converged? " + converged);
         }
         return System.currentTimeMillis() - sTime;
     }
@@ -1274,6 +1444,16 @@ public class SNLDA extends AbstractSampler {
         }
 
         /**
+         * Return the number of tokens of a given document which are assigned to
+         * any nodes below this node.
+         *
+         * @param dd Document index
+         */
+        int getPassingCount(int dd) {
+            return subtreeTokenCounts.getCount(dd) - tokenCounts.getCount(dd);
+        }
+
+        /**
          * Get the probability of a word type given this node. During training,
          * this probability is computed on-the-fly using counts and
          * pseudo-counts. During test, it comes from the learned distribution.
@@ -1358,7 +1538,10 @@ public class SNLDA extends AbstractSampler {
     }
 
     public static String getExampleCmd() {
-        return "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
+        String example = new String();
+
+        example += "For continuous responses:";
+        example += "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
                 + "--dataset amazon-data "
                 + "--word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc "
                 + "--word-file demo/amazon-data/format-supervised/amazon-data.dat "
@@ -1378,6 +1561,28 @@ public class SNLDA extends AbstractSampler {
                 + "--mu 0.0 "
                 + "--sigma 2.5 "
                 + "-v -d -z";
+        example += "\n";
+        example += "For continuous responses:";
+        example += "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
+                + "--dataset amazon-data "
+                + "--word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc "
+                + "--word-file demo/amazon-data/format-binary/amazon-data.dat "
+                + "--info-file demo/amazon-data/format-binary/amazon-data.docinfo "
+                + "--output-folder demo/amazon-data/model-binary "
+                + "--Ks 15,4 "
+                + "--burnIn 50 "
+                + "--maxIter 100 "
+                + "--sampleLag 25 "
+                + "--report 5 "
+                + "--init random "
+                + "--alphas 0.1,0.1 "
+                + "--betas 1.0,0.5,0.1 "
+                + "--gamma-means 0.2,0.2 "
+                + "--gamma-scales 100,10 "
+                + "--mu 0.0 "
+                + "--sigma 2.5 "
+                + "-v -d -binary";
+        return example;
     }
 
     private static void addOpitions() throws Exception {
@@ -1416,6 +1621,7 @@ public class SNLDA extends AbstractSampler {
         options.addOption("z", false, "z-normalize");
         options.addOption("help", false, "Help");
         options.addOption("example", false, "Example command");
+        options.addOption("binary", false, "Binary responses");
     }
 
     private static void runModel() throws Exception {
@@ -1494,50 +1700,54 @@ public class SNLDA extends AbstractSampler {
         // data output
         String outputFolder = cmd.getOptionValue("output-folder");
 
-        ResponseTextDataset data = new ResponseTextDataset(datasetName);
-        data.loadFormattedData(new File(wordVocFile),
-                new File(docWordFile),
-                new File(docInfoFile),
-                null);
-        int V = data.getWordVocab().size();
-
         SNLDA sampler = new SNLDA();
         sampler.setVerbose(cmd.hasOption("v"));
         sampler.setDebug(cmd.hasOption("d"));
         sampler.setLog(true);
         sampler.setReport(true);
-        sampler.setWordVocab(data.getWordVocab());
 
-        sampler.configure(outputFolder, V, Ks,
-                alphas, betas, gamma_means, gamma_scales, rho, mu, sigma,
-                initState, paramOpt,
-                burnIn, maxIters, sampleLag, repInterval);
+        boolean isBinary = cmd.hasOption("binary");
+        ResponseTextDataset contData = new ResponseTextDataset(datasetName);
+        LabelTextDataset binData = new LabelTextDataset(datasetName);
+        int V;
+        if (isBinary) {
+            binData.loadFormattedData(new File(wordVocFile),
+                    new File(docWordFile),
+                    new File(docInfoFile),
+                    null);
+            V = binData.getWordVocab().size();
+            sampler.setWordVocab(binData.getWordVocab());
+            sampler.configureBinary(outputFolder, V, Ks,
+                    alphas, betas, gamma_means, gamma_scales, mu, sigma,
+                    initState, paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+        } else {
+            contData.loadFormattedData(new File(wordVocFile),
+                    new File(docWordFile),
+                    new File(docInfoFile),
+                    null);
+            V = contData.getWordVocab().size();
+            sampler.setWordVocab(contData.getWordVocab());
+            sampler.configureContinuous(outputFolder, V, Ks,
+                    alphas, betas, gamma_means, gamma_scales, rho, mu, sigma,
+                    initState, paramOpt,
+                    burnIn, maxIters, sampleLag, repInterval);
+        }
+
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
 
-        double[] docResponses = data.getResponses();
-        if (cmd.hasOption("z")) { // z-normalization
-            ZNormalizer zNorm = new ZNormalizer(docResponses);
-            docResponses = zNorm.normalize(docResponses);
-        }
-
-        ArrayList<Integer> selectedDocIndices = null;
-        if (cmd.hasOption("selected-docs-file")) {
-            String selectedDocFile = cmd.getOptionValue("selected-docs-file");
-            selectedDocIndices = new ArrayList<>();
-            BufferedReader reader = IOUtils.getBufferedReader(selectedDocFile);
-            String line;
-            while ((line = reader.readLine()) != null) {
-                int docIdx = Integer.parseInt(line);
-                if (docIdx >= data.getDocIds().length) {
-                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
-                }
-                selectedDocIndices.add(Integer.parseInt(line));
+        if (isBinary) {
+            sampler.train(binData.getWords(), null, binData.getSingleLabels());
+        } else {
+            double[] docResponses = contData.getResponses();
+            if (cmd.hasOption("z")) { // z-normalization
+                ZNormalizer zNorm = new ZNormalizer(docResponses);
+                docResponses = zNorm.normalize(docResponses);
             }
-            reader.close();
+            sampler.train(contData.getWords(), null, docResponses);
         }
 
-        sampler.train(data.getWords(), selectedDocIndices, docResponses);
         sampler.initialize();
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
