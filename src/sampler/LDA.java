@@ -22,6 +22,9 @@ import util.evaluation.MimnoTopicCoherence;
 /**
  * Implementation of a Gibbs sampler for LDA.
  *
+ * This is obsolete and retained for backward compatibility. For new
+ * implementations which needs LDA, use the one in sampler/unsupervised/LDA.java
+ *
  * @author vietan
  */
 public class LDA extends AbstractSampler {
@@ -35,8 +38,6 @@ public class LDA extends AbstractSampler {
     protected int[][] z;
     protected DirMult[] doc_topics;
     protected DirMult[] topic_words;
-    protected int numTokens;
-    protected int numTokensChanged;
 
     public void configure(LDA sampler) {
         this.configure(sampler.folder,
@@ -569,6 +570,7 @@ public class LDA extends AbstractSampler {
      * @param file
      * @param numTopWords
      */
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");
@@ -1460,8 +1462,7 @@ public class LDA extends AbstractSampler {
         try {
             IOUtils.createFolder(iterPerplexityFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.endsWith("zip")) {
                     continue;
                 }
@@ -1512,8 +1513,7 @@ public class LDA extends AbstractSampler {
         try {
             IOUtils.createFolder(iterPerplexityFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1619,10 +1619,10 @@ public class LDA extends AbstractSampler {
     public static double computePerplexity(double[][] tokenProbs) {
         double val = 0.0;
         int num = 0;
-        for (int dd = 0; dd < tokenProbs.length; dd++) {
-            num += tokenProbs[dd].length;
-            for (int nn = 0; nn < tokenProbs[dd].length; nn++) {
-                val += Math.log(tokenProbs[dd][nn]);
+        for (double[] tokenProb : tokenProbs) {
+            num += tokenProb.length;
+            for (int nn = 0; nn < tokenProb.length; nn++) {
+                val += Math.log(tokenProb[nn]);
             }
         }
         return Math.exp(-val / num);
@@ -1655,8 +1655,7 @@ public class LDA extends AbstractSampler {
 
             // partial score
             ArrayList<double[][]> aggTopics = new ArrayList<double[][]>();
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
+            for (String filename : filenames) {
                 if (!filename.contains("zip")) {
                     continue;
                 }
@@ -1681,8 +1680,8 @@ public class LDA extends AbstractSampler {
             for (int k = 0; k < K; k++) {
                 double[] avgTopic = new double[V];
                 for (int v = 0; v < V; v++) {
-                    for (int ii = 0; ii < aggTopics.size(); ii++) {
-                        avgTopic[v] += aggTopics.get(ii)[k][v] / aggTopics.size();
+                    for (double[][] aggTopic : aggTopics) {
+                        avgTopic[v] += aggTopic[k][v] / aggTopics.size();
                     }
                 }
                 int[] topic = SamplerUtils.getSortedTopic(avgTopic);
@@ -1709,11 +1708,11 @@ public class LDA extends AbstractSampler {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             writer.write(tokenProbsList.size() + "\n");
-            for (int ii = 0; ii < tokenProbsList.size(); ii++) {
+            for (double[][] tokenProbs : tokenProbsList) {
                 for (int dd = 0; dd < testIndices.length; dd++) {
                     writer.write(dd + "\t" + testIndices[dd].size());
                     for (int jj = 0; jj < testIndices[dd].size(); jj++) {
-                        writer.write("\t" + tokenProbsList.get(ii)[dd][jj]);
+                        writer.write("\t" + tokenProbs[dd][jj]);
                     }
                     writer.write("\n");
                 }

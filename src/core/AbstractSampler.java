@@ -18,6 +18,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.LDA;
+import sampler.unsupervised.RecursiveLDA;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -208,8 +209,9 @@ public abstract class AbstractSampler implements Serializable {
      * @param words Document
      * @param K Number of topics
      * @param V Vocabulary size
+     * @param priorTopics
      */
-    public LDA runLDA(int[][] words, int K, int V) {
+    public LDA runLDA(int[][] words, int K, int V, double[][] priorTopics) {
         int lda_burnin = 250;
         int lda_maxiter = 500;
         int lda_samplelag = 25;
@@ -235,7 +237,7 @@ public abstract class AbstractSampler implements Serializable {
                 if (verbose) {
                     logln("--- --- LDA not found. Running LDA ...");
                 }
-                lda.initialize();
+                lda.initialize(null, priorTopics);
                 lda.iterate();
                 IOUtils.createFolder(lda.getSamplerFolderPath());
                 lda.outputState(ldaFile);
@@ -248,6 +250,53 @@ public abstract class AbstractSampler implements Serializable {
         }
         setLog(log);
         return lda;
+    }
+
+    /**
+     * Run LDA recursively.
+     *
+     * @param words
+     * @param Ks
+     * @param V
+     * @param rldaAlphas 
+     * @param rldaBetas 
+     * @param priorTopics
+     */
+    public RecursiveLDA runRecursiveLDA(int[][] words, int[] Ks, 
+            double[] rldaAlphas, double[] rldaBetas,
+            int V,
+            double[][] priorTopics) {
+        int rlda_burnin = 10;
+        int rlda_maxiter = 100;
+        int rlda_samplelag = 10;
+        RecursiveLDA rlda = new RecursiveLDA();
+        rlda.setDebug(false);
+        rlda.setVerbose(verbose);
+        rlda.setLog(false);
+
+        rlda.configure(folder, V, Ks, rldaAlphas, rldaBetas,
+                InitialState.RANDOM, false,
+                rlda_burnin, rlda_maxiter, rlda_samplelag, rlda_samplelag);
+        try {
+            File ldaZFile = new File(rlda.getSamplerFolderPath(), basename + ".zip");
+            rlda.train(words, null); // words are already filtered using docIndices
+            if (ldaZFile.exists()) {
+                rlda.inputState(ldaZFile);
+            } else {
+                rlda.setPriorTopics(priorTopics);
+                rlda.initialize();
+                rlda.iterate();
+                IOUtils.createFolder(rlda.getSamplerFolderPath());
+                rlda.outputState(ldaZFile);
+                rlda.setWordVocab(wordVocab);
+                rlda.outputTopicTopWords(new File(rlda.getSamplerFolderPath(), TopWordFile), 20);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while running Recursive LDA for initialization");
+        }
+        setLog(log);
+        return rlda;
     }
 
     public void metaIterate() {

@@ -39,9 +39,6 @@ public class LDA extends AbstractSampler {
     protected DirMult[] docTopics;
     protected DirMult[] topicWords;
     protected int[][] z;
-    // internal
-    protected int numTokens;
-    protected int numTokensChanged;
 
     public LDA() {
         this.basename = "LDA";
@@ -486,6 +483,7 @@ public class LDA extends AbstractSampler {
      * @param file
      * @param numTopWords
      */
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

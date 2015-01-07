@@ -44,7 +44,6 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
     private DirMult[] labelWords;
     private int[][] z;
     private ArrayList<String> labelVocab;
-    private int numTokens;
     private int numTokensChange;
 
     public LabeledLDA() {
@@ -683,6 +682,7 @@ public class LabeledLDA extends AbstractSampler implements Serializable {
         }
     }
 
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

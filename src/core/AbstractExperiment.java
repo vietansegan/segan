@@ -133,6 +133,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         addOption("rho", "rho");
         addOption("epsilon", "epsilon");
         addOption("eta", "eta");
+        addOption("pi", "pi");
     }
 
     /**
