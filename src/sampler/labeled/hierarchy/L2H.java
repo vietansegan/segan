@@ -2024,9 +2024,8 @@ public class L2H extends AbstractSampler {
 
     private static void runModel() throws Exception {
         String datasetName = cmd.getOptionValue("dataset");
-        String datasetFolder = cmd.getOptionValue("data-folder");
+        String formatFolder = cmd.getOptionValue("format-folder");
         String outputFolder = cmd.getOptionValue("output");
-        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
         String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
         int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 100);
@@ -2066,9 +2065,9 @@ public class L2H extends AbstractSampler {
         if (verbose) {
             System.out.println("\nLoading formatted data ...");
         }
-        LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
+        LabelTextDataset data = new LabelTextDataset(datasetName);
         data.setFormatFilename(formatFile);
-        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+        data.loadFormattedData(formatFolder);
         data.filterLabelsByFrequency(minLabelFreq);
         data.prepareTopicCoherence(numTopWords);
 
