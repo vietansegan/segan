@@ -3,6 +3,7 @@ package sampler.labeled.hierarchy;
 import cc.mallet.types.Dirichlet;
 import cc.mallet.util.Randoms;
 import core.AbstractSampler;
+import data.LabelTextDataset;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -16,12 +17,17 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.Options;
 import sampler.labeled.LabeledLDA;
 import sampling.likelihood.CascadeDirMult.PathAssumption;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
 import taxonomy.AbstractTaxonomyBuilder;
+import taxonomy.BetaTreeBuilder;
+import taxonomy.MSTBuilder;
+import util.CLIUtils;
 import util.IOUtils;
 import util.MiscUtils;
 import util.PredictionUtils;
@@ -70,8 +76,6 @@ public class L2H extends AbstractSampler {
     private HashMap<Integer, Set<Integer>> labelDocIndices;
     // information
     private ArrayList<String> labelVocab;
-    private int numTokens;
-    private int numTokensChange;
     private int numAccepts; // number of sampled nodes accepted
     private int[] labelFreqs;
     private double[] switchPrior;
@@ -518,8 +522,8 @@ public class L2H extends AbstractSampler {
                 double loglikelihood = this.getLogLikelihood();
                 String str = "Iter " + iter + "/" + MAX_ITER
                         + "\t llh = " + MiscUtils.formatDouble(loglikelihood)
-                        + "\t # tokens changed: " + numTokensChange
-                        + " (" + MiscUtils.formatDouble((double) numTokensChange / numTokens) + ")"
+                        + "\t # tokens changed: " + numTokensChanged
+                        + " (" + MiscUtils.formatDouble((double) numTokensChanged / numTokens) + ")"
                         + "\t # accepts: " + numAccepts
                         + " (" + MiscUtils.formatDouble((double) numAccepts / L) + ")"
                         + "\n" + getCurrentState();
@@ -839,7 +843,7 @@ public class L2H extends AbstractSampler {
     private long sampleXZsExact(
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
-        numTokensChange = 0;
+        numTokensChanged = 0;
         long sTime = System.currentTimeMillis();
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
@@ -892,7 +896,7 @@ public class L2H extends AbstractSampler {
         int sampledZ = SamplerUtils.logMaxRescaleSample(logprobs);
 
         if (sampledZ != z[d][n]) {
-            numTokensChange++;
+            numTokensChanged++;
         }
         z[d][n] = sampledZ;
         if (docMaskes[d].contains(z[d][n])) {
@@ -924,7 +928,7 @@ public class L2H extends AbstractSampler {
     private long sampleXZsMH(
             boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData) {
-        numTokensChange = 0;
+        numTokensChanged = 0;
         long sTime = System.currentTimeMillis();
         for (int d = 0; d < D; d++) {
             for (int n = 0; n < words[d].length; n++) {
@@ -971,7 +975,7 @@ public class L2H extends AbstractSampler {
 
         // compute MH ratio: accept all for now
         if (pZ != z[d][n]) {
-            numTokensChange++;
+            numTokensChanged++;
         }
         z[d][n] = pZ;
         x[d][n] = pX;
@@ -1957,6 +1961,180 @@ public class L2H extends AbstractSampler {
                     .append("]");
             return str.toString();
         }
+    }
+
+    public static String getHelpString() {
+        return "java -cp dist/segan.jar " + L2H.class.getName() + " -help";
+    }
+
+    public static void main(String[] args) {
+        try {
+            // create the command line parser
+            parser = new BasicParser();
+
+            // create the Options
+            options = new Options();
+
+            // directories
+            addOption("dataset", "Dataset");
+            addOption("data-folder", "Processed data folder");
+            addOption("format-folder", "Folder holding formatted data");
+            addOption("format-file", "Formatted file name");
+            addOption("output", "Output folder");
+
+            // sampling configurations
+            addSamplingOptions();
+
+            // model parameters
+            addOption("K", "Number of topics");
+            addOption("numTopwords", "Number of top words per topic");
+            addOption("min-label-freq", "Minimum label frequency");
+
+            // model hyperparameters
+            addOption("alpha", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for topic distributions");
+            addOption("beta", "Hyperparameter of the symmetric Dirichlet prior "
+                    + "for word distributions");
+            addOption("a0", "a0");
+            addOption("b0", "b0");
+            addOption("path", "Path assumption");
+            addOption("tree-init", "Tree initialization type");
+
+            options.addOption("train", false, "Training");
+            options.addOption("tree", false, "Whether the tree is updated or not");
+            options.addOption("paramOpt", false, "Whether hyperparameter "
+                    + "optimization using slice sampling is performed");
+            options.addOption("v", false, "verbose");
+            options.addOption("d", false, "debug");
+            options.addOption("help", false, "Help");
+
+            cmd = parser.parse(options, args);
+            if (cmd.hasOption("help")) {
+                CLIUtils.printHelp(getHelpString(), options);
+                return;
+            }
+
+            runModel();
+        } catch (Exception e) {
+            e.printStackTrace();
+            CLIUtils.printHelp(getHelpString(), options);
+            System.exit(1);
+        }
+    }
+
+    private static void runModel() throws Exception {
+        String datasetName = cmd.getOptionValue("dataset");
+        String datasetFolder = cmd.getOptionValue("data-folder");
+        String outputFolder = cmd.getOptionValue("output");
+        String formatFolder = CLIUtils.getStringArgument(cmd, "format-folder", "format-label");
+        String formatFile = CLIUtils.getStringArgument(cmd, "format-file", datasetName);
+        int numTopWords = CLIUtils.getIntegerArgument(cmd, "numTopwords", 20);
+        int minLabelFreq = CLIUtils.getIntegerArgument(cmd, "min-label-freq", 100);
+
+        int burnIn = CLIUtils.getIntegerArgument(cmd, "burnIn", 250);
+        int maxIters = CLIUtils.getIntegerArgument(cmd, "maxIter", 500);
+        int sampleLag = CLIUtils.getIntegerArgument(cmd, "sampleLag", 25);
+        int repInterval = CLIUtils.getIntegerArgument(cmd, "report", 1);
+
+        double alpha = CLIUtils.getDoubleArgument(cmd, "alpha", 10);
+        double beta = CLIUtils.getDoubleArgument(cmd, "beta", 1000);
+        double a0 = CLIUtils.getDoubleArgument(cmd, "a0", 90);
+        double b0 = CLIUtils.getDoubleArgument(cmd, "b0", 10);
+        boolean treeUpdate = cmd.hasOption("tree");
+        boolean sampleExact = cmd.hasOption("exact");
+
+        PathAssumption pathAssumption;
+        String path = CLIUtils.getStringArgument(cmd, "path", "max");
+        switch (path) {
+            case "min":
+                pathAssumption = PathAssumption.MINIMAL;
+                break;
+            case "max":
+                pathAssumption = PathAssumption.MAXIMAL;
+                break;
+            case "antoniak":
+                pathAssumption = PathAssumption.ANTONIAK;
+                break;
+            default:
+                throw new RuntimeException(path + " path assumption is not"
+                        + " supported. Use min or max.");
+        }
+
+        boolean verbose = cmd.hasOption("v");
+        boolean debug = cmd.hasOption("d");
+
+        if (verbose) {
+            System.out.println("\nLoading formatted data ...");
+        }
+        LabelTextDataset data = new LabelTextDataset(datasetName, datasetFolder);
+        data.setFormatFilename(formatFile);
+        data.loadFormattedData(new File(data.getDatasetFolderPath(), formatFolder).getAbsolutePath());
+        data.filterLabelsByFrequency(minLabelFreq);
+        data.prepareTopicCoherence(numTopWords);
+
+        int V = data.getWordVocab().size();
+        int K = data.getLabelVocab().size();
+
+        boolean paramOpt = cmd.hasOption("paramOpt");
+        InitialState initState = InitialState.PRESET;
+
+        String treeInit = CLIUtils.getStringArgument(cmd, "tree-init", "mst");
+        AbstractTaxonomyBuilder treeBuilder;
+        switch (treeInit) {
+            case "mst":
+                treeBuilder = new MSTBuilder(data.getLabels(), data.getLabelVocab());
+                break;
+            case "beta":
+                double treeAlpha = CLIUtils.getDoubleArgument(cmd, "tree-alpha", 100);
+                double treeA = CLIUtils.getDoubleArgument(cmd, "tree-a", 0.1);
+                double treeB = CLIUtils.getDoubleArgument(cmd, "tree-b", 0.1);
+                treeBuilder = new BetaTreeBuilder(data.getLabels(), data.getLabelVocab(),
+                        treeAlpha, treeA, treeB);
+                break;
+            default:
+                throw new RuntimeException(treeInit + " not supported");
+        }
+
+        File builderFolder = new File(outputFolder, treeBuilder.getName());
+        IOUtils.createFolder(builderFolder);
+        File treeFile = new File(builderFolder, "tree.txt");
+        File labelVocFile = new File(builderFolder, "labels.voc");
+        if (treeFile.exists()) {
+            treeBuilder.inputTree(treeFile);
+            treeBuilder.inputLabelVocab(labelVocFile);
+        } else {
+            treeBuilder.buildTree();
+            treeBuilder.outputTree(treeFile);
+            treeBuilder.outputLabelVocab(labelVocFile);
+        }
+        treeBuilder.outputTreeTemp(new File(treeFile + "-temp"));
+
+        L2H sampler = new L2H();
+        sampler.setReport(true);
+        sampler.setVerbose(verbose);
+        sampler.setDebug(debug);
+        sampler.setWordVocab(data.getWordVocab());
+        sampler.setLabelVocab(data.getLabelVocab());
+
+        sampler.configure(outputFolder,
+                data.getWordVocab().size(),
+                alpha, beta,
+                a0, b0,
+                treeBuilder,
+                treeUpdate,
+                sampleExact,
+                initState,
+                pathAssumption,
+                paramOpt,
+                burnIn, maxIters, sampleLag, repInterval);
+
+        File samplerFolder = new File(sampler.getSamplerFolderPath());
+        IOUtils.createFolder(samplerFolder);
+
+        sampler.train(null, data.getWords(), data.getLabels());
+        sampler.initialize();
+        sampler.iterate();
+        sampler.outputGlobalTree(new File(samplerFolder, TopWordFile), numTopWords);
     }
 }
 
