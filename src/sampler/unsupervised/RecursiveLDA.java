@@ -74,8 +74,8 @@ public class RecursiveLDA extends AbstractSampler {
 
     public DirMult getTopicWord(int[] path) {
         RLDA node = rootLDA;
-        for (int ll = 1; ll < path.length - 1; ll++) {
-            node = node.getChild(path[ll]);
+        for (int ll = 1; ll < path.length ; ll++) {
+            node = node.getChild(path[ll-1]);
         }
         return node.getTopicWords()[path[path.length - 1]];
     }
