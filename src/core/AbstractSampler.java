@@ -126,6 +126,18 @@ public abstract class AbstractSampler implements Serializable {
         options.addOption("example", false, "example");
     }
 
+    public void setFolder(String folder) {
+        this.folder = folder;
+    }
+    
+    public String getFolder() {
+        return this.folder;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
     public String getBasename() {
         return this.basename;
     }
@@ -203,27 +215,29 @@ public abstract class AbstractSampler implements Serializable {
 
     public abstract void inputState(String filepath);
 
+    public LDA runLDA(int[][] words, int K, int V, double[][] priorTopics) {
+        return runLDA(words, K, V, null, priorTopics, 0.1, 0.1, 250, 500, 25);
+    }
+
     /**
      * Run LDA.
      *
      * @param words Document
      * @param K Number of topics
      * @param V Vocabulary size
-     * @param priorTopics
+     * @param topicWordPriors
      */
-    public LDA runLDA(int[][] words, int K, int V, double[][] priorTopics) {
-        int lda_burnin = 250;
-        int lda_maxiter = 500;
-        int lda_samplelag = 25;
+    public LDA runLDA(int[][] words, int K, int V,
+            double[][] docTopicPriors, double[][] topicWordPriors,
+            double ldaAlpha, double ldaBeta,
+            int ldaBurnIn, int ldaMaxIter, int ldaLag) {
         LDA lda = new LDA();
         lda.setDebug(false);
         lda.setVerbose(verbose);
         lda.setLog(false);
-        double lda_alpha = 0.1;
-        double lda_beta = 0.1;
 
-        lda.configure(folder, V, K, lda_alpha, lda_beta, InitialState.RANDOM, false,
-                lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
+        lda.configure(folder, V, K, ldaAlpha, ldaBeta, InitialState.RANDOM, false,
+                ldaBurnIn, ldaMaxIter, ldaLag, ldaLag);
 
         try {
             File ldaFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
@@ -237,7 +251,7 @@ public abstract class AbstractSampler implements Serializable {
                 if (verbose) {
                     logln("--- --- LDA not found. Running LDA ...");
                 }
-                lda.initialize(null, priorTopics);
+                lda.initialize(docTopicPriors, topicWordPriors);
                 lda.iterate();
                 IOUtils.createFolder(lda.getSamplerFolderPath());
                 lda.outputState(ldaFile);
@@ -258,11 +272,11 @@ public abstract class AbstractSampler implements Serializable {
      * @param words
      * @param Ks
      * @param V
-     * @param rldaAlphas 
-     * @param rldaBetas 
+     * @param rldaAlphas
+     * @param rldaBetas
      * @param priorTopics
      */
-    public RecursiveLDA runRecursiveLDA(int[][] words, int[] Ks, 
+    public RecursiveLDA runRecursiveLDA(int[][] words, int[] Ks,
             double[] rldaAlphas, double[] rldaBetas,
             int V,
             double[][] priorTopics) {

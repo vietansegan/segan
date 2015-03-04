@@ -24,13 +24,13 @@ public class SVMLight {
 
     public SVMLight() {
         String os = System.getProperty("os.name").toLowerCase();
-        if (os.indexOf("win") >= 0) {
+        if (os.contains("win")) {
             this.svmLightLearn = "lib/svm_light_windows/svm_learn.exe";
             this.svmLightClassify = "lib/svm_light_windows/svm_classify.exe";
-        } else if (os.indexOf("mac") >= 0) {
+        } else if (os.contains("mac")) {
             this.svmLightLearn = "lib/svm_light_osx/svm_learn";
             this.svmLightClassify = "lib/svm_light_osx/svm_classify";
-        } else if (os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0) {
+        } else if (os.contains("nix") || os.contains("nux")) {
             this.svmLightLearn = "lib/svm_light_linux/svm_learn";
             this.svmLightClassify = "lib/svm_light_linux/svm_classify";
         } else {
@@ -57,14 +57,15 @@ public class SVMLight {
         System.out.println("\nStart learning ...");
         String cmd = svmLightLearn;
         if (options != null) {
-            for (int i = 0; i < options.length; i++) {
-                cmd += " " + options[i];
+            for (String option : options) {
+                cmd += " " + option;
             }
         }
 
-        cmd += " " + trainingFile.getAbsolutePath() + " " + modelFile.getAbsolutePath();
-        System.out.println("Learn cmd: " + cmd);
         try {
+            cmd += " " + trainingFile.getAbsolutePath() + " " + modelFile.getAbsolutePath();
+            System.out.println("Learn cmd: " + cmd);
+
             Process proc = Runtime.getRuntime().exec(cmd);
             InputStream istr = proc.getInputStream();
             BufferedReader in = new BufferedReader(new InputStreamReader(istr));
@@ -95,15 +96,17 @@ public class SVMLight {
 
         String cmd = svmLightClassify;
         if (options != null) {
-            for (int i = 0; i < options.length; i++) {
-                cmd += " " + options[i];
+            for (String option : options) {
+                cmd += " " + option;
             }
         }
-        cmd += " " + testingFile.getAbsolutePath()
-                + " " + modelFile.getAbsolutePath()
-                + " " + resultFile.getAbsolutePath();
-        System.out.println("Classify cmd: " + cmd);
+
         try {
+            cmd += " " + testingFile.getAbsolutePath()
+                    + " " + modelFile.getAbsolutePath()
+                    + " " + resultFile.getAbsolutePath();
+            System.out.println("Classify cmd: " + cmd);
+
             Process proc = Runtime.getRuntime().exec(cmd);
 
             InputStream istr = proc.getInputStream();
@@ -210,7 +213,7 @@ public class SVMLight {
         rankingItemList.sortDescending();
         System.out.println("# total data points: " + rankingItemList.size());
 
-        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet, 
+        performance = new RankingPerformance<Integer>(rankingItemList, positiveSet,
                 evaluateFolder.getAbsolutePath());
         performance.outputRankingResultsWithGroundtruth();
         performance.computePrecisionsAndRecalls();
@@ -221,7 +224,7 @@ public class SVMLight {
     }
 
     //String testFilePath, String resultFilePath, String outputFilePath
-    public int[][] confusionMatrix(File testingFilePath, File resultFile, 
+    public int[][] confusionMatrix(File testingFilePath, File resultFile,
             File confusionMatrixFile) throws Exception {
         int[][] conMatrix = new int[2][2];
         BufferedReader testIn = IOUtils.getBufferedReader(testingFilePath);
@@ -239,9 +242,9 @@ public class SVMLight {
         while ((line = resultIn.readLine()) != null) {
             double res = Double.parseDouble(line);
             if (res > 0) {
-                result.add(Integer.valueOf(1));
+                result.add(1);
             } else {
-                result.add(Integer.valueOf(-1));
+                result.add(-1);
             }
         }
 
@@ -264,9 +267,9 @@ public class SVMLight {
         testIn.close();
         resultIn.close();
 
-        for (int i = 0; i < conMatrix.length; i++) {
+        for (int[] row : conMatrix) {
             for (int j = 0; j < conMatrix[0].length; j++) {
-                System.out.print(conMatrix[i][j] + "\t");
+                System.out.print(row[j] + "\t");
             }
             System.out.println();
         }
@@ -280,7 +283,7 @@ public class SVMLight {
         return conMatrix;
     }
 
-    public double[] getFeatureWeights(File modelFile, File perlSvm2Weight, 
+    public double[] getFeatureWeights(File modelFile, File perlSvm2Weight,
             File featureWeightsFile) throws Exception {
 
         String cmd = "perl " + perlSvm2Weight.getAbsolutePath()

@@ -64,6 +64,18 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
         return data.getFolder();
     }
 
+    public boolean isTraining() {
+        return cmd.hasOption("train");
+    }
+
+    public boolean isDeveloping() {
+        return cmd.hasOption("dev");
+    }
+
+    public boolean isTesting() {
+        return cmd.hasOption("test");
+    }
+
     public void setupSampling() {
         burn_in = CLIUtils.getIntegerArgument(cmd, "burnIn", 5);
         max_iters = CLIUtils.getIntegerArgument(cmd, "maxIter", 10);

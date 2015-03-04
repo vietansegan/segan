@@ -255,8 +255,9 @@ public class SparseVector implements Serializable {
 
     public static String output(SparseVector vector) {
         StringBuilder str = new StringBuilder();
+        str.append(Integer.toString(vector.dim));
         for (int key : vector.getIndices()) {
-            str.append(key).append(",").append(vector.get(key)).append("\t");
+            str.append("\t").append(key).append(",").append(vector.get(key));
         }
         return str.toString();
     }
@@ -264,12 +265,39 @@ public class SparseVector implements Serializable {
     public static SparseVector input(String str) {
         SparseVector vector = new SparseVector();
         String[] sstr = str.split("\t");
-        for (String s : sstr) {
-            String[] ss = s.split(",");
+        int d = Integer.parseInt(sstr[0]);
+        vector.setDimension(d);
+        for (int ii = 1; ii < sstr.length; ii++) {
+            String[] ss = sstr[ii].split(",");
             int key = Integer.parseInt(ss[0]);
             double val = Double.parseDouble(ss[1]);
             vector.set(key, val);
         }
         return vector;
+    }
+
+    public static SparseVector concatenate(ArrayList<SparseVector> vectors) {
+        SparseVector concVec = null;
+        for (SparseVector vec : vectors) {
+            if (concVec == null) {
+                concVec = vec;
+            } else {
+                int curDim = concVec.getDimension();
+                int newDim = vec.getDimension();
+                for (int jj : vec.getIndices()) {
+                    concVec.set(jj + curDim, vec.get(jj));
+                }
+                concVec.setDimension(curDim + newDim);
+            }
+        }
+        return concVec;
+    }
+
+    public void concatenate(SparseVector vector) {
+        for (int jj : vector.getIndices()) {
+            double val = vector.get(jj);
+            this.set(jj + dim, val);
+        }
+        this.setDimension(dim + vector.getDimension());
     }
 }

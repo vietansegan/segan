@@ -17,6 +17,23 @@ import sampling.util.SparseCount;
 public class MiscUtils {
 
     protected static final NumberFormat formatter = new DecimalFormat("###.###");
+    
+    public static ArrayList<ArrayList<String>> getPowerSet(ArrayList<String> list) {
+        ArrayList<ArrayList<String>> powerSet = new ArrayList<>();
+        powerSet.add(new ArrayList<String>());
+        for (String item : list) {
+            ArrayList<ArrayList<String>> newPs = new ArrayList<>();
+            for (ArrayList<String> subset : powerSet) {
+                newPs.add(subset);
+
+                ArrayList<String> newSubset = new ArrayList<String>(subset);
+                newSubset.add(item);
+                newPs.add(newSubset);
+            }
+            powerSet = newPs;
+        }
+        return powerSet;
+    }
 
     public static String[] getTopWords(ArrayList<String> wordVocab,
             double[] probs, int numTopObs) {
@@ -170,6 +187,16 @@ public class MiscUtils {
             }
         }
         return flattenArray;
+    }
+
+    public static ArrayList<Double> stringToList(String str) {
+        str = str.substring(1, str.length() - 1);
+        String[] sline = str.split(",");
+        ArrayList<Double> list = new ArrayList<>();
+        for (String s : sline) {
+            list.add(Double.parseDouble(s));
+        }
+        return list;
     }
 
     public static String listToString(List<Double> list) {

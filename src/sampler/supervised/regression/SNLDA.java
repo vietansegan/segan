@@ -426,16 +426,20 @@ public class SNLDA extends AbstractSampler {
             getLogLikelihood();
         }
 
+        outputTopicTopWords(new File(getSamplerFolderPath(), "topwords-init.txt"), 20);
         validate("Initialized");
     }
 
     /**
      * Initialize the topics at each node by running LDA recursively.
+     *
+     * @param priorTopics Topic priors
      */
     protected void initializeModelStructure(double[][] priorTopics) {
         if (verbose) {
             logln("--- Initializing model structure using Recursive LDA ...");
         }
+        // TODO: reuse runRecursiveLDA in AbstractSampler
         int rlda_burnin = 10;
         int rlda_maxiter = 100;
         int rlda_samplelag = 10;
@@ -480,8 +484,7 @@ public class SNLDA extends AbstractSampler {
         setLog(log);
 
         if (verbose) {
-            logln("--- Recursive LDA loaded");
-            logln(rlda.printSummary());
+            logln("--- Recursive LDA loaded.\n" + rlda.printSummary());
         }
 
         // initialize structure
@@ -1569,7 +1572,7 @@ public class SNLDA extends AbstractSampler {
                 + "--sigma 2.5 "
                 + "-v -d -z";
         example += "\n\n";
-        example += "For continuous responses:\n";
+        example += "For binary responses:\n";
         example += "java -cp \"dist/segan.jar:lib/*\" sampler.supervised.regression.SNLDA "
                 + "--dataset amazon-data "
                 + "--word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc "

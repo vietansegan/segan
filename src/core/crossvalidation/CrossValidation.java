@@ -1,5 +1,6 @@
 package core.crossvalidation;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
@@ -27,7 +28,7 @@ public class CrossValidation<I, T extends Instance<I>> {
     }
 
     public String getFolderPath() {
-        return this.folder + this.name + "/";
+        return new File(this.folder, this.name).getAbsolutePath();
     }
 
     public Fold<I, T>[] getFolds() {

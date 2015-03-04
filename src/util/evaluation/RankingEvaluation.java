@@ -65,6 +65,9 @@ public class RankingEvaluation {
             }
         }
 
+        this.measurements.add(new Measurement("N", ranking.size()));
+        this.measurements.add(new Measurement("#positives", relevants.size()));
+
         this.measurements.add(new Measurement("PRF1", f1s[this.relevants.size() - 1]));
         this.measurements.add(new Measurement("P@1", precisions[0]));
         this.measurements.add(new Measurement("R@1", recalls[0]));

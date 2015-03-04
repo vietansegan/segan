@@ -2,6 +2,12 @@ package optimization;
 
 import core.AbstractLinearModel;
 import edu.stanford.nlp.optimization.DiffFunction;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import util.IOUtils;
+import util.RankingItem;
 import util.SparseVector;
 
 /**
@@ -69,6 +75,30 @@ public class OWLQNLogisticRegression extends AbstractLinearModel {
             predictions[d] = expdotprod / (1.0 + expdotprod);
         }
         return predictions;
+    }
+
+    public void outputRankedWeights(File outputFile, ArrayList<String> featureNames) {
+        try {
+            ArrayList<RankingItem<Integer>> rankItems = new ArrayList<>();
+            for (int vv = 0; vv < this.weights.length; vv++) {
+                rankItems.add(new RankingItem<Integer>(vv, weights[vv]));
+            }
+            Collections.sort(rankItems);
+
+            BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
+            for (RankingItem<Integer> rankItem : rankItems) {
+                int idx = rankItem.getObject();
+                double val = rankItem.getPrimaryValue();
+                writer.write(idx
+                        + "\t" + featureNames.get(idx)
+                        + "\t" + val
+                        + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + outputFile);
+        }
     }
 
     class DiffFunc implements DiffFunction {

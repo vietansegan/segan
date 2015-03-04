@@ -28,6 +28,14 @@ public class SparseCount implements Cloneable, Serializable {
         return sc;
     }
 
+    public double dotprod(double[] w) {
+        double dp = 0.0;
+        for (int idx : this.getIndices()) {
+            dp += this.getCount(idx) * w[idx];
+        }
+        return dp;
+    }
+
     public int size() {
         return this.counts.size();
     }

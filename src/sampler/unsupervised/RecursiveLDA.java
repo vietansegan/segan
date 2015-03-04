@@ -45,7 +45,6 @@ public class RecursiveLDA extends AbstractSampler {
     protected int[][][] zs;
     protected DirMult background; // topic at root node
     // internal
-    private int numTokens;
     private RLDA rootLDA;
 
     public RecursiveLDA() {
@@ -74,8 +73,8 @@ public class RecursiveLDA extends AbstractSampler {
 
     public DirMult getTopicWord(int[] path) {
         RLDA node = rootLDA;
-        for (int ll = 1; ll < path.length ; ll++) {
-            node = node.getChild(path[ll-1]);
+        for (int ll = 1; ll < path.length; ll++) {
+            node = node.getChild(path[ll - 1]);
         }
         return node.getTopicWords()[path[path.length - 1]];
     }
@@ -477,6 +476,7 @@ public class RecursiveLDA extends AbstractSampler {
         inputModel(filepath);
     }
 
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

@@ -29,7 +29,7 @@ import util.evaluation.MimnoTopicCoherence;
  *
  * @author vietan
  */
-public class LabeledLDA extends AbstractSampler implements Serializable {
+    public class LabeledLDA extends AbstractSampler implements Serializable {
 
     private static final long serialVersionUID = 1123581321L;
     public static final int ALPHA = 0;
