@@ -1559,7 +1559,7 @@ public class SNLDA extends AbstractSampler {
     /**
      * Output posterior distribution over non-rooted nodes in the tree of all
      * documents.
-     * 
+     *
      * @param outputFile Output file
      */
     public void outputNodePosteriors(File outputFile) {
@@ -1572,7 +1572,7 @@ public class SNLDA extends AbstractSampler {
                     Node node = nodeList.get(kk);
                     nodePos[kk] = (double) node.tokenCounts.getCount(dd) / words[dd].length;
                 }
-                writer.write(dd);
+                writer.write(Integer.toString(dd));
                 for (int kk = 0; kk < nodePos.length; kk++) {
                     writer.write("\t" + nodePos[kk]);
                 }
@@ -1890,9 +1890,9 @@ public class SNLDA extends AbstractSampler {
             String priorTopicFile = cmd.getOptionValue("prior-topic-file");
             priorTopics = IOUtils.input2DArray(new File(priorTopicFile));
         }
-        
+
         File docInfoFile = null;
-        if(cmd.hasOption("info-file")) {
+        if (cmd.hasOption("info-file")) {
             docInfoFile = new File(cmd.getOptionValue("info-file"));
         }
 
