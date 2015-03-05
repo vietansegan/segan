@@ -51,7 +51,6 @@ public class SHDP extends AbstractSampler implements Regressor<ResponseTextDatas
     private SBP<Topic> topicWords;
     protected double[] docRegressMeans;
     private int[][] z;
-    private int numTokens;
     private int numTokensChange;
     private SparseVector sbpWeights;
 

@@ -462,7 +462,9 @@ public class TextDataset extends AbstractTokenizeDataset {
         try {
             inputWordVocab(wordVocabFile);
             inputTextData(docWordFile);
-            inputDocumentInfo(docInfoFile);
+            if (docInfoFile != null) {
+                inputDocumentInfo(docInfoFile);
+            }
             if (sentFile != null && sentFile.exists()) {
                 inputSentenceTextData(sentFile);
             }

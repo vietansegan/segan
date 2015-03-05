@@ -47,8 +47,6 @@ public class NLDA extends AbstractSampler {
     Node[][] z;
     Node root;
     // internal
-    private int numTokens;
-    private int numTokensChanged;
     private int numTokensAccepted;
     private double[] background;
 
@@ -866,6 +864,7 @@ public class NLDA extends AbstractSampler {
      * @param outputFile The output file
      * @param numWords Number of top words
      */
+    @Override
     public void outputTopicTopWords(File outputFile, int numWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

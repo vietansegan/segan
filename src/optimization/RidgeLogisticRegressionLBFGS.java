@@ -33,6 +33,22 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         this.paramVar = var;
         this.paramVars = null;
     }
+    
+    public RidgeLogisticRegressionLBFGS(int[] labels,
+            double[] params,
+            SparseVector[] designMatrix,
+            double mean,
+            double[] vars) {
+        this.labels = labels;
+        this.params = params;
+        this.designMatrix = designMatrix;
+        this.N = this.designMatrix.length;
+        this.K = this.params.length;
+
+        this.paramMean = mean;
+        this.paramVar = 0.0;
+        this.paramVars = vars;
+    }
 
     public double getMean(int k) {
         return this.paramMean;

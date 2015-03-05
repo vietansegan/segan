@@ -1,4 +1,4 @@
-package sampler.supervised.regression;
+package sampler.backup;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizable;
