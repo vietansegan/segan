@@ -213,7 +213,7 @@ public class SVR<D extends ResponseTextDataset> extends AbstractRegressor implem
     }
 
     public static String getHelpString() {
-        return "java -cp 'dist/segan.jar:dist/lib/*' " + SVR.class.getName() + " -help";
+        return "java -cp \"dist/segan.jar:dist/lib/*\" " + SVR.class.getName() + " -help";
     }
 
     public static void main(String[] args) {

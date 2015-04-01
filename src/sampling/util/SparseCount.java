@@ -166,6 +166,12 @@ public class SparseCount implements Cloneable, Serializable {
             throw new RuntimeException(msg + ". Total counts mismatched. " + totalCount + " vs. " + countSum);
         }
     }
+    
+    public void add(SparseCount other) {
+        for(int key : other.getIndices()) {
+            this.changeCount(key, other.getCount(key));
+        }
+    }
 
     public static SparseCount add(SparseCount sc1, SparseCount sc2) {
         SparseCount sc = new SparseCount();

@@ -13,7 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import optimization.RidgeLinearRegressionLBFGS;
+import optimization.RidgeLinearRegressionOptimizable;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.LDA;
@@ -174,6 +174,10 @@ public class SLDA extends AbstractSampler {
         return this.regParams;
     }
 
+    public double[] getPredictedValues() {
+        return this.docRegressMeans;
+    }
+
     protected void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
         RegressionEvaluation eval = new RegressionEvaluation(trueVals, predVals);
         eval.computeCorrelationCoefficient();
@@ -258,7 +262,7 @@ public class SLDA extends AbstractSampler {
      */
     public double[] test(int[][] docWords, ArrayList<Integer> docIndices,
             File stateFile, File predictionFile) {
-        setTestConfigurations(BURN_IN, MAX_ITER, LAG);
+        setTestConfigurations(BURN_IN / 2, MAX_ITER / 2, LAG / 2);
         inputModel(stateFile.toString());
         setupData(docWords, docIndices, null);
         initializeDataStructure();
@@ -284,14 +288,6 @@ public class SLDA extends AbstractSampler {
                 sampleZs(!REMOVE, !ADD, !REMOVE, ADD, !OBSERVED);
             } else {
                 sampleZs(!REMOVE, !ADD, REMOVE, ADD, !OBSERVED);
-            }
-
-            if (isReporting) {
-                logln("--- --- # tokens: " + numTokens
-                        + ". # token changed: " + numTokensChanged
-                        + ". change ratio: " + (double) numTokensChanged / numTokens
-                        + "\n");
-                System.out.println();
             }
 
             // store prediction (on all documents) at a test iteration
@@ -322,22 +318,7 @@ public class SLDA extends AbstractSampler {
         if (verbose) {
             logln("Initializing ...");
         }
-
-        iter = INIT;
-        initializeModelStructure(null);
-        initializeDataStructure();
-        initializeAssignments();
-        updateTopicRegressionParameters(); // optimize regression parameters
-
-        if (debug) {
-            validate("Initialized");
-        }
-
-        if (verbose) {
-            logln("--- Done initializing. " + getCurrentState());
-            getLogLikelihood();
-            evaluateRegressPrediction(responses, docRegressMeans);
-        }
+        initialize(null);
     }
 
     /**
@@ -433,42 +414,11 @@ public class SLDA extends AbstractSampler {
         int lda_burnin = 10;
         int lda_maxiter = 100;
         int lda_samplelag = 10;
-        LDA lda = new LDA();
-        lda.setDebug(debug);
-        lda.setVerbose(verbose);
-        lda.setLog(false);
         double lda_alpha = hyperparams.get(ALPHA);
         double lda_beta = hyperparams.get(BETA);
-
-        lda.configure(folder, V, K, lda_alpha, lda_beta, initState, paramOptimized,
-                lda_burnin, lda_maxiter, lda_samplelag, lda_samplelag);
-
-        int[][] ldaZ = null;
-        try {
-            File ldaFile = new File(lda.getSamplerFolderPath(), basename + ".zip");
-            lda.train(words, null);
-            if (ldaFile.exists()) {
-                if (verbose) {
-                    logln("--- --- LDA file exists. Loading from " + ldaFile);
-                }
-                lda.inputState(ldaFile);
-            } else {
-                if (verbose) {
-                    logln("--- --- LDA not found. Running LDA ...");
-                }
-                lda.initialize();
-                lda.iterate();
-                IOUtils.createFolder(lda.getSamplerFolderPath());
-                lda.outputState(ldaFile);
-                lda.setWordVocab(wordVocab);
-                lda.outputTopicTopWords(new File(lda.getSamplerFolderPath(), TopWordFile), 20);
-            }
-            ldaZ = lda.getZs();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while running LDA for initialization");
-        }
-        setLog(log);
+        LDA lda = runLDA(words, K, V, null, null, lda_alpha, lda_beta, 
+                lda_burnin, lda_maxiter, lda_samplelag);
+        int[][] ldaZ = lda.getZs();
 
         // initialize assignments
         for (int dd = 0; dd < D; dd++) {
@@ -506,8 +456,8 @@ public class SLDA extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            numTokensChanged = 0;
-            if (isReporting()) {
+            isReporting = isReporting();
+            if (isReporting) {
                 // store llh after every iteration
                 double loglikelihood = this.getLogLikelihood();
                 logLikelihoods.add(loglikelihood);
@@ -545,16 +495,7 @@ public class SLDA extends AbstractSampler {
                 }
             }
 
-            if (isReporting()) {
-                evaluateRegressPrediction(responses, docRegressMeans);
-                logln("--- --- # tokens: " + numTokens
-                        + ". # token changed: " + numTokensChanged
-                        + ". change ratio: " + (double) numTokensChanged / numTokens
-                        + "\n");
-                System.out.println();
-            }
-
-            if (debug) {
+            if (isReporting && debug) {
                 validate("iter " + iter);
             }
 
@@ -586,9 +527,14 @@ public class SLDA extends AbstractSampler {
      * @param addToData
      * @param observe Whether the response variable of this document is observed
      */
-    protected void sampleZs(boolean removeFromModel, boolean addToModel,
+    protected long sampleZs(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData,
             boolean observe) {
+        if (isReporting) {
+            logln("+++ Sampling Zs ...");
+        }
+        numTokensChanged = 0;
+        long sTime = System.currentTimeMillis();
         for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
                 if (removeFromModel) {
@@ -626,12 +572,26 @@ public class SLDA extends AbstractSampler {
                 }
             }
         }
+
+        long eTime = System.currentTimeMillis() - sTime;
+        if (isReporting) {
+            logln("--- --- time: " + eTime);
+            logln("--- --- # tokens: " + numTokens
+                    + ". # token changed: " + numTokensChanged
+                    + ". change ratio: " + (double) numTokensChanged / numTokens
+                    + "\n");
+        }
+        return eTime;
     }
 
     /**
      * Update regression parameters by optimizing using L-BFGS.
      */
-    private void updateTopicRegressionParameters() {
+    private long updateTopicRegressionParameters() {
+        if (isReporting) {
+            logln("+++ Updating etas ...");
+        }
+        long sTime = System.currentTimeMillis();
         designMatrix = new SparseVector[D];
         for (int dd = 0; dd < D; dd++) {
             designMatrix[dd] = new SparseVector(K);
@@ -641,7 +601,7 @@ public class SLDA extends AbstractSampler {
             }
         }
 
-        RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
+        RidgeLinearRegressionOptimizable optimizable = new RidgeLinearRegressionOptimizable(
                 responses, regParams, designMatrix, rho, mu, sigma);
 
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
@@ -650,10 +610,6 @@ public class SLDA extends AbstractSampler {
             converged = optimizer.optimize();
         } catch (Exception ex) {
             ex.printStackTrace();
-        }
-
-        if (isReporting()) {
-            logln("--- converged? " + converged);
         }
 
         // update regression parameters
@@ -668,6 +624,14 @@ public class SLDA extends AbstractSampler {
                 this.docRegressMeans[dd] += designMatrix[dd].get(kk) * regParams[kk];
             }
         }
+
+        long eTime = System.currentTimeMillis() - sTime;
+        if (isReporting) {
+            evaluateRegressPrediction(responses, docRegressMeans);
+            logln("--- converged? " + converged);
+            logln("--- --- time: " + eTime);
+        }
+        return eTime;
     }
 
     @Override
@@ -930,7 +894,7 @@ public class SLDA extends AbstractSampler {
      * @param iterPredFolder Output folder
      * @param sampler The configured sampler
      */
-    public static void parallelTest(int[][] newWords,
+    public static double[] parallelTest(int[][] newWords,
             ArrayList<Integer> newDocIndices,
             File iterPredFolder,
             SLDA sampler) {
@@ -938,10 +902,12 @@ public class SLDA extends AbstractSampler {
         if (!reportFolder.exists()) {
             throw new RuntimeException("Report folder not found. " + reportFolder);
         }
+        double[] avgPredictions = null;
         String[] filenames = reportFolder.list();
         try {
             IOUtils.createFolder(iterPredFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
+            ArrayList<File> partPredFiles = new ArrayList<>();
             for (String filename : filenames) { // all learned models
                 if (!filename.contains("zip")) {
                     continue;
@@ -955,15 +921,19 @@ public class SLDA extends AbstractSampler {
                         partialResultFile.getAbsolutePath());
                 Thread thread = new Thread(runner);
                 threads.add(thread);
+                partPredFiles.add(partialResultFile);
             }
 
             // run MAX_NUM_PARALLEL_THREADS threads at a time
             runThreads(threads);
 
+            // average predictions
+            avgPredictions = PredictionUtils.computeMultipleAverage(partPredFiles);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during parallel test.");
         }
+        return avgPredictions;
     }
 
     public static String getHelpString() {
@@ -1046,7 +1016,7 @@ public class SLDA extends AbstractSampler {
         options.addOption("help", false, "Help");
         options.addOption("example", false, "Example command");
     }
-
+ 
     private static void runModel() throws Exception {
         // sampling configurations
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "num-top-words", 20);
@@ -1183,12 +1153,10 @@ public class SLDA extends AbstractSampler {
             }
 
             PredictionUtils.outputRegressionPredictions(
-                    new File(predictionFolder,
-                            AbstractExperiment.PREDICTION_FILE),
+                    new File(predictionFolder, AbstractExperiment.PREDICTION_FILE),
                     selectedIds, responses, predictions);
             PredictionUtils.outputRegressionResults(
-                    new File(evaluationFolder,
-                            AbstractExperiment.RESULT_FILE), responses,
+                    new File(evaluationFolder, AbstractExperiment.RESULT_FILE), responses,
                     predictions);
         }
     }
@@ -1255,8 +1223,7 @@ class SLDATestRunner implements Runnable {
                 sampler.getMaxIters(), sampler.getSampleLag());
 
         try {
-            testSampler.test(newWords, newDocIndices, new File(stateFile),
-                    new File(outputFile));
+            testSampler.test(newWords, newDocIndices, new File(stateFile), new File(outputFile));
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException();

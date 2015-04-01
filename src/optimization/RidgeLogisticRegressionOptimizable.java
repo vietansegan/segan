@@ -7,7 +7,7 @@ import util.SparseVector;
  *
  * @author vietan
  */
-public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue {
+public class RidgeLogisticRegressionOptimizable implements Optimizable.ByGradientValue {
 
     private final int[] labels;                 // [N]-dim vector
     private final double[] params;              // [K]-dim vector
@@ -18,7 +18,7 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
     private final double paramVar;
     private final double[] paramVars;
 
-    public RidgeLogisticRegressionLBFGS(int[] labels,
+    public RidgeLogisticRegressionOptimizable(int[] labels,
             double[] params,
             SparseVector[] designMatrix,
             double mean,
@@ -34,7 +34,7 @@ public class RidgeLogisticRegressionLBFGS implements Optimizable.ByGradientValue
         this.paramVars = null;
     }
     
-    public RidgeLogisticRegressionLBFGS(int[] labels,
+    public RidgeLogisticRegressionOptimizable(int[] labels,
             double[] params,
             SparseVector[] designMatrix,
             double mean,

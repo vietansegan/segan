@@ -10,6 +10,7 @@ import java.util.Random;
 import util.MiscUtils;
 
 /**
+ * Obsolete. To be removed.
  *
  * @author vietan
  */
@@ -18,7 +19,7 @@ public class GurobiMLRL1Norm {
     private double[][] designMatrix;
     private double[] responseVector;
     private double t;
-    
+
     public GurobiMLRL1Norm(double t) {
         this.t = t;
     }
@@ -28,11 +29,11 @@ public class GurobiMLRL1Norm {
         this.responseVector = y;
         this.t = t;
     }
-    
+
     public void setDesignMatrix(double[][] d) {
         this.designMatrix = d;
     }
-    
+
     public void setResponseVector(double[] r) {
         this.responseVector = r;
     }
@@ -126,7 +127,7 @@ public class GurobiMLRL1Norm {
 //        }
         return solution;
     }
-    
+
     public static void main(String[] args) {
         test();
     }

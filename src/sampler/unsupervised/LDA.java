@@ -329,7 +329,8 @@ public class LDA extends AbstractSampler {
                 logln("--- --- Time. topic: " + topicTime);
                 logln("--- --- # tokens: " + numTokens
                         + ". # token changed: " + numTokensChanged
-                        + ". change ratio: " + (double) numTokensChanged / numTokens
+                        + ". change ratio: "
+                        + MiscUtils.formatDouble((double) numTokensChanged / numTokens)
                         + "\n\n");
             }
 
@@ -445,11 +446,11 @@ public class LDA extends AbstractSampler {
         }
         double llh = 0;
         for (int d = 0; d < D; d++) {
-            llh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K, 
+            llh += docTopics[d].getLogLikelihood(newParams.get(ALPHA) * K,
                     docTopics[d].getCenterVector());
         }
         for (int k = 0; k < K; k++) {
-            llh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V, 
+            llh += topicWords[k].getLogLikelihood(newParams.get(BETA) * V,
                     topicWords[k].getCenterVector());
         }
         return llh;
@@ -516,10 +517,11 @@ public class LDA extends AbstractSampler {
     }
 
     public void outputPosterior(File my_file) {
-	double[][] postTops = new double[K][];
-	for (int i = 0; i < K; i++) 
-	    postTops[i] = topicWords[i].getDistribution();
-	IOUtils.output2DArray(my_file, postTops);
+        double[][] postTops = new double[K][];
+        for (int i = 0; i < K; i++) {
+            postTops[i] = topicWords[i].getDistribution();
+        }
+        IOUtils.output2DArray(my_file, postTops);
     }
 
     @Override
@@ -766,7 +768,7 @@ public class LDA extends AbstractSampler {
         sampler.initialize(null, priorTopics);
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-	sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+        sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
     }
 
     public static void main(String[] args) {

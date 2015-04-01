@@ -14,7 +14,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
-import optimization.RidgeLogisticRegressionLBFGS;
+import optimization.RidgeLogisticRegressionOptimizable;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
 import sampler.LDA;
@@ -557,7 +557,7 @@ public class BinarySLDA extends AbstractSampler {
             }
         }
 
-        RidgeLogisticRegressionLBFGS optimizable = new RidgeLogisticRegressionLBFGS(
+        RidgeLogisticRegressionOptimizable optimizable = new RidgeLogisticRegressionOptimizable(
                 labels, lambdas, designMatrix, mean, sigma);
         LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
         boolean converged = false;

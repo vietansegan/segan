@@ -39,8 +39,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
     public static final String RANKING_FOLDER = "ranking";
     public static final String SURVEY_FOLDER = "survey";
     public static final String MODEL_FILE = "model";
-//    public static final String PERPLEXITY_FILE = "perplexity.txt";
-    public static final String PERPLEXITY_FILE = "perp.txt";
+    public static final String PERPLEXITY_FILE = "perplexity.txt";
     public static final int UNOBSERVED = -1;
 
     public static int burn_in = 100;
@@ -318,8 +317,7 @@ public abstract class AbstractExperiment<D extends AbstractDataset> extends Abst
 
                 writer.write(measure + "\n");
                 writer.write("Model\tNum-folds\tAverage\tStdv\n");
-                for (int ii = 0; ii < rankModels.size(); ii++) {
-                    RankingItem<String> rankModel = rankModels.get(ii);
+                for (RankingItem<String> rankModel : rankModels) {
                     String model = rankModel.getObject();
                     ArrayList<Double> vals = modelVals.get(model);
                     double std = StatUtils.standardDeviation(vals);

@@ -49,8 +49,6 @@ public class HDP extends AbstractSampler {
     private Topics topicWords;
     private int[][] z;
     // internal
-    private int numTokens;
-    private int numTokensChange;
     private double uniform;
 
     public HDP() {
@@ -322,7 +320,7 @@ public class HDP extends AbstractSampler {
         startTime = System.currentTimeMillis();
 
         for (iter = 0; iter < MAX_ITER; iter++) {
-            numTokensChange = 0;
+            numTokensChanged = 0;
 
             sampleZs(REMOVE, ADD, REMOVE, ADD); // sample topic assignments
 
@@ -333,8 +331,8 @@ public class HDP extends AbstractSampler {
                 logLikelihoods.add(loglikelihood);
 
                 String str = "Iter " + iter + "\t llh = " + loglikelihood
-                        + ". # token changed: " + numTokensChange
-                        + ". change ratio: " + (double) numTokensChange / numTokens
+                        + ". # token changed: " + numTokensChanged
+                        + ". change ratio: " + (double) numTokensChanged / numTokens
                         + "\n" + getCurrentState();
                 if (iter <= BURN_IN) {
                     logln("--- Burning in. " + str);
@@ -434,7 +432,7 @@ public class HDP extends AbstractSampler {
                 int newZ = indices.get(sampledIdx);
 
                 if (curZ != newZ) {
-                    numTokensChange++;
+                    numTokensChanged++;
                 }
 
                 boolean newTopic = false;
@@ -653,6 +651,7 @@ public class HDP extends AbstractSampler {
         }
     }
 
+    @Override
     public void outputTopicTopWords(File file, int numTopWords) {
         if (this.wordVocab == null) {
             throw new RuntimeException("The word vocab has not been assigned yet");

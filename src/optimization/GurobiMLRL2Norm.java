@@ -11,7 +11,7 @@ import util.MiscUtils;
 import util.SamplerUtils;
 
 /**
- * L2-norm multiple linear regression.
+ * Obsolete. To be removed. L2-norm multiple linear regression.
  *
  * @author vietan
  */
@@ -48,7 +48,7 @@ public class GurobiMLRL2Norm {
         double[] solution = new double[getNumVariables()];
         int D = getNumObservations();
         int V = getNumVariables();
-        
+
 //        System.out.println("Solving MLR L2 ...");
 //        System.out.println("# observations: " + D);
 //        System.out.println("# variables: " + V);
@@ -120,8 +120,8 @@ public class GurobiMLRL2Norm {
 //        }
         return solution;
     }
-    
-     public double[] solve() {
+
+    public double[] solve() {
         double[] solution = new double[getNumVariables()];
 //        try {
 //            GRBEnv env = new GRBEnv();
@@ -282,12 +282,11 @@ public class GurobiMLRL2Norm {
             responseVector[d] = SamplerUtils.getGaussian(responseVector[d], rho);
         }
 
-
         GurobiMLRL2Norm mlr = new GurobiMLRL2Norm(designMatrix, responseVector, rho, mean, sigma);
         double[] solution = mlr.solveExact();
         System.out.println("solution:\t" + MiscUtils.arrayToString(solution));
         System.out.println("groundtruth:\t" + MiscUtils.arrayToString(trueParams));
-        
+
 //        for(int d=0; d<D; d++) {
 //            double predVal = 0.0;
 //            double trueVal = 0.0;

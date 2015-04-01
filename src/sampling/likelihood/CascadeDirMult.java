@@ -15,7 +15,7 @@ public class CascadeDirMult extends AbstractDiscreteFiniteLikelihoodModel
 
     public static enum PathAssumption {
 
-        MINIMAL, MAXIMAL, ANTONIAK, UNIPROC
+        MINIMAL, MAXIMAL, ANTONIAK, UNIPROC, NONE
     }
     private SparseCount pseudoObservations;
     private double[] distribution;

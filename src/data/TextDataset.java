@@ -42,6 +42,10 @@ public class TextDataset extends AbstractTokenizeDataset {
 
     public TextDataset(String name) {
         super(name);
+        
+        this.docIdList = new ArrayList<String>();
+        this.textList = new ArrayList<String>();
+        this.processedDocIndices = new ArrayList<Integer>();
     }
 
     public TextDataset(

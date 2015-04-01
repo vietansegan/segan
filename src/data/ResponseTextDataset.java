@@ -155,8 +155,8 @@ public class ResponseTextDataset extends TextDataset {
             double trToDevRatio, int numClasses) throws Exception {
         ArrayList<Instance<String>> instanceList = new ArrayList<Instance<String>>();
         ArrayList<Integer> groupIdList = StatUtils.discretize(responses, numClasses);
-        for (int d = 0; d < this.docIdList.size(); d++) {
-            instanceList.add(new Instance<String>(docIdList.get(d)));
+        for (String id : this.docIdList) {
+            instanceList.add(new Instance<String>(id));
         }
 
         String cvName = "";

@@ -9,7 +9,7 @@ import util.SparseVector;
  *
  * @author vietan
  */
-public class RidgeLinearRegressionLBFGS implements Optimizable.ByGradientValue {
+public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientValue {
 
     // inputs
     private final double[] values;              // [N]-dim vector
@@ -22,7 +22,7 @@ public class RidgeLinearRegressionLBFGS implements Optimizable.ByGradientValue {
     private final double sigmaSquare;
     private final double[] sigmaSquares;
 
-    public RidgeLinearRegressionLBFGS(double[] values,
+    public RidgeLinearRegressionOptimizable(double[] values,
             double[] params,
             SparseVector[] designMatrix,
             double rho,
@@ -40,7 +40,7 @@ public class RidgeLinearRegressionLBFGS implements Optimizable.ByGradientValue {
         this.sigmaSquares = null;
     }
 
-    public RidgeLinearRegressionLBFGS(double[] values,
+    public RidgeLinearRegressionOptimizable(double[] values,
             double[] params,
             SparseVector[] designMatrix,
             double rho,
@@ -61,7 +61,7 @@ public class RidgeLinearRegressionLBFGS implements Optimizable.ByGradientValue {
         }
     }
 
-    public RidgeLinearRegressionLBFGS(ArrayList<Double> values,
+    public RidgeLinearRegressionOptimizable(ArrayList<Double> values,
             double[] params,
             ArrayList<SparseVector> designMatrix,
             double rho,

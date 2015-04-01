@@ -44,8 +44,7 @@ public class AbstractLinearModel extends AbstractModel {
             Collections.sort(rankWeights);
             BufferedWriter writer = IOUtils.getBufferedWriter(file);
             writer.write("Feature\tWeight\n");
-            for (int ii = 0; ii < rankWeights.size(); ii++) {
-                RankingItem<String> item = rankWeights.get(ii);
+            for (RankingItem<String> item : rankWeights) {
                 writer.write(item.getObject() + "\t" + item.getPrimaryValue() + "\n");
             }
             writer.close();

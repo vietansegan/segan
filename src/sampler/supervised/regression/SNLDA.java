@@ -1,6 +1,7 @@
 package sampler.supervised.regression;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
+import core.AbstractExperiment;
 import core.AbstractSampler;
 import data.LabelTextDataset;
 import data.ResponseTextDataset;
@@ -16,13 +17,15 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
-import optimization.RidgeLinearRegressionLBFGS;
-import optimization.RidgeLogisticRegressionLBFGS;
+import optimization.RidgeLinearRegressionOptimizable;
+import optimization.RidgeLogisticRegressionOptimizable;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Options;
-import sampler.unsupervised.RecursiveLDA;
+import sampler.unsupervised.LDA;
 import sampling.likelihood.DirMult;
 import sampling.util.SparseCount;
 import sampling.util.TreeNode;
@@ -35,7 +38,10 @@ import util.RankingItem;
 import util.SamplerUtils;
 import util.SparseVector;
 import util.StatUtils;
+import util.evaluation.Measurement;
+import util.evaluation.RegressionEvaluation;
 import util.normalizer.ZNormalizer;
+import sampling.likelihood.CascadeDirMult.PathAssumption;
 
 /**
  *
@@ -61,6 +67,7 @@ public class SNLDA extends AbstractSampler {
     protected ArrayList<Integer> docIndices; // indices of docs under consideration
     protected int V;    // vocabulary size
     protected int[] Ks; // [L-1]: number of children per node at each level
+    protected PathAssumption path;
     // derived
     protected int D; // number of documents
     protected int L;
@@ -73,6 +80,7 @@ public class SNLDA extends AbstractSampler {
     private double[] docMeans;
     private boolean isBinary;
     private Set<Integer> positives;
+    private double uniform;
 
     public SNLDA() {
         this.basename = "SNLDA";
@@ -95,6 +103,7 @@ public class SNLDA extends AbstractSampler {
                     sampler.mu,
                     sampler.sigmas,
                     sampler.initState,
+                    sampler.path,
                     sampler.paramOptimized,
                     sampler.BURN_IN,
                     sampler.MAX_ITER,
@@ -112,6 +121,7 @@ public class SNLDA extends AbstractSampler {
                     sampler.mu,
                     sampler.sigmas,
                     sampler.initState,
+                    sampler.path,
                     sampler.paramOptimized,
                     sampler.BURN_IN,
                     sampler.MAX_ITER,
@@ -129,6 +139,7 @@ public class SNLDA extends AbstractSampler {
             double mu,
             double[] sigmas,
             InitialState initState,
+            PathAssumption pathAssumption,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
         if (verbose) {
@@ -136,6 +147,7 @@ public class SNLDA extends AbstractSampler {
         }
         this.folder = folder;
         this.V = V;
+        this.uniform = 1.0 / this.V;
         this.Ks = Ks;
         this.L = this.Ks.length + 1;
 
@@ -156,6 +168,7 @@ public class SNLDA extends AbstractSampler {
         this.REP_INTERVAL = repInt;
 
         this.initState = initState;
+        this.path = pathAssumption;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.isBinary = true;
@@ -179,6 +192,7 @@ public class SNLDA extends AbstractSampler {
             logln("--- report interval:\t" + REP_INTERVAL);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + this.initState);
+            logln("--- path assumption:\t" + this.path);
         }
 
         validateInputHyperparameters();
@@ -194,6 +208,7 @@ public class SNLDA extends AbstractSampler {
             double mu,
             double[] sigmas,
             InitialState initState,
+            PathAssumption pathAssumption,
             boolean paramOpt,
             int burnin, int maxiter, int samplelag, int repInt) {
         if (verbose) {
@@ -201,6 +216,7 @@ public class SNLDA extends AbstractSampler {
         }
         this.folder = folder;
         this.V = V;
+        this.uniform = 1.0 / this.V;
         this.Ks = Ks;
         this.L = this.Ks.length + 1;
 
@@ -222,6 +238,7 @@ public class SNLDA extends AbstractSampler {
         this.REP_INTERVAL = repInt;
 
         this.initState = initState;
+        this.path = pathAssumption;
         this.paramOptimized = paramOpt;
         this.prefix += initState.toString();
         this.isBinary = false;
@@ -245,6 +262,7 @@ public class SNLDA extends AbstractSampler {
             logln("--- report interval:\t" + REP_INTERVAL);
             logln("--- paramopt:\t" + paramOptimized);
             logln("--- initialize:\t" + this.initState);
+            logln("--- path assumption:\t" + this.path);
         }
 
         validateInputHyperparameters();
@@ -303,6 +321,7 @@ public class SNLDA extends AbstractSampler {
         }
         str.append("_opt-").append(this.paramOptimized);
         str.append("_bin-").append(this.isBinary);
+        str.append("_path-").append(this.path);
         this.name = str.toString();
     }
 
@@ -328,11 +347,16 @@ public class SNLDA extends AbstractSampler {
 
     @Override
     public String getCurrentState() {
-        return this.getSamplerFolderPath();
+        return this.getSamplerFolderPath() + "\n"
+                + printGlobalTreeSummary() + "\n";
     }
 
     public boolean isLeafNode(int level) {
         return level == L - 1;
+    }
+
+    public double[] getPredictedValues() {
+        return docMeans;
     }
 
     /**
@@ -451,6 +475,7 @@ public class SNLDA extends AbstractSampler {
             File stateFile,
             File testStateFile,
             File predictionFile) {
+        setTestConfigurations(BURN_IN / 2, MAX_ITER / 2, LAG / 2);
         // input stored model
         if (stateFile == null) {
             stateFile = getFinalStateFile();
@@ -554,6 +579,7 @@ public class SNLDA extends AbstractSampler {
         initializeModelStructure(priorTopics);
         initializeDataStructure();
         initializeAssignments();
+        updateTopics();
         updateEtas();
 
         if (verbose) {
@@ -566,88 +592,51 @@ public class SNLDA extends AbstractSampler {
         validate("Initialized");
     }
 
-    /**
-     * Initialize the topics at each node by running LDA recursively.
-     *
-     * @param priorTopics Topic priors
-     */
     protected void initializeModelStructure(double[][] priorTopics) {
         if (verbose) {
             logln("--- Initializing model structure using Recursive LDA ...");
         }
-        // TODO: reuse runRecursiveLDA in AbstractSampler
-        int rlda_burnin = 10;
-        int rlda_maxiter = 100;
-        int rlda_samplelag = 10;
-        RecursiveLDA rlda = new RecursiveLDA();
-        rlda.setDebug(false);
-        rlda.setVerbose(verbose);
-        rlda.setLog(false);
-        double[] rlda_alphas = this.alphas;
-        double[] rlda_betas = new double[L - 1];
-        for (int ll = 0; ll < L - 1; ll++) {
-            rlda_betas[ll] = this.betas[ll + 1];
-        }
-        rlda.configure(folder, V, Ks, rlda_alphas, rlda_betas,
-                InitialState.RANDOM, false,
-                rlda_burnin, rlda_maxiter, rlda_samplelag, rlda_samplelag);
-        try {
-            File rldaFile = new File(rlda.getSamplerFolderPath(), basename + ".zip");
-            rlda.train(words, null); // words are already filtered using docIndices
-            if (rldaFile.exists()) {
-                if (verbose) {
-                    logln("--- --- Recursive LDA file exists. Loading from " + rldaFile);
-                }
-                rlda.inputState(rldaFile);
-            } else {
-                if (verbose) {
-                    logln("--- --- Recursive LDA not found. Running RecursiveLDA ...");
-                }
-                if (priorTopics != null) {
-                    rlda.setPriorTopics(priorTopics);
-                }
-                rlda.initialize();
-                rlda.iterate();
-                IOUtils.createFolder(rlda.getSamplerFolderPath());
-                rlda.outputState(rldaFile);
-                rlda.setWordVocab(wordVocab);
-                rlda.outputTopicTopWords(new File(rlda.getSamplerFolderPath(), TopWordFile), 20);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while running Recursive LDA for initialization");
-        }
-        setLog(log);
 
-        if (verbose) {
-            logln("--- Recursive LDA loaded.\n" + rlda.printSummary());
-        }
+        double ldaAlpha = this.alphas[0];
+        double ldaBeta = this.betas[0];
+        LDA lda = runLDA(words, Ks[0], V, null, null, ldaAlpha, ldaBeta, 100, 250, 30);
 
-        // initialize structure
         DirMult rootTopic = new DirMult(V, getBeta(0) * V, background);
         this.root = new Node(iter, 0, 0, rootTopic, null, 0.0);
+
+        Queue<Node> queue = new LinkedList<>();
+        for (int kk = 0; kk < Ks[0]; kk++) {
+            DirMult topic = new DirMult(V, getBeta(1) * V, lda.getTopicWords()[kk].getDistribution());
+            Node node = new Node(iter, kk, 1, topic, root, SamplerUtils.getGaussian(mu, sigmas[0]));
+            this.root.addChild(kk, node);
+
+            queue.add(node);
+        }
+        while (!queue.isEmpty()) {
+            Node node = queue.poll();
+
+            int level = node.getLevel();
+            if (level < L - 1) {
+                for (int kk = 0; kk < Ks[level]; kk++) {
+                    DirMult topic = new DirMult(V, getBeta(level + 1) * V, 1.0 / V);
+                    Node child = new Node(iter, kk, level + 1, topic, node, SamplerUtils.getGaussian(mu, sigmas[level]));
+                    node.addChild(kk, child);
+                    queue.add(child);
+                }
+            }
+        }
+
+        // initialize pi's and theta's
         Stack<Node> stack = new Stack<>();
         stack.add(root);
         while (!stack.isEmpty()) {
             Node node = stack.pop();
-            int level = node.getLevel();
-
-            if (level < L - 1) {
-                int[] nodePathIndices = node.getPathIndex();
-                int[] childPathIndices = new int[level + 1];
-                System.arraycopy(nodePathIndices, 0, childPathIndices, 0, level);
-                for (int kk = 0; kk < this.Ks[level]; kk++) {
-                    childPathIndices[level] = kk;
-                    DirMult childTopic = new DirMult(V, getBeta(level + 1) * V,
-                            rlda.getTopicWord(childPathIndices).getDistribution());
-                    Node childNode = new Node(iter, kk, level + 1, childTopic, node,
-                            SamplerUtils.getGaussian(mu, getSigma(level + 1)));
-                    node.addChild(kk, childNode);
-
-                    stack.add(childNode);
-                }
-                node.initializeGlobalPi();
+            if (node.getLevel() < L - 1) {
                 node.initializeGlobalTheta();
+                node.initializeGlobalPi();
+                for (Node child : node.getChildren()) {
+                    stack.add(child);
+                }
             }
         }
 
@@ -655,15 +644,14 @@ public class SNLDA extends AbstractSampler {
             logln("--- --- Initialized model structure.\n" + printGlobalTreeSummary());
         }
     }
-
+    
     protected void initializeDataStructure() {
         if (verbose) {
             logln("--- Initializing data structure ...");
         }
         this.z = new Node[D][];
-        for (int ii = 0; ii < D; ii++) {
-            int dd = docIndices.get(ii);
-            this.z[ii] = new Node[words[dd].length];
+        for (int dd = 0; dd < D; dd++) {
+            this.z[dd] = new Node[words[dd].length];
         }
         this.docMeans = new double[D];
     }
@@ -737,85 +725,14 @@ public class SNLDA extends AbstractSampler {
 
     @Override
     public void iterate() {
-        if (verbose) {
-            logln("Iterating ...");
-        }
-        logLikelihoods = new ArrayList<Double>();
-
-        File reportFolderPath = new File(getSamplerFolderPath(), ReportFolder);
-        try {
-            if (report) {
-                IOUtils.createFolder(reportFolderPath);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Exception while creating report folder."
-                    + " " + reportFolderPath);
+        if (isReporting) {
+            System.out.println("\n");
+            logln("Iteration " + iter + " / " + MAX_ITER);
         }
 
-        if (log && !isLogging()) {
-            openLogger();
-        }
-
-        logln(getClass().toString());
-        startTime = System.currentTimeMillis();
-
-        for (iter = 0; iter < MAX_ITER; iter++) {
-            numTokensChanged = 0;
-            numTokensAccepted = 0;
-            isReporting = isReporting();
-
-            if (isReporting) {
-                // store llh after every iteration
-                double loglikelihood = this.getLogLikelihood();
-                logLikelihoods.add(loglikelihood);
-                String str = "Iter " + iter + "/" + MAX_ITER
-                        + "\t llh = " + loglikelihood
-                        + "\n" + getCurrentState();
-                if (iter < BURN_IN) {
-                    logln("--- Burning in. " + str);
-                } else {
-                    logln("--- Sampling. " + str);
-                }
-            }
-
-            long topicTime = sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
-            long etaTime = updateEtas();
-
-            if (isReporting) {
-                logln("--- --- Time (s). sample topic: " + topicTime
-                        + ". update eta: " + etaTime);
-                logln("--- --- # tokens: " + numTokens
-                        + ". # token changed: " + numTokensChanged
-                        + " (" + (double) numTokensChanged / numTokens + ") "
-                        + ". # token accepted: " + numTokensAccepted
-                        + " (" + (double) numTokensAccepted / numTokens + ") "
-                        + "\n");
-                logln(printGlobalTreeSummary() + "\n");
-
-                if (debug) {
-                    validate("iter " + iter);
-                }
-            }
-
-            // store model
-            if (report && iter > BURN_IN && iter % LAG == 0) {
-                outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
-                outputTopicTopWords(new File(reportFolderPath, "topwords-" + iter + ".txt"), 20);
-            }
-        }
-
-        if (report) { // output the final model
-            outputState(new File(reportFolderPath, "iter-" + iter + ".zip"));
-            outputTopicTopWords(new File(reportFolderPath, "topwords-" + iter + ".txt"), 20);
-        }
-
-        float ellapsedSeconds = (System.currentTimeMillis() - startTime) / (1000);
-        logln("Total runtime iterating: " + ellapsedSeconds + " seconds");
-
-        if (log && isLogging()) {
-            closeLogger();
-        }
+        sampleZs(REMOVE, ADD, REMOVE, ADD, OBSERVED);
+        updateTopics();
+        updateEtas();
     }
 
     /**
@@ -830,6 +747,12 @@ public class SNLDA extends AbstractSampler {
      */
     protected long sampleZs(boolean removeFromModel, boolean addToModel,
             boolean removeFromData, boolean addToData, boolean observed) {
+        if (isReporting) {
+            logln("+++ Sampling Zs ...");
+        }
+        numTokensChanged = 0;
+        numTokensAccepted = 0;
+
         long sTime = System.currentTimeMillis();
         for (int dd = 0; dd < D; dd++) {
             for (int nn = 0; nn < words[dd].length; nn++) {
@@ -840,6 +763,8 @@ public class SNLDA extends AbstractSampler {
                 boolean accept = false;
                 if (z[dd][nn] == null) {
                     accept = true;
+                    numTokensChanged ++;
+                    numTokensAccepted++;
                 } else if (sampledNode.equals(z[dd][nn])) {
                     accept = true;
                     numTokensAccepted++;
@@ -866,7 +791,17 @@ public class SNLDA extends AbstractSampler {
                 addToken(dd, nn, z[dd][nn], addToData, addToModel);
             }
         }
-        return System.currentTimeMillis() - sTime;
+
+        long eTime = System.currentTimeMillis() - sTime;
+        if (isReporting) {
+            logln("--- --- time: " + eTime);
+            logln("--- --- # tokens: " + numTokens
+                    + ". # changed: " + numTokensChanged
+                    + " (" + MiscUtils.formatDouble((double) numTokensChanged / numTokens) + ")"
+                    + ". # accepted: " + numTokensAccepted
+                    + " (" + MiscUtils.formatDouble((double) numTokensAccepted / numTokens) + ")");
+        }
+        return eTime;
     }
 
     /**
@@ -1023,12 +958,70 @@ public class SNLDA extends AbstractSampler {
         }
     }
 
+    protected long updateTopics() {
+        if (isReporting) {
+            logln("+++ Updating topics ...");
+        }
+        long sTime = System.currentTimeMillis();
+
+        // get all leaves of the tree
+        ArrayList<Node> leaves = new ArrayList<Node>();
+        Stack<Node> stack = new Stack<Node>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            if (node.getChildren().isEmpty()) {
+                leaves.add(node);
+            }
+            for (Node child : node.getChildren()) {
+                stack.add(child);
+            }
+        }
+
+        // bottom-up smoothing to compute pseudo-counts from children
+        Queue<Node> queue = new LinkedList<Node>();
+        for (Node leaf : leaves) {
+            queue.add(leaf);
+        }
+        while (!queue.isEmpty()) {
+            Node node = queue.poll();
+            Node parent = node.getParent();
+            if (!node.isRoot() && !queue.contains(parent)) {
+                queue.add(parent);
+            }
+            if (node.isLeaf()) {
+                continue;
+            }
+            node.computePropagatedCountsFromChildren();
+        }
+
+        // top-down sampling to get topics
+        queue = new LinkedList<Node>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            Node node = queue.poll();
+            for (Node child : node.getChildren()) {
+                queue.add(child);
+            }
+            node.updateTopic();
+        }
+
+        long eTime = System.currentTimeMillis() - sTime;
+        if (isReporting) {
+            logln("--- --- time: " + eTime);
+        }
+        return eTime;
+    }
+
     /**
      * Update regression parameters using L-BFGS.
      *
      * @return Elapsed time
      */
     public long updateEtas() {
+        if (isReporting) {
+            logln("+++ Updating eta's ...");
+        }
         long sTime = System.currentTimeMillis();
 
         // list of nodes
@@ -1059,7 +1052,7 @@ public class SNLDA extends AbstractSampler {
 
         boolean converged = false;
         if (isBinary) {
-            RidgeLogisticRegressionLBFGS optimizable = new RidgeLogisticRegressionLBFGS(
+            RidgeLogisticRegressionOptimizable optimizable = new RidgeLogisticRegressionOptimizable(
                     labels, etaArray, designMatrix, mu, sigmaArray);
             LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
             try {
@@ -1073,7 +1066,7 @@ public class SNLDA extends AbstractSampler {
                 nodeList.get(kk).eta = optimizable.getParameter(kk);
             }
         } else {
-            RidgeLinearRegressionLBFGS optimizable = new RidgeLinearRegressionLBFGS(
+            RidgeLinearRegressionOptimizable optimizable = new RidgeLinearRegressionOptimizable(
                     responses, etaArray, designMatrix, rho, mu, sigmaArray);
             LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
 
@@ -1096,10 +1089,29 @@ public class SNLDA extends AbstractSampler {
                 docMeans[dd] += designMatrix[dd].get(kk) * nodeList.get(kk).eta;
             }
         }
+        long eTime = System.currentTimeMillis() - sTime;
         if (isReporting) {
             logln("--- converged? " + converged);
+            logln("--- --- time: " + eTime);
+            evaluatePerformances();
         }
-        return System.currentTimeMillis() - sTime;
+        return eTime;
+    }
+
+    protected void evaluatePerformances() {
+        if (isBinary) {
+        } else {
+            RegressionEvaluation eval = new RegressionEvaluation(responses, docMeans);
+            eval.computeCorrelationCoefficient();
+            eval.computeMeanSquareError();
+            eval.computeMeanAbsoluteError();
+            eval.computeRSquared();
+            eval.computePredictiveRSquared();
+            ArrayList<Measurement> measurements = eval.getMeasurements();
+            for (Measurement measurement : measurements) {
+                logln("--- --- " + measurement.getName() + ":\t" + measurement.getValue());
+            }
+        }
     }
 
     private ArrayList<Node> getNodeList() {
@@ -1252,9 +1264,9 @@ public class SNLDA extends AbstractSampler {
                 Node node = new Node(born, nodeIndex, nodeLevel, topic, parent, eta);
                 node.pi = pi;
                 node.theta = theta;
-                node.tokenCounts = tokenCounts;
-                node.subtreeTokenCounts = subtreeTokenCounts;
-                node.setPhiHat(topic.getDistribution());
+//                node.tokenCounts = tokenCounts;
+//                node.subtreeTokenCounts = subtreeTokenCounts;
+                node.setPhi(topic.getDistribution());
 
                 if (node.getLevel() == 0) {
                     root = node;
@@ -1299,6 +1311,7 @@ public class SNLDA extends AbstractSampler {
                     }
                     String pathStr = sline[2];
                     z[dd][nn] = getNode(pathStr);
+                    addToken(dd, nn, z[dd][nn], ADD, !ADD);
                 }
             }
 
@@ -1352,7 +1365,6 @@ public class SNLDA extends AbstractSampler {
         SparseCount nodeCountPerLevel = new SparseCount();
         SparseCount obsCountPerLevel = new SparseCount();
         SparseCount subtreeObsCountPerLvl = new SparseCount();
-        int numEffNodes = 0;
 
         Stack<Node> stack = new Stack<Node>();
         stack.add(root);
@@ -1361,10 +1373,6 @@ public class SNLDA extends AbstractSampler {
         while (!stack.isEmpty()) {
             Node node = stack.pop();
             int level = node.getLevel();
-
-            if (node.getContent().getCountSum() > 20) {
-                numEffNodes++;
-            }
 
             nodeCountPerLevel.increment(level);
             obsCountPerLevel.changeCount(level, node.getContent().getCountSum());
@@ -1386,14 +1394,15 @@ public class SNLDA extends AbstractSampler {
                     .append(nodeCount)
                     .append("] [").append(obsCount)
                     .append(", ").append(MiscUtils.formatDouble((double) obsCount / nodeCount))
+                    .append(", ").append(MiscUtils.formatDouble((double) 100 * obsCount / numTokens)).append("%")
                     .append("] [").append(subtreeObsCount)
                     .append(", ").append(MiscUtils.formatDouble((double) subtreeObsCount / nodeCount))
+                    .append(", ").append(MiscUtils.formatDouble((double) 100 * subtreeObsCount / numTokens)).append("%")
                     .append("]\n");
         }
         str.append("\n");
         str.append("\t>>> # observations = ").append(totalObs).append("\n");
         str.append("\t>>> # nodes = ").append(nodeCountPerLevel.getCountSum()).append("\n");
-        str.append("\t>>> # effective nodes = ").append(numEffNodes);
         return str.toString();
     }
 
@@ -1407,7 +1416,6 @@ public class SNLDA extends AbstractSampler {
         SparseCount obsCountPerLvl = new SparseCount();
         SparseCount subtreeObsCountPerLvl = new SparseCount();
         int totalNumObs = 0;
-        int numEffNodes = 0;
 
         StringBuilder str = new StringBuilder();
         str.append("global tree\n");
@@ -1426,12 +1434,6 @@ public class SNLDA extends AbstractSampler {
             }
 
             int level = node.getLevel();
-            if (node.getContent().getCountSum() > 20) {
-                numEffNodes++;
-            }
-            if (node.isEmpty()) { // skip empty nodes
-                continue;
-            }
 
             nodeCountPerLvl.increment(level);
             obsCountPerLvl.changeCount(level, node.getContent().getCountSum());
@@ -1474,13 +1476,14 @@ public class SNLDA extends AbstractSampler {
                     .append(nodeCount)
                     .append("] [").append(obsCount)
                     .append(", ").append(MiscUtils.formatDouble((double) obsCount / nodeCount))
+                    .append(", ").append(MiscUtils.formatDouble((double) 100 * obsCount / numTokens)).append("%")
                     .append("] [").append(subtreeObsCount)
                     .append(", ").append(MiscUtils.formatDouble((double) subtreeObsCount / nodeCount))
+                    .append(", ").append(MiscUtils.formatDouble((double) 100 * subtreeObsCount / numTokens)).append("%")
                     .append("]\n");
         }
         str.append("\t>>> # observations = ").append(totalNumObs).append("\n");
         str.append("\t>>> # nodes = ").append(nodeCountPerLvl.getCountSum()).append("\n");
-        str.append("\t>>> # effective nodes = ").append(numEffNodes).append("\n");
         return str.toString();
     }
 
@@ -1515,7 +1518,7 @@ public class SNLDA extends AbstractSampler {
                 stack.add(item.getObject());
             }
 
-            double[] nodeTopic = node.getMLEPhi();
+            double[] nodeTopic = node.phi;
             String[] topWords = getTopWords(nodeTopic, numWords);
 
             // top words according to the distribution
@@ -1593,9 +1596,10 @@ public class SNLDA extends AbstractSampler {
         protected double[] theta;
         protected double pi;
         protected double eta;
+        protected SparseCount propagatedCounts;
 
         // estimated topics after training, which is used for test
-        protected double[] phihat;
+        protected double[] phi;
 
         public Node(int iter, int index, int level, DirMult content, Node parent,
                 double eta) {
@@ -1604,6 +1608,7 @@ public class SNLDA extends AbstractSampler {
             this.subtreeTokenCounts = new SparseCount();
             this.tokenCounts = new SparseCount();
             this.eta = eta;
+            this.propagatedCounts = new SparseCount();
         }
 
         void initializeGlobalPi() {
@@ -1616,8 +1621,8 @@ public class SNLDA extends AbstractSampler {
             Arrays.fill(this.theta, 1.0 / KK);
         }
 
-        void setPhiHat(double[] ph) {
-            this.phihat = ph;
+        void setPhi(double[] ph) {
+            this.phi = ph;
         }
 
         /**
@@ -1638,27 +1643,54 @@ public class SNLDA extends AbstractSampler {
          * @param v word type
          */
         double getPhi(int v) {
-            if (this.phihat == null) {
+            if (this.phi == null) {
                 return getContent().getProbability(v);
             }
-            return phihat[v];
+            return phi[v];
+        }
+
+        void updateTopic() {
+            phi = new double[V];
+            double beta = getBeta(getLevel());
+            double[] meanPrior = this.content.getCenterVector();
+
+            double norm = this.getContent().getCountSum()
+                    + this.propagatedCounts.getCountSum()
+                    + beta * V;
+            for (int vv = 0; vv < V; vv++) {
+                phi[vv] = (getContent().getCount(vv)
+                        + propagatedCounts.getCount(vv)
+                        + beta * V * meanPrior[vv]) / norm;
+            }
+        }
+
+        void computePropagatedCountsFromChildren() {
+            this.propagatedCounts = new SparseCount();
+            for (Node child : this.getChildren()) {
+                SparseCount childCount = child.getContent().getSparseCounts();
+                childCount.add(child.propagatedCounts);
+                for (int vv : childCount.getIndices()) {
+                    if (path == PathAssumption.MINIMAL) {
+                        this.propagatedCounts.increment(vv);
+                    } else if (path == PathAssumption.MAXIMAL) {
+                        this.propagatedCounts.changeCount(vv, childCount.getCount(vv));
+                    } else if (path == PathAssumption.NONE) {
+                        // do nothing, no propagation
+                    } else {
+                        throw new RuntimeException("Path assumption " + path
+                                + " is not supported.");
+                    }
+                }
+            }
         }
 
         boolean isEmpty() {
             return this.getContent().isEmpty();
         }
 
-        double[] getMLEPhi() {
-            double[] mapPhi = new double[V];
-            for (int vv = 0; vv < V; vv++) {
-                mapPhi[vv] = (double) getContent().getCount(vv) / getContent().getCountSum();
-            }
-            return mapPhi;
-        }
-
         String[] getTopWords(int numTopWords) {
             ArrayList<RankingItem<String>> topicSortedVocab
-                    = IOUtils.getSortedVocab(getContent().getDistribution(), wordVocab);
+                    = IOUtils.getSortedVocab(phi, wordVocab);
             String[] topWords = new String[numTopWords];
             for (int i = 0; i < numTopWords; i++) {
                 topWords[i] = topicSortedVocab.get(i).getObject();
@@ -1831,51 +1863,15 @@ public class SNLDA extends AbstractSampler {
         int[] Ks = CLIUtils.getIntArrayArgument(cmd, "Ks", new int[]{15, 4}, ",");
         int L = Ks.length + 1;
 
-        // set alphas
-        double[] defaultAlphas = new double[L - 1];
-        Arrays.fill(defaultAlphas, 0.1);
-        double[] alphas = defaultAlphas;
-        if (cmd.hasOption("alphas")) {
-            alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas", defaultAlphas, ",");
-        }
-
-        // set betas
-        double[] defaultBetas = new double[L];
-        for (int ll = 0; ll < L; ll++) {
-            defaultBetas[ll] = 0.1 * (L - ll);
-        }
-        double[] betas = defaultBetas;
-        if (cmd.hasOption("betas")) {
-            betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", defaultBetas, ",");
-        }
-
-        // set gamma means
-        double[] defaultGammaMeans = new double[L - 1];
-        Arrays.fill(defaultGammaMeans, 0.25);
-        double[] gamma_means = defaultGammaMeans;
-        if (cmd.hasOption("gamma-means")) {
-            gamma_means = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means",
-                    defaultGammaMeans, ",");
-        }
-
-        // set gamma scales
-        double[] defaultGammaScales = new double[L - 1];
-        for (int ll = 0; ll < L - 1; ll++) {
-            defaultGammaScales[ll] = 10 * (L - ll);
-        }
-        double[] gamma_scales = defaultGammaScales;
-        if (cmd.hasOption("gamma-scales")) {
-            gamma_scales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales",
-                    defaultGammaScales, ",");
-        }
-
+        double[] alphas = CLIUtils.getDoubleArrayArgument(cmd, "alphas", new double[]{2.0, 1.0}, ",");
+        double[] betas = CLIUtils.getDoubleArrayArgument(cmd, "betas", new double[]{0.5, 0.25, 0.1}, ",");
+        double[] gamma_means = CLIUtils.getDoubleArrayArgument(cmd, "gamma-means", new double[]{0.2, 0.2}, ",");
+        double[] gamma_scales = CLIUtils.getDoubleArrayArgument(cmd, "gamma-scales", new double[]{100, 10}, ",");
         double rho = CLIUtils.getDoubleArgument(cmd, "rho", 1.0);
         double mu = CLIUtils.getDoubleArgument(cmd, "mu", 0.0);
-        double[] defaultSigmas = {0.5, 1.0};
-        double[] sigmas = defaultSigmas;
-        if (cmd.hasOption("sigmas")) {
-            sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", defaultSigmas, ",");
-        }
+        double[] sigmas = CLIUtils.getDoubleArrayArgument(cmd, "sigmas", new double[]{0.5, 2.5}, ",");
+        String path = CLIUtils.getStringArgument(cmd, "path", "none");
+        PathAssumption pathAssumption = getPathAssumption(path);
 
         // data input
         String datasetName = cmd.getOptionValue("dataset");
@@ -1915,7 +1911,7 @@ public class SNLDA extends AbstractSampler {
             sampler.setWordVocab(binData.getWordVocab());
             sampler.configureBinary(outputFolder, V, Ks,
                     alphas, betas, gamma_means, gamma_scales, mu, sigmas,
-                    initState, paramOpt,
+                    initState, pathAssumption, paramOpt,
                     burnIn, maxIters, sampleLag, repInterval);
         } else {
             contData.loadFormattedData(new File(wordVocFile),
@@ -1926,18 +1922,20 @@ public class SNLDA extends AbstractSampler {
             sampler.setWordVocab(contData.getWordVocab());
             sampler.configureContinuous(outputFolder, V, Ks,
                     alphas, betas, gamma_means, gamma_scales, rho, mu, sigmas,
-                    initState, paramOpt,
+                    initState, pathAssumption, paramOpt,
                     burnIn, maxIters, sampleLag, repInterval);
         }
 
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
 
-        if (cmd.hasOption("train")) {
-            ArrayList<Integer> trainDocIndices = null;
+        if (isTraining()) {
+            ArrayList<Integer> trainDocIndices;
             if (isBinary) {
+                trainDocIndices = sampler.getSelectedDocIndices(binData.getDocIds());
                 sampler.train(binData.getWords(), trainDocIndices, binData.getSingleLabels());
             } else {
+                trainDocIndices = sampler.getSelectedDocIndices(contData.getDocIds());
                 double[] docResponses = contData.getResponses();
                 if (cmd.hasOption("z")) { // z-normalization
                     ZNormalizer zNorm = new ZNormalizer(docResponses);
@@ -1952,29 +1950,47 @@ public class SNLDA extends AbstractSampler {
             sampler.outputNodePosteriors(new File(samplerFolder, "train-node-posteriors.txt"));
         }
 
-        if (cmd.hasOption("test")) {
+        if (isTesting()) {
             int[][] testWords;
+            ArrayList<Integer> testDocIndices;
             if (isBinary) {
                 testWords = binData.getWords();
+                testDocIndices = sampler.getSelectedDocIndices(binData.getDocIds());
+
             } else {
                 testWords = contData.getWords();
+                testDocIndices = sampler.getSelectedDocIndices(contData.getDocIds());
             }
 
-            ArrayList<Integer> testDocIndices = null;
             File testAssignmentFolder = new File(samplerFolder, AbstractSampler.IterAssignmentFolder);
             IOUtils.createFolder(testAssignmentFolder);
 
             File testPredFolder = new File(samplerFolder, AbstractSampler.IterPredictionFolder);
             IOUtils.createFolder(testPredFolder);
 
+            double[] predictions;
             if (cmd.hasOption("parallel")) { // using multiple stored models
-                SNLDA.parallelTest(testWords, testDocIndices, testPredFolder, testAssignmentFolder, sampler);
+                predictions = SNLDA.parallelTest(testWords, testDocIndices, testPredFolder, testAssignmentFolder, sampler);
             } else { // using the last model
                 File stateFile = sampler.getFinalStateFile();
                 File outputPredFile = new File(testPredFolder, "iter-" + sampler.MAX_ITER + ".txt");
                 File outputStateFile = new File(testPredFolder, "iter-" + sampler.MAX_ITER + ".zip");
-                sampler.test(testWords, testDocIndices, stateFile, outputStateFile, outputPredFile);
+                predictions = sampler.test(testWords, testDocIndices, stateFile, outputStateFile, outputPredFile);
                 sampler.outputNodePosteriors(new File(samplerFolder, "test-node-posteriors.txt"));
+            }
+
+            if (isBinary) {
+                // TODO
+            } else {
+                File teResultFolder = new File(samplerFolder,
+                        AbstractExperiment.TEST_PREFIX + AbstractExperiment.RESULT_FOLDER);
+                IOUtils.createFolder(teResultFolder);
+                PredictionUtils.outputRegressionPredictions(
+                        new File(teResultFolder, AbstractExperiment.PREDICTION_FILE),
+                        contData.getDocIds(), contData.getResponses(), predictions);
+                PredictionUtils.outputRegressionResults(
+                        new File(teResultFolder, AbstractExperiment.RESULT_FILE), contData.getResponses(),
+                        predictions);
             }
         }
     }
@@ -2018,7 +2034,7 @@ public class SNLDA extends AbstractSampler {
      * @param iterStateFolder Folder to store assignments
      * @param sampler The configured sampler
      */
-    public static void parallelTest(int[][] newWords,
+    public static double[] parallelTest(int[][] newWords,
             ArrayList<Integer> newDocIndices,
             File iterPredFolder,
             File iterStateFolder,
@@ -2028,9 +2044,11 @@ public class SNLDA extends AbstractSampler {
             throw new RuntimeException("Report folder not found. " + reportFolder);
         }
         String[] filenames = reportFolder.list();
+        double[] avgPredictions = null;
         try {
             IOUtils.createFolder(iterPredFolder);
             ArrayList<Thread> threads = new ArrayList<Thread>();
+            ArrayList<File> partPredFiles = new ArrayList<>();
             for (String filename : filenames) { // all learned models
                 if (!filename.contains("zip")) {
                     continue;
@@ -2049,14 +2067,19 @@ public class SNLDA extends AbstractSampler {
                         iterOutputPredFile.getAbsolutePath());
                 Thread thread = new Thread(runner);
                 threads.add(thread);
+                partPredFiles.add(iterOutputPredFile);
             }
 
             // run MAX_NUM_PARALLEL_THREADS threads at a time
             runThreads(threads);
+
+            // average predictions
+            avgPredictions = PredictionUtils.computeMultipleAverage(partPredFiles);
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Exception while sampling during parallel test.");
         }
+        return avgPredictions;
     }
 }
 
@@ -2091,8 +2114,6 @@ class SNLDATestRunner implements Runnable {
         testSampler.setLog(false);
         testSampler.setReport(false);
         testSampler.configure(sampler);
-        testSampler.setTestConfigurations(sampler.getBurnIn(),
-                sampler.getMaxIters(), sampler.getSampleLag());
         try {
             testSampler.test(newWords, newDocIndices,
                     new File(stateFile),

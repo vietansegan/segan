@@ -50,7 +50,7 @@ public class PredictionUtils {
      * Input predictions.
      *
      * @param inputFile The input file
-     * @return 
+     * @return
      */
     public static double[] inputPredictions(File inputFile) {
         double[] predResponses = null;
@@ -163,11 +163,16 @@ public class PredictionUtils {
         }
     }
 
-    public static void outputClassificationPredictions(
-            File outputFile,
-            String[] instanceIds,
-            int[] trueLabels,
-            double[] predValues) {
+    /**
+     * Output classification predictions.
+     *
+     * @param outputFile
+     * @param instanceIds
+     * @param trueLabels
+     * @param predValues
+     */
+    public static void outputClassificationPredictions(File outputFile,
+            String[] instanceIds, int[] trueLabels, double[] predValues) {
         if (instanceIds.length != trueLabels.length
                 || instanceIds.length != predValues.length) {
             throw new RuntimeException("Lengths mismatched. "
@@ -198,32 +203,69 @@ public class PredictionUtils {
      * Output classification results.
      *
      * @param outputFile The output file
-     * @param labels List of true labels
-     * @param preds List of predicted labels
+     * @param trueLabels
+     * @param predValues
      * @return
      */
     public static ArrayList<Measurement> outputBinaryClassificationResults(
             File outputFile,
-            int[] labels,
-            int[] preds) {
-        System.out.println("Outputing binary classification results to " + outputFile);
-        ArrayList<Measurement> measurements = null;
+            int[] trueLabels,
+            double[] predValues) {
+        ArrayList<Measurement> measurements = getBinaryClassificationResults(trueLabels, predValues);
+        outputEvaluationResults(outputFile, measurements);
+        return measurements;
+    }
+
+    public static ArrayList<Measurement> getBinaryClassificationResults(int[] trueLabels,
+            double[] predValues) {
+        int numPositives = 0;
+        Set<Integer> positiveSet = new HashSet<>();
+        for (int ii = 0; ii < trueLabels.length; ii++) {
+            if (trueLabels[ii] == POSITVE) {
+                numPositives++;
+                positiveSet.add(ii);
+            }
+        }
+
+        ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
+        for (int d = 0; d < predValues.length; d++) {
+            rankDocs.add(new RankingItem<Integer>(d, predValues[d]));
+        }
+        Collections.sort(rankDocs);
+        int[] preds = new int[predValues.length];
+        for (int ii = 0; ii < numPositives; ii++) {
+            int d = rankDocs.get(ii).getObject();
+            preds[d] = POSITVE;
+        }
+
+        ArrayList<Measurement> measurements = new ArrayList<>();
+        ClassificationEvaluation clsEval = new ClassificationEvaluation(trueLabels, preds);
+        clsEval.computePRF1();
+        for (Measurement m : clsEval.getMeasurements()) {
+            measurements.add(m);
+        }
+
+        RankingEvaluation rankEval = new RankingEvaluation(predValues, positiveSet);
+        rankEval.computePRF();
+        rankEval.computeAUCs();
+        for (Measurement m : rankEval.getMeasurements()) {
+            measurements.add(m);
+        }
+        return measurements;
+    }
+
+    public static void outputEvaluationResults(File outputFile, ArrayList<Measurement> measurements) {
+        System.out.println("Outputing evaluation results to " + outputFile);
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
-            ClassificationEvaluation eval = new ClassificationEvaluation(labels, preds);
-            eval.computePRF1();
-            measurements = eval.getMeasurements();
             for (Measurement m : measurements) {
                 writer.write(m.getName() + "\t" + m.getValue() + "\n");
             }
             writer.close();
-
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Exception while outputing results to "
-                    + outputFile);
+            throw new RuntimeException("Exception while outputing to " + outputFile);
         }
-        return measurements;
     }
 
     /**
@@ -297,32 +339,6 @@ public class PredictionUtils {
         rankPerf.computeAndOutputNDCGsNormalize(truths);
     }
 
-    public static ArrayList<Measurement> outputBinaryClassificationResults(
-            File outputFile,
-            int[] trueLabels,
-            double[] predValues) {
-
-        int numPositives = 0;
-        for (int ii = 0; ii < trueLabels.length; ii++) {
-            if (trueLabels[ii] == POSITVE) {
-                numPositives++;
-            }
-        }
-
-        ArrayList<RankingItem<Integer>> rankDocs = new ArrayList<RankingItem<Integer>>();
-        for (int d = 0; d < predValues.length; d++) {
-            rankDocs.add(new RankingItem<Integer>(d, predValues[d]));
-        }
-        Collections.sort(rankDocs);
-        int[] preds = new int[predValues.length];
-        for (int ii = 0; ii < numPositives; ii++) {
-            int d = rankDocs.get(ii).getObject();
-            preds[d] = POSITVE;
-        }
-
-        return outputBinaryClassificationResults(outputFile, trueLabels, preds);
-    }
-
     /**
      * Output the predictions of a single model for classification.
      *
@@ -391,13 +407,11 @@ public class PredictionUtils {
         try {
             BufferedWriter writer = IOUtils.getBufferedWriter(outputFile);
             String[] filenames = iterPredFolder.list();
-            for (int ff = 0; ff < filenames.length; ff++) {
-                double[][] singlePredictions = inputSingleModelClassifications(
-                        new File(iterPredFolder, filenames[ff]));
+            for (String filename : filenames) {
+                double[][] singlePredictions = inputSingleModelClassifications(new File(iterPredFolder, filename));
                 MultilabelClassificationEvaluation eval = new MultilabelClassificationEvaluation(trueLabels, singlePredictions);
                 eval.computeMeasurements();
-
-                if (ff == 0) {
+                if (avgPreds == null) {
                     writer.write("File");
                     for (Measurement m : eval.getMeasurements()) {
                         writer.write("\t" + m.getName());
@@ -406,12 +420,11 @@ public class PredictionUtils {
 
                     avgPreds = new double[singlePredictions.length][singlePredictions[0].length];
                 }
-                writer.write(filenames[ff]);
+                writer.write(filename);
                 for (Measurement m : eval.getMeasurements()) {
                     writer.write("\t" + m.getValue());
                 }
                 writer.write("\n");
-
                 for (int dd = 0; dd < avgPreds.length; dd++) {
                     for (int jj = 0; jj < avgPreds[dd].length; jj++) {
                         avgPreds[dd][jj] += singlePredictions[dd][jj];
@@ -419,9 +432,9 @@ public class PredictionUtils {
                 }
             }
             // average
-            for (int dd = 0; dd < avgPreds.length; dd++) {
-                for (int jj = 0; jj < avgPreds[dd].length; jj++) {
-                    avgPreds[dd][jj] /= filenames.length;
+            for (double[] avgPred : avgPreds) {
+                for (int jj = 0; jj < avgPred.length; jj++) {
+                    avgPred[jj] /= filenames.length;
                 }
             }
             MultilabelClassificationEvaluation eval = new MultilabelClassificationEvaluation(trueLabels, avgPreds);
@@ -456,8 +469,8 @@ public class PredictionUtils {
             for (int d = 0; d < predictions.get(0).length; d++) {
                 writer.write(Integer.toString(d));
 
-                for (int ii = 0; ii < predictions.size(); ii++) {
-                    writer.write("\t" + predictions.get(ii)[d]);
+                for (double[] prediction : predictions) {
+                    writer.write("\t" + prediction[d]);
                 }
                 writer.write("\n");
             }
@@ -499,6 +512,59 @@ public class PredictionUtils {
                     + file);
         }
         return preds;
+    }
+
+    public static double[][] inputSingleModelRegressions(File file) {
+        ArrayList<double[]> predList = new ArrayList<>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(file);
+            String line;
+            String[] sline;
+            while ((line = reader.readLine()) != null) {
+                sline = line.split("\t");
+                double[] ps = new double[sline.length - 1];
+                for (int ii = 0; ii < ps.length; ii++) {
+                    ps[ii] = Double.parseDouble(sline[ii + 1]);
+                }
+                predList.add(ps);
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading predictions from "
+                    + file);
+        }
+        double[][] preds = new double[predList.size()][];
+        for (int ii = 0; ii < predList.size(); ii++) {
+            preds[ii] = predList.get(ii);
+        }
+        return preds;
+    }
+
+    public static double[] computeMultipleAverage(ArrayList<File> files) {
+        double[] avgPredictions = null;
+        for (File file : files) {
+            double[][] partPreds = PredictionUtils.inputSingleModelRegressions(file);
+            double[] preds = new double[partPreds.length];
+            for (int dd = 0; dd < preds.length; dd++) {
+                preds[dd] = StatUtils.mean(partPreds[dd]);
+            }
+
+            if (avgPredictions == null) {
+                avgPredictions = preds;
+            } else {
+                for (int dd = 0; dd < preds.length; dd++) {
+                    avgPredictions[dd] += preds[dd];
+                }
+            }
+        }
+        if (avgPredictions == null) {
+            throw new RuntimeException("Null predictions");
+        }
+        for (int dd = 0; dd < avgPredictions.length; dd++) {
+            avgPredictions[dd] /= files.size();
+        }
+        return avgPredictions;
     }
 
     /**
@@ -596,9 +662,7 @@ public class PredictionUtils {
             predResponses = new double[trueLabels.length];
             int numModels = filenames.length;
 
-            for (int i = 0; i < filenames.length; i++) {
-                String filename = filenames[i];
-
+            for (String filename : filenames) {
                 double[][] predictions = inputSingleModelRegressions(
                         new File(iterPredFolder, filename),
                         trueLabels.length);

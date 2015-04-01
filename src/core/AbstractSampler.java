@@ -1,5 +1,6 @@
 package core;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -19,6 +20,7 @@ import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import sampler.unsupervised.LDA;
 import sampler.unsupervised.RecursiveLDA;
+import sampling.likelihood.CascadeDirMult.PathAssumption;
 import util.IOUtils;
 import util.MiscUtils;
 import util.RankingItem;
@@ -125,12 +127,25 @@ public abstract class AbstractSampler implements Serializable {
         options.addOption("d", false, "debug");
         options.addOption("help", false, "help");
         options.addOption("example", false, "example");
+
+        options.addOption("train", false, "train");
+        options.addOption("test", false, "test");
+        options.addOption("parallel", false, "parallel");
+    }
+
+    public static void addDataOptions() {
+        addOption("dataset", "Dataset");
+        addOption("word-voc-file", "Word vocabulary file");
+        addOption("word-file", "Document word file");
+        addOption("info-file", "Document info file");
+        addOption("selected-doc-indices-file", "File containing selected document indices");
+        addOption("selected-doc-ids-file", "File containing selected document IDs");
     }
 
     public void setFolder(String folder) {
         this.folder = folder;
     }
-    
+
     public String getFolder() {
         return this.folder;
     }
@@ -139,26 +154,24 @@ public abstract class AbstractSampler implements Serializable {
         return this.name;
     }
 
+    public void setBasename(String basename) {
+        this.basename = basename;
+    }
+
     public String getBasename() {
         return this.basename;
     }
 
     public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag) {
-        if (tMaxIter <= this.testMaxIter) {
-            this.testBurnIn = tBurnIn;
-            this.testMaxIter = tMaxIter;
-            this.testSampleLag = tSampleLag;
-        }
+        setTestConfigurations(tBurnIn, tMaxIter, tSampleLag, tSampleLag);
     }
 
     public void setTestConfigurations(int tBurnIn, int tMaxIter, int tSampleLag,
             int tRepInt) {
-        if (tMaxIter <= this.testMaxIter) {
-            this.testBurnIn = tBurnIn;
-            this.testMaxIter = tMaxIter;
-            this.testSampleLag = tSampleLag;
-            this.testRepInterval = tRepInt;
-        }
+        this.testBurnIn = tBurnIn;
+        this.testMaxIter = tMaxIter;
+        this.testSampleLag = tSampleLag;
+        this.testRepInterval = tRepInt;
     }
 
     public void setSamplerConfiguration(int burn_in, int max_iter, int lag, int repInt) {
@@ -362,7 +375,7 @@ public abstract class AbstractSampler implements Serializable {
                 }
             }
 
-            if (debug) {
+            if (debug && isReporting) {
                 validate("iter " + iter);
             }
 
@@ -389,13 +402,102 @@ public abstract class AbstractSampler implements Serializable {
     }
 
     /**
+     * Read a list of indices of selected documents.
+     *
+     * @param docIds Original document IDs
+     */
+    public ArrayList<Integer> getSelectedDocIndices(String[] docIds) {
+        ArrayList<Integer> selectedDocIndices = null;
+        if (!cmd.hasOption("selected-doc-indices-file")
+                && !cmd.hasOption("selected-doc-ids-file")) {
+            return selectedDocIndices;
+        }
+
+        if (cmd.hasOption("selected-doc-indices-file")) {
+            return loadFromSelectedDocIndices(docIds, cmd.getOptionValue("selected-doc-indices-file"));
+        } else {
+            assert cmd.hasOption("selected-doc-ids-file");
+            return loadFromSelectedDocIds(docIds, cmd.getOptionValue("selected-doc-ids-file"));
+        }
+    }
+
+    /**
+     * Load the list of selected documents where each line is the document
+     * index.
+     *
+     * @param docIds
+     * @param filename
+     */
+    private ArrayList<Integer> loadFromSelectedDocIndices(String[] docIds, String filename) {
+        if (verbose) {
+            logln("Loading selected document indices from " + filename);
+        }
+        ArrayList<Integer> selectedDocIndices = new ArrayList<>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(filename);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int docIdx = Integer.parseInt(line);
+                if (docIdx >= docIds.length) {
+                    throw new RuntimeException("Out of bound. Doc index " + docIdx);
+                }
+                selectedDocIndices.add(docIdx);
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading from " + filename);
+        }
+        return selectedDocIndices;
+    }
+
+    /**
+     * Load the list of selected documents where each line is the document id.
+     *
+     * @param docIds
+     * @param filename
+     */
+    private ArrayList<Integer> loadFromSelectedDocIds(String[] docIds, String filename) {
+        if (verbose) {
+            logln("Loading selected document indices from " + filename);
+        }
+        ArrayList<Integer> selectedDocIndices = new ArrayList<>();
+        try {
+            BufferedReader reader = IOUtils.getBufferedReader(filename);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int docIdx = findIndex(docIds, line);
+                if (docIdx < 0) {
+                    throw new RuntimeException("Doc " + line + " not found");
+                }
+                selectedDocIndices.add(docIdx);
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while loading from " + filename);
+        }
+        return selectedDocIndices;
+    }
+
+    private static int findIndex(String[] set, String q) {
+        for (int i = 0; i < set.length; i++) {
+            if (set[i].equals(q)) {
+                return i;
+            }
+        }
+        System.out.println(q);
+        return -1;
+    }
+
+    /**
      * Output learned topics.
      *
      * @param file Output file
      * @param numTopWords Number of top words
      */
     public void outputTopicTopWords(File file, int numTopWords) {
-
+        // TOD: make this abstract
     }
 
     public String getCurrentState() {
@@ -746,6 +848,18 @@ public abstract class AbstractSampler implements Serializable {
         }
     }
 
+    public static boolean isTraining() {
+        return cmd.hasOption("train");
+    }
+
+    public static boolean isDeveloping() {
+        return cmd.hasOption("dev");
+    }
+
+    public static boolean isTesting() {
+        return cmd.hasOption("test");
+    }
+
     /**
      * Run multiple threads in parallel.
      *
@@ -769,5 +883,44 @@ public abstract class AbstractSampler implements Serializable {
         for (int jj = c; jj < threads.size(); jj++) {
             threads.get(jj).join();
         }
+    }
+
+    public static PathAssumption getPathAssumption(String path) {
+        PathAssumption pathAssumption;
+        switch (path) {
+            case "max":
+                pathAssumption = PathAssumption.MAXIMAL;
+                break;
+            case "min":
+                pathAssumption = PathAssumption.MINIMAL;
+                break;
+            case "uniproc":
+                pathAssumption = PathAssumption.UNIPROC;
+                break;
+            case "antoniak":
+                pathAssumption = PathAssumption.ANTONIAK;
+                break;
+            case "none": // no cascade
+                pathAssumption = PathAssumption.NONE;
+                break;
+            default:
+                throw new RuntimeException("Path assumption " + path + " not supported");
+        }
+        return pathAssumption;
+    }
+
+    public static InitialState getInitialState(String init) {
+        InitialState initState;
+        switch (init) {
+            case "random":
+                initState = InitialState.RANDOM;
+                break;
+            case "preset":
+                initState = InitialState.PRESET;
+                break;
+            default:
+                throw new RuntimeException("Initialization " + init + " not supported");
+        }
+        return initState;
     }
 }
