@@ -45,10 +45,52 @@ public class LBFGSLinearRegression extends AbstractLinearModel {
         return this.sigma;
     }
 
-    public void train(int[][] docWords,
-            ArrayList<Integer> docIndices,
-            double[] docResponses,
-            int V) {
+    public void trainAdaptive(int[][] docWords, ArrayList<Integer> docIndices,
+            double[] docResponses, int V) {
+        if (docIndices == null) {
+            docIndices = new ArrayList<>();
+            for (int dd = 0; dd < docWords.length; dd++) {
+                docIndices.add(dd);
+            }
+        }
+
+        int D = docIndices.size();
+        double[] responses = new double[D];
+        double[] rhos = new double[D];
+        SparseVector[] designMatrix = new SparseVector[D];
+        for (int ii = 0; ii < D; ii++) {
+            int dd = docIndices.get(ii);
+            responses[ii] = docResponses[dd];
+            designMatrix[ii] = new SparseVector(V);
+            double val = 1.0 / docWords[dd].length;
+            for (int nn = 0; nn < docWords[dd].length; nn++) {
+                designMatrix[ii].change(docWords[dd][nn], val);
+            }
+            rhos[ii] = this.rho / docWords[dd].length;
+        }
+
+        if (verbose) {
+            System.out.println("Training ...");
+            System.out.println("--- # instances: " + designMatrix.length + ". " + responses.length);
+            System.out.println("--- # features: " + designMatrix[0].getDimension() + ". " + V);
+        }
+        RidgeLinearRegressionOptimizable optimizable = new RidgeLinearRegressionOptimizable(
+                responses, new double[V], designMatrix, rhos, mu, sigma);
+        LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+
+        try {
+            optimizer.optimize();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        this.weights = new double[V];
+        for (int kk = 0; kk < V; kk++) {
+            this.weights[kk] = optimizable.getParameter(kk);
+        }
+    }
+
+    public void train(int[][] docWords, ArrayList<Integer> docIndices,
+            double[] docResponses, int V) {
         if (docIndices == null) {
             docIndices = new ArrayList<>();
             for (int dd = 0; dd < docWords.length; dd++) {

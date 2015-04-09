@@ -134,6 +134,22 @@ public class LDA extends AbstractSampler {
         return this.docTopics;
     }
 
+    public double[][] getThetas() {
+        double[][] thetas = new double[D][];
+        for (int dd = 0; dd < D; dd++) {
+            thetas[dd] = this.docTopics[dd].getDistribution();
+        }
+        return thetas;
+    }
+
+    public double[][] getPhis() {
+        double[][] phis = new double[K][];
+        for (int kk = 0; kk < K; kk++) {
+            phis[kk] = this.topicWords[kk].getDistribution();
+        }
+        return phis;
+    }
+
     /**
      * Set training data.
      *
@@ -769,6 +785,8 @@ public class LDA extends AbstractSampler {
         sampler.iterate();
         sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
         sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+        IOUtils.output2DArray(new File(samplerFolder, "phis.txt"), sampler.getPhis());
+        IOUtils.output2DArray(new File(samplerFolder, "thetas.txt"), sampler.getThetas());
     }
 
     public static void main(String[] args) {

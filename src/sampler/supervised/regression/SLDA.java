@@ -57,10 +57,11 @@ public class SLDA extends AbstractSampler {
     protected DirMult[] topicWords;
     protected double[] regParams;
     // optimization
-    protected double[] docRegressMeans;
+    protected double[] docMeans;
     protected SparseVector[] designMatrix;
     // internal
     protected double sqrtRho;
+    protected boolean hasBias;
 
     public SLDA() {
         this.basename = "SLDA";
@@ -81,6 +82,7 @@ public class SLDA extends AbstractSampler {
                 sampler.sigma,
                 sampler.initState,
                 sampler.paramOptimized,
+                sampler.hasBias,
                 sampler.BURN_IN,
                 sampler.MAX_ITER,
                 sampler.LAG,
@@ -96,7 +98,7 @@ public class SLDA extends AbstractSampler {
             double mu, // mean of Gaussian for regression parameters
             double sigma, // variance of Gaussian for regression parameters
             InitialState initState,
-            boolean paramOpt,
+            boolean paramOpt, boolean hasBias,
             int burnin, int maxiter, int samplelag, int repInt) {
         if (verbose) {
             logln("Configuring ...");
@@ -125,6 +127,7 @@ public class SLDA extends AbstractSampler {
 
         this.initState = initState;
         this.paramOptimized = paramOpt;
+        this.hasBias = hasBias;
         this.prefix += initState.toString();
         this.setName();
 
@@ -143,6 +146,7 @@ public class SLDA extends AbstractSampler {
             logln("--- max iter:\t" + MAX_ITER);
             logln("--- sample lag:\t" + LAG);
             logln("--- paramopt:\t" + paramOptimized);
+            logln("--- has bias:\t" + hasBias);
             logln("--- initialize:\t" + initState);
         }
     }
@@ -159,7 +163,8 @@ public class SLDA extends AbstractSampler {
                 + "_r-" + formatter.format(rho)
                 + "_m-" + formatter.format(mu)
                 + "_s-" + formatter.format(sigma)
-                + "_opt-" + this.paramOptimized;
+                + "_opt-" + this.paramOptimized
+                + "_bias-" + this.hasBias;
     }
 
     public DirMult[] getTopicWords() {
@@ -170,12 +175,28 @@ public class SLDA extends AbstractSampler {
         return this.z;
     }
 
+    public double[][] getThetas() {
+        double[][] thetas = new double[D][];
+        for (int dd = 0; dd < D; dd++) {
+            thetas[dd] = this.docTopics[dd].getDistribution();
+        }
+        return thetas;
+    }
+
+    public double[][] getPhis() {
+        double[][] phis = new double[K][];
+        for (int kk = 0; kk < K; kk++) {
+            phis[kk] = this.topicWords[kk].getDistribution();
+        }
+        return phis;
+    }
+
     public double[] getRegressionParameters() {
         return this.regParams;
     }
 
     public double[] getPredictedValues() {
-        return this.docRegressMeans;
+        return this.docMeans;
     }
 
     protected void evaluateRegressPrediction(double[] trueVals, double[] predVals) {
@@ -266,13 +287,17 @@ public class SLDA extends AbstractSampler {
         inputModel(stateFile.toString());
         setupData(docWords, docIndices, null);
         initializeDataStructure();
+        if (hasBias) {
+            for (int dd = 0; dd < D; dd++) {
+                docMeans[dd] = regParams[K];
+            }
+        }
 
         // store predictions at different test iterations
         ArrayList<double[]> predResponsesList = new ArrayList<double[]>();
 
         // sample topic assignments for test document
         for (iter = 0; iter < this.testMaxIter; iter++) {
-            numTokensChanged = 0;
             isReporting = verbose && iter % testRepInterval == 0;
             if (isReporting) {
                 String str = "Iter " + iter + "/" + testMaxIter
@@ -293,7 +318,7 @@ public class SLDA extends AbstractSampler {
             // store prediction (on all documents) at a test iteration
             if (iter >= this.testBurnIn && iter % this.testSampleLag == 0) {
                 double[] predResponses = new double[D];
-                System.arraycopy(docRegressMeans, 0, predResponses, 0, D);
+                System.arraycopy(docMeans, 0, predResponses, 0, D);
                 predResponsesList.add(predResponses);
             }
         }
@@ -344,7 +369,7 @@ public class SLDA extends AbstractSampler {
         if (verbose) {
             logln("--- Done initializing. " + getCurrentState());
             getLogLikelihood();
-            evaluateRegressPrediction(responses, docRegressMeans);
+            evaluateRegressPrediction(responses, docMeans);
         }
     }
 
@@ -362,9 +387,13 @@ public class SLDA extends AbstractSampler {
             }
         }
 
-        regParams = new double[K];
-        for (int k = 0; k < K; k++) {
-            regParams[k] = SamplerUtils.getGaussian(mu, sigma);
+        int numParams = K;
+        if (hasBias) {
+            numParams++;
+        }
+        regParams = new double[numParams];
+        for (int kk = 0; kk < numParams; kk++) {
+            regParams[kk] = SamplerUtils.getGaussian(mu, sigma);
         }
     }
 
@@ -379,7 +408,7 @@ public class SLDA extends AbstractSampler {
             docTopics[ii] = new DirMult(K, hyperparams.get(ALPHA) * K, 1.0 / K);
         }
 
-        docRegressMeans = new double[D];
+        docMeans = new double[D];
     }
 
     protected void initializeAssignments() {
@@ -416,7 +445,7 @@ public class SLDA extends AbstractSampler {
         int lda_samplelag = 10;
         double lda_alpha = hyperparams.get(ALPHA);
         double lda_beta = hyperparams.get(BETA);
-        LDA lda = runLDA(words, K, V, null, null, lda_alpha, lda_beta, 
+        LDA lda = runLDA(words, K, V, null, null, lda_alpha, lda_beta,
                 lda_burnin, lda_maxiter, lda_samplelag);
         int[][] ldaZ = lda.getZs();
 
@@ -542,7 +571,7 @@ public class SLDA extends AbstractSampler {
                 }
                 if (removeFromData) {
                     docTopics[dd].decrement(z[dd][nn]);
-                    docRegressMeans[dd] -= regParams[z[dd][nn]] / words[dd].length;
+                    docMeans[dd] -= regParams[z[dd][nn]] / words[dd].length;
                 }
 
                 double[] logprobs = new double[K];
@@ -550,7 +579,7 @@ public class SLDA extends AbstractSampler {
                     logprobs[k] = Math.log(docTopics[dd].getCount(k) + hyperparams.get(ALPHA))
                             + Math.log(topicWords[k].getProbability(words[dd][nn]));
                     if (observe) {
-                        double mean = docRegressMeans[dd] + regParams[k] / words[dd].length;
+                        double mean = docMeans[dd] + regParams[k] / words[dd].length;
                         logprobs[k] += StatUtils.logNormalProbability(responses[dd], mean, sqrtRho);
                     }
                 }
@@ -568,7 +597,7 @@ public class SLDA extends AbstractSampler {
                 }
                 if (addToData) {
                     docTopics[dd].increment(z[dd][nn]);
-                    docRegressMeans[dd] += regParams[z[dd][nn]] / words[dd].length;
+                    docMeans[dd] += regParams[z[dd][nn]] / words[dd].length;
                 }
             }
         }
@@ -594,7 +623,12 @@ public class SLDA extends AbstractSampler {
         long sTime = System.currentTimeMillis();
         designMatrix = new SparseVector[D];
         for (int dd = 0; dd < D; dd++) {
-            designMatrix[dd] = new SparseVector(K);
+            if (hasBias) {
+                designMatrix[dd] = new SparseVector(K + 1);
+                designMatrix[dd].set(K, 1.0);
+            } else {
+                designMatrix[dd] = new SparseVector(K);
+            }
             for (int k : docTopics[dd].getSparseCounts().getIndices()) {
                 double val = (double) docTopics[dd].getCount(k) / z[dd].length;
                 designMatrix[dd].change(k, val);
@@ -613,21 +647,22 @@ public class SLDA extends AbstractSampler {
         }
 
         // update regression parameters
-        for (int kk = 0; kk < K; kk++) {
+        for (int kk = 0; kk < optimizable.getNumParameters(); kk++) {
             regParams[kk] = optimizable.getParameter(kk);
         }
 
         // update current predictions
-        this.docRegressMeans = new double[D];
+        this.docMeans = new double[D];
         for (int dd = 0; dd < D; dd++) {
             for (int kk : designMatrix[dd].getIndices()) {
-                this.docRegressMeans[dd] += designMatrix[dd].get(kk) * regParams[kk];
+                this.docMeans[dd] += designMatrix[dd].get(kk) * regParams[kk];
             }
         }
 
         long eTime = System.currentTimeMillis() - sTime;
         if (isReporting) {
-            evaluateRegressPrediction(responses, docRegressMeans);
+            evaluateRegressPrediction(responses, docMeans);
+            logln("--- " + designMatrix.length + " x " + optimizable.getNumParameters());
             logln("--- converged? " + converged);
             logln("--- --- time: " + eTime);
         }
@@ -649,13 +684,19 @@ public class SLDA extends AbstractSampler {
         double responseLlh = 0.0;
         for (int ii = 0; ii < D; ii++) {
             double[] empDist = docTopics[ii].getEmpiricalDistribution();
-            double mean = StatUtils.dotProduct(regParams, empDist);
+            double mean = 0.0;
+            if (hasBias) {
+                mean += regParams[K];
+            }
+            for (int kk = 0; kk < K; kk++) {
+                mean += regParams[kk] * empDist[kk];
+            }
             responseLlh += StatUtils.logNormalProbability(responses[ii],
                     mean, sqrtRho);
         }
 
         double regParamLlh = 0.0;
-        for (int k = 0; k < K; k++) {
+        for (int k = 0; k < regParams.length; k++) {
             regParamLlh += StatUtils.logNormalProbability(
                     regParams[k], mu, Math.sqrt(sigma));
         }
@@ -691,13 +732,19 @@ public class SLDA extends AbstractSampler {
         double responseLlh = 0.0;
         for (int ii = 0; ii < D; ii++) {
             double[] empDist = docTopics[ii].getEmpiricalDistribution();
-            double mean = StatUtils.dotProduct(regParams, empDist);
+            double mean = 0.0;
+            if (hasBias) {
+                mean += regParams[K];
+            }
+            for (int kk = 0; kk < K; kk++) {
+                mean += regParams[kk] * empDist[kk];
+            }
             responseLlh += StatUtils.logNormalProbability(responses[ii],
                     mean, sqrtRho);
         }
 
         double regParamLlh = 0.0;
-        for (int k = 0; k < K; k++) {
+        for (int k = 0; k < regParams.length; k++) {
             regParamLlh += StatUtils.logNormalProbability(
                     regParams[k], mu, Math.sqrt(sigma));
         }
@@ -740,6 +787,9 @@ public class SLDA extends AbstractSampler {
                 modelStr.append(k).append("\n");
                 modelStr.append(regParams[k]).append("\n");
                 modelStr.append(DirMult.output(topicWords[k])).append("\n");
+            }
+            if (hasBias) {
+                modelStr.append(regParams[K]).append("\n");
             }
 
             // assignments
@@ -798,6 +848,9 @@ public class SLDA extends AbstractSampler {
                 }
                 regParams[k] = Double.parseDouble(reader.readLine());
                 topicWords[k] = DirMult.input(reader.readLine());
+            }
+            if (hasBias) {
+                regParams[K] = Double.parseDouble(reader.readLine());
             }
             reader.close();
         } catch (Exception e) {
@@ -868,6 +921,10 @@ public class SLDA extends AbstractSampler {
                     writer.write("\t" + topWord);
                 }
                 writer.write("\n\n");
+            }
+
+            if (hasBias) {
+                writer.write("Bias: " + regParams[K] + "\n");
             }
             writer.close();
         } catch (IOException e) {
@@ -1006,6 +1063,7 @@ public class SLDA extends AbstractSampler {
         options.addOption("train", false, "Train");
         options.addOption("test", false, "Test");
         options.addOption("parallel", false, "Parallel");
+        options.addOption("bias", false, "Bias");
 
         // configurations
         addOption("init", "Initialization");
@@ -1016,7 +1074,7 @@ public class SLDA extends AbstractSampler {
         options.addOption("help", false, "Help");
         options.addOption("example", false, "Example command");
     }
- 
+
     private static void runModel() throws Exception {
         // sampling configurations
         int numTopWords = CLIUtils.getIntegerArgument(cmd, "num-top-words", 20);
@@ -1061,6 +1119,7 @@ public class SLDA extends AbstractSampler {
                 new File(docInfoFile),
                 null);
         int V = data.getWordVocab().size();
+        boolean hasBias = cmd.hasOption("bias");
 
         SLDA sampler = new SLDA();
         sampler.setVerbose(cmd.hasOption("v"));
@@ -1071,7 +1130,7 @@ public class SLDA extends AbstractSampler {
 
         sampler.configure(outputFolder, V, K,
                 alpha, beta, rho, mu, sigma,
-                initState, paramOpt,
+                initState, paramOpt, hasBias,
                 burnIn, maxIters, sampleLag, repInterval);
         File samplerFolder = new File(sampler.getSamplerFolderPath());
         IOUtils.createFolder(samplerFolder);
@@ -1111,6 +1170,8 @@ public class SLDA extends AbstractSampler {
             sampler.iterate();
             sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
             sampler.outputPosterior(new File(samplerFolder, "posterior.csv"));
+            IOUtils.output2DArray(new File(samplerFolder, "phis.txt"), sampler.getPhis());
+            IOUtils.outputArray(new File(samplerFolder, "etas.txt"), sampler.regParams);
         }
 
         if (cmd.hasOption("test")) {

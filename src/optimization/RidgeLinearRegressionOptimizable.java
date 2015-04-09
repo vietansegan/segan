@@ -17,7 +17,7 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
     private final SparseVector[] designMatrix;  // [N]x[K] sparse matrix
     private final int N; // number of instances
     private final int K; // number of features
-    private final double rhoSquare;
+    private final double[] rhoSquares;
     private final double mu;
     private final double sigmaSquare;
     private final double[] sigmaSquares;
@@ -34,12 +34,61 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
         this.N = this.designMatrix.length;
         this.K = this.params.length;
 
-        this.rhoSquare = rho * rho;
+        double rhoSquare = rho * rho;
+        this.rhoSquares = new double[N];
+        for (int nn = 0; nn < N; nn++) {
+            this.rhoSquares[nn] = rhoSquare;
+        }
+        this.mu = mu;
+        this.sigmaSquare = sigma * sigma;
+        this.sigmaSquares = null;
+    }
+    
+    public RidgeLinearRegressionOptimizable(double[] values,
+            double[] params,
+            SparseVector[] designMatrix,
+            double[] rhos,
+            double mu,
+            double sigma) {
+        this.values = values;
+        this.params = params;
+        this.designMatrix = designMatrix;
+        this.N = this.designMatrix.length;
+        this.K = this.params.length;
+
+        this.rhoSquares = new double[N];
+        for(int nn=0; nn<N; nn++) {
+            this.rhoSquares[nn] = rhos[nn] * rhos[nn];
+        }
         this.mu = mu;
         this.sigmaSquare = sigma * sigma;
         this.sigmaSquares = null;
     }
 
+    public RidgeLinearRegressionOptimizable(double[] values,
+            double[] params,
+            SparseVector[] designMatrix,
+            double[] rhos,
+            double mu,
+            double[] sigmas) {
+        this.values = values;
+        this.params = params;
+        this.designMatrix = designMatrix;
+        this.N = this.designMatrix.length;
+        this.K = this.params.length;
+
+        this.rhoSquares = new double[N];
+        for (int nn = 0; nn < N; nn++) {
+            this.rhoSquares[nn] = rhos[nn] * rhos[nn];
+        }
+        this.mu = mu;
+        this.sigmaSquare = -1; // dummy value
+        this.sigmaSquares = new double[sigmas.length];
+        for (int ii = 0; ii < this.sigmaSquares.length; ii++) {
+            this.sigmaSquares[ii] = sigmas[ii] * sigmas[ii];
+        }
+    }
+    
     public RidgeLinearRegressionOptimizable(double[] values,
             double[] params,
             SparseVector[] designMatrix,
@@ -52,7 +101,10 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
         this.N = this.designMatrix.length;
         this.K = this.params.length;
 
-        this.rhoSquare = rho * rho;
+        this.rhoSquares = new double[N];
+        for (int nn = 0; nn < N; nn++) {
+            this.rhoSquares[nn] = rho * rho;
+        }
         this.mu = mu;
         this.sigmaSquare = -1; // dummy value
         this.sigmaSquares = new double[sigmas.length];
@@ -78,7 +130,10 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
             this.designMatrix[n] = designMatrix.get(n);
         }
 
-        this.rhoSquare = rho * rho;
+        this.rhoSquares = new double[N];
+        for(int nn=0; nn<N; nn++) {
+            this.rhoSquares[nn] = rho * rho;
+        }
         this.mu = mu;
         this.sigmaSquare = -1; // dummy value
         this.sigmaSquares = new double[sigmas.length];
@@ -104,9 +159,9 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
         for (int n = 0; n < N; n++) {
             double dotprod = dotprod(n);
             double diff = values[n] - dotprod;
-            llh += diff * diff;
+            llh += diff * diff / rhoSquares[n];
         }
-        llh /= (-2 * rhoSquare * N);
+        llh /= (-2 * N);
 
         double lprior = 0.0;
         for (int k = 0; k < K; k++) {
@@ -124,7 +179,7 @@ public class RidgeLinearRegressionOptimizable implements Optimizable.ByGradientV
             double dotprod = dotprod(n);
             for (int k : this.designMatrix[n].getIndices()) {
                 double grad = (values[n] - dotprod) * designMatrix[n].get(k)
-                        / (rhoSquare * N);
+                        / (rhoSquares[n] * N);
                 llhGrad[k] += grad;
             }
         }

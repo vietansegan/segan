@@ -1,5 +1,8 @@
 package core;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.OptionBuilder;
@@ -46,5 +49,11 @@ public class AbstractRunner {
 
     public static String getHelpString(String className) {
         return "java -cp 'dist/segan.jar' " + className + " -help";
+    }
+
+    public static String getCompletedTime() {
+        DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
+        Date dateobj = new Date();
+        return df.format(dateobj);
     }
 }

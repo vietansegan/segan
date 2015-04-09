@@ -21,6 +21,14 @@ public class SparseCount implements Cloneable, Serializable {
         this.countSum = 0;
     }
 
+    public SparseCount(SparseCount other) {
+        this.counts = new HashMap<>();
+        for (int key : other.getIndices()) {
+            this.counts.put(key, other.getCount(key));
+        }
+        this.countSum = other.getCountSum();
+    }
+
     @Override
     public SparseCount clone() throws CloneNotSupportedException {
         SparseCount sc = (SparseCount) super.clone();
@@ -166,9 +174,9 @@ public class SparseCount implements Cloneable, Serializable {
             throw new RuntimeException(msg + ". Total counts mismatched. " + totalCount + " vs. " + countSum);
         }
     }
-    
+
     public void add(SparseCount other) {
-        for(int key : other.getIndices()) {
+        for (int key : other.getIndices()) {
             this.changeCount(key, other.getCount(key));
         }
     }

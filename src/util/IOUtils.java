@@ -15,6 +15,37 @@ import java.util.zip.ZipOutputStream;
  */
 public class IOUtils {
 
+    public static double[] inputArray(File inputFile) {
+        double[] a = null;
+        try {
+            BufferedReader reader = getBufferedReader(inputFile);
+            int nrow = Integer.parseInt(reader.readLine());
+            a = new double[nrow];
+            for (int ii = 0; ii < nrow; ii++) {
+                a[ii] = Double.parseDouble(reader.readLine());
+            }
+            reader.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while inputing from " + inputFile);
+        }
+        return a;
+    }
+
+    public static void outputArray(File outputFile, double[] a) {
+        try {
+            BufferedWriter writer = getBufferedWriter(outputFile);
+            writer.write(a.length + "\n");
+            for (int ii = 0; ii < a.length; ii++) {
+                writer.write(a[ii] + "\n");
+            }
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Exception while outputing to " + outputFile);
+        }
+    }
+
     public static double[][] input2DArray(File inputFile) {
         double[][] m = null;
         try {
@@ -94,8 +125,8 @@ public class IOUtils {
             writer.write("Min-Perplexity\t" + StatUtils.min(perplexities) + "\n");
             writer.write("Max-Perplexity\t" + StatUtils.max(perplexities) + "\n");
             writer.write("Median-Perplexity\t" + StatUtils.median(perplexities) + "\n");
-            for (int ii = 0; ii < perplexities.size(); ii++) {
-                writer.write(perplexities.get(ii) + "\n");
+            for (Double perplexitie : perplexities) {
+                writer.write(perplexitie + "\n");
             }
             writer.close();
         } catch (Exception e) {
@@ -112,8 +143,8 @@ public class IOUtils {
             writer.write("Min-Coherence\t" + StatUtils.min(topicCoherences) + "\n");
             writer.write("Max-Coherence\t" + StatUtils.max(topicCoherences) + "\n");
             writer.write("Median-Coherence\t" + StatUtils.median(topicCoherences) + "\n");
-            for (int ii = 0; ii < topicCoherences.size(); ii++) {
-                writer.write(topicCoherences.get(ii) + "\n");
+            for (Double topicCoherence : topicCoherences) {
+                writer.write(topicCoherence + "\n");
             }
             writer.close();
         } catch (Exception e) {
@@ -796,23 +827,16 @@ public class IOUtils {
             writer = getBufferedWriter(outputFolderpath + measurement + ".txt");
             HashMap<String, ArrayList<Double>> measurementTable = metaSummary.get(measurement);
 
-//            for(String modelName : modelNames){
-//                writer.write(modelName);
-//                ArrayList<Double> values = measurementTable.get(modelName);
-//                for(Double value : values)
-//                    writer.write("\t" + value);
-//                writer.write("\n");
-//            }
             // write header
-            for (int i = 0; i < modelNames.size(); i++) {
-                writer.write(modelNames.get(i) + "\t");
+            for (String modelName : modelNames) {
+                writer.write(modelName + "\t");
             }
             writer.write("\n");
 
             // write contents
             for (int j = 0; j < measurementTable.get(modelNames.get(0)).size(); j++) {
-                for (int i = 0; i < modelNames.size(); i++) {
-                    writer.write(measurementTable.get(modelNames.get(i)).get(j) + "\t");
+                for (String modelName : modelNames) {
+                    writer.write(measurementTable.get(modelName).get(j) + "\t");
                 }
                 writer.write("\n");
             }

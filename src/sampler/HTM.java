@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -121,7 +120,7 @@ public class HTM extends AbstractSampler {
     protected int numTokensAccepted;
 
     public HTM() {
-        this.basename = "HTP";
+        this.basename = "HTM";
     }
 
     public HTM(String bname) {
@@ -741,8 +740,7 @@ public class HTM extends AbstractSampler {
      * iterations using the given trained model
      * @return Prediction on all documents using the given model
      */
-    public double[] sampleTest(File stateFile, File testStateFile,
-            File predictionFile) {
+    public double[] sampleTest(File stateFile, File testStateFile, File predictionFile) {
         setTestConfigurations(BURN_IN / 2, MAX_ITER / 2, LAG / 2);
         if (stateFile == null) {
             stateFile = getFinalStateFile();
@@ -755,8 +753,6 @@ public class HTM extends AbstractSampler {
 
         // sample topic assignments for test document
         for (iter = 0; iter < this.testMaxIter; iter++) {
-            numTokensChanged = 0;
-            numTokensAccepted = 0;
             isReporting = verbose && iter % testRepInterval == 0;
             if (isReporting) {
                 String str = "Iter " + iter + "/" + testMaxIter
@@ -822,7 +818,6 @@ public class HTM extends AbstractSampler {
         initializeModelStructure(priors);
         initializeDataStructure();
         initializeAssignments();
-        updateTopics();
         if (isSupervised()) {
             if (isLexical) {
                 updateEtasTaus();
@@ -994,7 +989,7 @@ public class HTM extends AbstractSampler {
             for (int dd = 0; dd < D; dd++) {
                 for (int nn = 0; nn < words[dd].length; nn++) {
                     int kk = lda.getZs()[dd][nn];
-                    Node node = sampleNode(dd, nn, root.getChild(kk), EXTEND);
+                    Node node = sampleNode(dd, nn, root.getChild(kk), EXTEND, false);
                     z[dd][nn] = node;
                     addToken(dd, nn, z[dd][nn], ADD, ADD);
                 }
@@ -1063,7 +1058,7 @@ public class HTM extends AbstractSampler {
         } else {
             sampleZs_Gibbs(REMOVE, ADD, REMOVE, ADD, EXTEND);
         }
-        updateTopics();
+//        updateTopics();
         if (this.isExtendable) {
             updateGlobalProbabilities();
         }
@@ -1089,16 +1084,20 @@ public class HTM extends AbstractSampler {
             boolean addToData, boolean addToModel) {
         if (addToModel) {
             node.getContent().increment(words[dd][nn]);
+            Node tempNode = node;
+            while (tempNode != null) {
+                tempNode.incrementSubtreeWordCount(words[dd][nn]);
+                tempNode = tempNode.getParent();
+            }
         }
         if (addToData) {
             if (isSupervised()) {
-//                dotprods[dd] += node.eta / words[dd].length;
                 dotprods[dd] += node.pathEta / words[dd].length;
             }
-            node.tokenCounts.increment(dd);
+            node.nodeDocCounts.increment(dd);
             Node tempNode = node;
             while (tempNode != null) {
-                tempNode.subtreeTokenCounts.increment(dd);
+                tempNode.subtreeDocCounts.increment(dd);
                 tempNode = tempNode.getParent();
             }
         }
@@ -1117,27 +1116,31 @@ public class HTM extends AbstractSampler {
             boolean removeFromData, boolean removeFromModel) {
         if (removeFromData) {
             if (isSupervised()) {
-//                dotprods[dd] -= node.eta / words[dd].length;
                 dotprods[dd] -= node.pathEta / words[dd].length;
             }
-            node.tokenCounts.decrement(dd);
+            node.nodeDocCounts.decrement(dd);
             Node tempNode = node;
             while (tempNode != null) {
-                tempNode.subtreeTokenCounts.decrement(dd);
+                tempNode.subtreeDocCounts.decrement(dd);
                 tempNode = tempNode.getParent();
             }
         }
 
         if (removeFromModel) {
             node.getContent().decrement(words[dd][nn]);
+            Node tempNode = node;
+            while (tempNode != null) {
+                tempNode.decrementSubtreeWordCount(words[dd][nn]);
+                tempNode = tempNode.getParent();
+            }
 
-            if (node.subtreeTokenCounts.isEmpty()) {
-                if (!node.tokenCounts.isEmpty()) {
+            if (node.subtreeDocCounts.isEmpty()) {
+                if (!node.nodeDocCounts.isEmpty()) {
                     throw new RuntimeException("SubtreeTokenCounts is empty"
                             + " but TokenCounts is not.\n" + node.toString());
                 }
-                Node tempNode = node;
-                while (tempNode.subtreeTokenCounts.isEmpty()) {
+                tempNode = node;
+                while (tempNode.subtreeDocCounts.isEmpty()) {
                     Node parent = tempNode.getParent();
                     parent.removeChildUpdate(tempNode.getIndex());
                     tempNode = parent;
@@ -1171,7 +1174,7 @@ public class HTM extends AbstractSampler {
                 removeToken(dd, nn, z[dd][nn], removeFromData, removeFromModel);
 
                 // sample
-                Node sampledNode = sampleNode(dd, nn, root, extend);
+                Node sampledNode = sampleNode(dd, nn, root, extend, false);
                 if (z[dd][nn] == null
                         || (z[dd][nn] != null && !z[dd][nn].equals(sampledNode))) {
                     numTokensChanged++;
@@ -1221,7 +1224,7 @@ public class HTM extends AbstractSampler {
                 removeToken(dd, nn, z[dd][nn], removeFromData, removeFromModel);
 
                 // sample
-                Node sampledNode = sampleNode(dd, nn, root, extend);
+                Node sampledNode = sampleNode(dd, nn, root, extend, observe);
 
                 boolean accept = false;
                 if (z[dd][nn] == null) { // first iteration, accept anything
@@ -1232,15 +1235,17 @@ public class HTM extends AbstractSampler {
                     accept = true;
                     numTokensAccepted++;
                 } else { // Metropolis-Hastings
-                    double[] curLogprobs = getLogProbabilities(dd, nn, z[dd][nn], observe);
-                    double[] newLogprobs = getLogProbabilities(dd, nn, sampledNode, observe);
-                    double ratio = Math.min(1.0,
-                            Math.exp(newLogprobs[ACTUAL_INDEX] - curLogprobs[ACTUAL_INDEX]
-                                    + curLogprobs[PROPOSAL_INDEX] - newLogprobs[PROPOSAL_INDEX]));
-                    if (rand.nextDouble() < ratio) {
-                        accept = true;
-                        numTokensAccepted++;
-                    }
+//                    double[] curLogprobs = getLogProbabilities(dd, nn, z[dd][nn], observe);
+//                    double[] newLogprobs = getLogProbabilities(dd, nn, sampledNode, observe);
+//                    double ratio = Math.min(1.0,
+//                            Math.exp(newLogprobs[ACTUAL_INDEX] - curLogprobs[ACTUAL_INDEX]
+//                                    + curLogprobs[PROPOSAL_INDEX] - newLogprobs[PROPOSAL_INDEX]));
+//                    if (rand.nextDouble() < ratio) {
+//                        accept = true;
+//                        numTokensAccepted++;
+//                    }
+                    accept = true;
+                    numTokensAccepted++;
                 }
 
                 if (accept) { // if accept
@@ -1287,62 +1292,151 @@ public class HTM extends AbstractSampler {
     /**
      * Updating topics.
      */
-    protected long updateTopics() {
-        if (isReporting) {
-            logln("+++ Updating topics ...");
+//    protected long updateTopics() {
+//        if (isReporting) {
+//            logln("+++ Updating topics ...");
+//        }
+//        long sTime = System.currentTimeMillis();
+//
+//        // get all leaves of the tree
+//        ArrayList<Node> leaves = new ArrayList<Node>();
+//        Stack<Node> stack = new Stack<Node>();
+//        stack.add(root);
+//        while (!stack.isEmpty()) {
+//            Node node = stack.pop();
+//            if (node.getChildren().isEmpty()) {
+//                leaves.add(node);
+//            }
+//            for (Node child : node.getChildren()) {
+//                stack.add(child);
+//            }
+//        }
+//
+//        // bottom-up smoothing to compute pseudo-counts from children
+//        Queue<Node> queue = new LinkedList<Node>();
+//        for (Node leaf : leaves) {
+//            queue.add(leaf);
+//        }
+//        while (!queue.isEmpty()) {
+//            Node node = queue.poll();
+//            Node parent = node.getParent();
+//            if (!node.isRoot() && !queue.contains(parent)) {
+//                queue.add(parent);
+//            }
+//            if (node.isLeaf()) {
+//                continue;
+//            }
+//
+//            if (!node.isRoot()) {
+//                node.computePropagatedCountsFromChildren();
+//            }
+//        }
+//
+//        // top-down sampling to get topics
+//        queue = new LinkedList<Node>();
+//        queue.add(root);
+//        while (!queue.isEmpty()) {
+//            Node node = queue.poll();
+//            for (Node child : node.getChildren()) {
+//                queue.add(child);
+//            }
+//            node.updateTopic();
+//        }
+//
+//        long eTime = System.currentTimeMillis() - sTime;
+//        if (isReporting) {
+//            logln("--- --- time: " + eTime);
+//        }
+//        return eTime;
+//    }
+    /**
+     * Recursively sample a node from a current node. The sampled node can be
+     * either the same node or one of its children. If the current node is a
+     * leaf node, return it.
+     *
+     * @param dd Document index
+     * @param nn Token index
+     * @param curNode Current node
+     * @param extend Whether the tree structure is extendable
+     */
+    private Node sampleNode(int dd, int nn, Node curNode, boolean extend,
+            boolean observed) {
+        if (curNode.isLeaf() && !curNode.extensible) {
+            return curNode;
         }
-        long sTime = System.currentTimeMillis();
 
-        // get all leaves of the tree
-        ArrayList<Node> leaves = new ArrayList<Node>();
-        Stack<Node> stack = new Stack<Node>();
-        stack.add(root);
-        while (!stack.isEmpty()) {
-            Node node = stack.pop();
-            if (node.getChildren().isEmpty()) {
-                leaves.add(node);
+        ArrayList<Node> nodeList = new ArrayList<>();
+        ArrayList<Double> logprobList = new ArrayList<>();
+
+        int level = curNode.getLevel();
+        double gamma = getGamma(level);
+        double stayprob;
+        if (curNode.isRoot() && !isRooted) {
+            stayprob = 0.0;
+        } else {
+            stayprob = (curNode.nodeDocCounts.getCount(dd) + gamma * curNode.pi)
+                    / (curNode.subtreeDocCounts.getCount(dd) + gamma);
+
+            double wordprob = curNode.getNodeWordProbability(words[dd][nn]);
+            double lp = Math.log(stayprob * wordprob);
+            if (observed) {
+                lp += getResponseLogLikelihood(dd, nn, curNode);
             }
-            for (Node child : node.getChildren()) {
-                stack.add(child);
+            logprobList.add(lp);
+            nodeList.add(curNode);
+        }
+        double passprob = 1.0 - stayprob;
+
+        // for moving to an existing child node
+        double lAlpha = getLocalAlpha(level);
+        double norm = curNode.getPassingCount(dd) + lAlpha;
+        for (Node child : curNode.getChildren()) {
+            double pathprob = (child.subtreeDocCounts.getCount(dd)
+                    + lAlpha * curNode.theta.get(child.getIndex())) / norm;
+            double lp = Math.log(passprob * pathprob * child.getSubtreeWordProbability(words[dd][nn]));
+            if (observed) {
+                lp += getResponseLogLikelihood(dd, nn, child);
             }
+            nodeList.add(child);
+            logprobList.add(lp);
         }
 
-        // bottom-up smoothing to compute pseudo-counts from children
-        Queue<Node> queue = new LinkedList<Node>();
-        for (Node leaf : leaves) {
-            queue.add(leaf);
+        // for moving to a new child node
+        double eta = 0.0;
+        if (isSupervised()) {
+            eta = SamplerUtils.getGaussian(mu, getSigma(curNode.getLevel() + 1));
         }
-        while (!queue.isEmpty()) {
-            Node node = queue.poll();
-            Node parent = node.getParent();
-            if (!node.isRoot() && !queue.contains(parent)) {
-                queue.add(parent);
+        if (extend && curNode.extensible) {
+            double pathprob = lAlpha * curNode.theta.get(NEW_CHILD_INDEX) / norm;
+            double lp = Math.log(passprob * pathprob * uniform);
+            if (observed) {
+                lp += getResponseLogLikelihood(dd, nn, curNode.pathEta + eta);
             }
-            if (node.isLeaf()) {
-                continue;
-            }
-
-            if (!node.isRoot()) {
-                node.computePropagatedCountsFromChildren();
-            }
+            nodeList.add(null);
+            logprobList.add(lp);
         }
 
-        // top-down sampling to get topics
-        queue = new LinkedList<Node>();
-        queue.add(root);
-        while (!queue.isEmpty()) {
-            Node node = queue.poll();
-            for (Node child : node.getChildren()) {
-                queue.add(child);
-            }
-            node.updateTopic();
-        }
+        // sample
+        int sampledIdx = SamplerUtils.logMaxRescaleSample(logprobList);
 
-        long eTime = System.currentTimeMillis() - sTime;
-        if (isReporting) {
-            logln("--- --- time: " + eTime);
+        Node sampledNode = nodeList.get(sampledIdx);
+        if (sampledNode == null) { // new child
+            int nodeIdx = curNode.getNextChildIndex();
+            int nodeLevel = curNode.getLevel() + 1;
+            boolean extendable = isExtendable(nodeLevel);
+            DirMult topic = new DirMult(V, getBeta(nodeLevel) * V, uniform);
+            Node newNode = new Node(iter, nodeIdx, nodeLevel, extendable, topic, curNode, eta);
+            newNode.pathEta = curNode.pathEta + eta;
+            if (extendable) {
+                newNode.initializeGlobalTheta();
+                newNode.initializeGlobalPi();
+            }
+            return newNode;
+        } else if (sampledNode.equals(curNode)) { // stay at current node
+            return sampledNode;
+        } else { // recursively move to an existing child
+            return sampleNode(dd, nn, sampledNode, extend, observed);
         }
-        return eTime;
     }
 
     /**
@@ -1355,81 +1449,80 @@ public class HTM extends AbstractSampler {
      * @param curNode Current node
      * @param extend Whether the tree structure is extendable
      */
-    private Node sampleNode(int dd, int nn, Node curNode, boolean extend) {
-        if (curNode.isLeaf() && !curNode.extensible) {
-            return curNode;
-        }
-
-        int level = curNode.getLevel();
-        double gamma = getGamma(level);
-        double stayprob;
-        if (curNode.isRoot() && !isRooted) {
-            stayprob = 0.0;
-        } else {
-            stayprob = (curNode.tokenCounts.getCount(dd) + gamma * curNode.pi)
-                    / (curNode.subtreeTokenCounts.getCount(dd) + gamma);
-        }
-        double passprob = 1.0 - stayprob;
-
-        ArrayList<Node> nodeList = new ArrayList<>();
-        ArrayList<Double> nodeProbs = new ArrayList<>();
-
-        // for staying at current node
-        nodeList.add(curNode);
-        nodeProbs.add(stayprob * curNode.getPhi(words[dd][nn]));
-
-        // for moving to an existing child node
-        double lAlpha = getLocalAlpha(level);
-        double norm = curNode.getPassingCount(dd) + lAlpha;
-        for (Node child : curNode.getChildren()) {
-            int childIdx = child.getIndex();
-            nodeList.add(child);
-            double pathprob = (child.subtreeTokenCounts.getCount(dd)
-                    + lAlpha * curNode.theta.get(childIdx)) / norm;
-            nodeProbs.add(passprob * pathprob * child.getPhi(words[dd][nn]));
-        }
-
-        // for moving to a new child node
-        if (extend && curNode.extensible) {
-            nodeList.add(null);
-            double pathprob = lAlpha * curNode.theta.get(NEW_CHILD_INDEX) / norm;
-            nodeProbs.add(passprob * pathprob * uniform);
-        }
-
-        // sample
-        int sampledIdx = SamplerUtils.scaleSample(nodeProbs);
-        if (sampledIdx == nodeProbs.size()) { // debug
-            for (int ii = 0; ii < nodeProbs.size(); ii++) {
-                logln(ii
-                        + ". " + nodeList.get(ii)
-                        + ". " + nodeProbs.get(ii));
-            }
-        }
-
-        Node sampledNode = nodeList.get(sampledIdx);
-        if (sampledNode == null) { // new child
-            int nodeIdx = curNode.getNextChildIndex();
-            int nodeLevel = curNode.getLevel() + 1;
-            boolean extendable = isExtendable(nodeLevel);
-            DirMult topic = new DirMult(V, getBeta(nodeLevel) * V, uniform);
-
-            double eta = 0.0;
-            if (isSupervised()) {
-                eta = SamplerUtils.getGaussian(mu, getSigma(nodeLevel));
-            }
-            Node newNode = new Node(iter, nodeIdx, nodeLevel, extendable, topic, curNode, eta);
-            if (extendable) {
-                newNode.initializeGlobalTheta();
-                newNode.initializeGlobalPi();
-            }
-            return newNode;
-        } else if (sampledNode.equals(curNode)) { // stay at current node
-            return sampledNode;
-        } else { // recursively move to an existing child
-            return sampleNode(dd, nn, sampledNode, extend);
-        }
-    }
-
+//    private Node sampleNodeOld(int dd, int nn, Node curNode, boolean extend) {
+//        if (curNode.isLeaf() && !curNode.extensible) {
+//            return curNode;
+//        }
+//
+//        int level = curNode.getLevel();
+//        double gamma = getGamma(level);
+//        double stayprob;
+//        if (curNode.isRoot() && !isRooted) {
+//            stayprob = 0.0;
+//        } else {
+//            stayprob = (curNode.nodeDocCounts.getCount(dd) + gamma * curNode.pi)
+//                    / (curNode.subtreeDocCounts.getCount(dd) + gamma);
+//        }
+//        double passprob = 1.0 - stayprob;
+//
+//        ArrayList<Node> nodeList = new ArrayList<>();
+//        ArrayList<Double> nodeProbs = new ArrayList<>();
+//
+//        // for staying at current node
+//        nodeList.add(curNode);
+//        nodeProbs.add(stayprob * curNode.getPhi(words[dd][nn]));
+//
+//        // for moving to an existing child node
+//        double lAlpha = getLocalAlpha(level);
+//        double norm = curNode.getPassingCount(dd) + lAlpha;
+//        for (Node child : curNode.getChildren()) {
+//            int childIdx = child.getIndex();
+//            nodeList.add(child);
+//            double pathprob = (child.subtreeDocCounts.getCount(dd)
+//                    + lAlpha * curNode.theta.get(childIdx)) / norm;
+//            nodeProbs.add(passprob * pathprob * child.getPhi(words[dd][nn]));
+//        }
+//
+//        // for moving to a new child node
+//        if (extend && curNode.extensible) {
+//            nodeList.add(null);
+//            double pathprob = lAlpha * curNode.theta.get(NEW_CHILD_INDEX) / norm;
+//            nodeProbs.add(passprob * pathprob * uniform);
+//        }
+//
+//        // sample
+//        int sampledIdx = SamplerUtils.scaleSample(nodeProbs);
+//        if (sampledIdx == nodeProbs.size()) { // debug
+//            for (int ii = 0; ii < nodeProbs.size(); ii++) {
+//                logln(ii
+//                        + ". " + nodeList.get(ii)
+//                        + ". " + nodeProbs.get(ii));
+//            }
+//        }
+//
+//        Node sampledNode = nodeList.get(sampledIdx);
+//        if (sampledNode == null) { // new child
+//            int nodeIdx = curNode.getNextChildIndex();
+//            int nodeLevel = curNode.getLevel() + 1;
+//            boolean extendable = isExtendable(nodeLevel);
+//            DirMult topic = new DirMult(V, getBeta(nodeLevel) * V, uniform);
+//
+//            double eta = 0.0;
+//            if (isSupervised()) {
+//                eta = SamplerUtils.getGaussian(mu, getSigma(nodeLevel));
+//            }
+//            Node newNode = new Node(iter, nodeIdx, nodeLevel, extendable, topic, curNode, eta);
+//            if (extendable) {
+//                newNode.initializeGlobalTheta();
+//                newNode.initializeGlobalPi();
+//            }
+//            return newNode;
+//        } else if (sampledNode.equals(curNode)) { // stay at current node
+//            return sampledNode;
+//        } else { // recursively move to an existing child
+//            return sampleNode(dd, nn, sampledNode, extend);
+//        }
+//    }
     /**
      * Compute both the proposal log probabilities and the actual log
      * probabilities of assigning a token to a node.
@@ -1439,25 +1532,24 @@ public class HTM extends AbstractSampler {
      * @param observed
      * @param node The node to be assigned to
      */
-    private double[] getLogProbabilities(int dd, int nn, Node node, boolean observed) {
-        double[] logprobs = getTransLogProbabilities(dd, nn, node, node);
-        logprobs[ACTUAL_INDEX] = Math.log(node.getPhi(words[dd][nn]));
-        if (isSupervised() && observed) {
-            logprobs[ACTUAL_INDEX] += getResponseLogLikelihood(dd, nn, node);
-        }
-        Node source = node.getParent();
-        Node target = node;
-        while (source != null) {
-            double[] lps = getTransLogProbabilities(dd, nn, source, target);
-            logprobs[PROPOSAL_INDEX] += lps[PROPOSAL_INDEX];
-            logprobs[ACTUAL_INDEX] += lps[ACTUAL_INDEX];
-
-            source = source.getParent();
-            target = target.getParent();
-        }
-        return logprobs;
-    }
-
+//    private double[] getLogProbabilities(int dd, int nn, Node node, boolean observed) {
+//        double[] logprobs = getTransLogProbabilities(dd, nn, node, node);
+//        logprobs[ACTUAL_INDEX] = Math.log(node.getPhi(words[dd][nn]));
+//        if (isSupervised() && observed) {
+//            logprobs[ACTUAL_INDEX] += getResponseLogLikelihood(dd, nn, node);
+//        }
+//        Node source = node.getParent();
+//        Node target = node;
+//        while (source != null) {
+//            double[] lps = getTransLogProbabilities(dd, nn, source, target);
+//            logprobs[PROPOSAL_INDEX] += lps[PROPOSAL_INDEX];
+//            logprobs[ACTUAL_INDEX] += lps[ACTUAL_INDEX];
+//
+//            source = source.getParent();
+//            target = target.getParent();
+//        }
+//        return logprobs;
+//    }
     /**
      * Get the transition log probability of moving a token from a source node
      * to a target node. The source node can be the same as the target node.
@@ -1467,111 +1559,124 @@ public class HTM extends AbstractSampler {
      * @param source
      * @param target
      */
-    private double[] getTransLogProbabilities(int dd, int nn, Node source, Node target) {
-        int level = source.getLevel();
-        if (level == L - 1) { // leaf node
-            if (!source.equals(target)) {
-                throw new RuntimeException("At leaf node. " + source.toString()
-                        + ". " + target.toString());
-            }
-            return new double[2]; // stay with probabilities 1
-        }
-
-        double pNum = 0.0;
-        double pDen = 0.0;
-        double aNum = 0.0;
-        double aDen = 0.0;
-
-        double lAlpha = getLocalAlpha(level);
-        double gamma = getGamma(level);
-        double stayprob = (source.tokenCounts.getCount(dd) + gamma * source.pi)
-                / (source.subtreeTokenCounts.getCount(dd) + gamma);
-        double passprob = 1.0 - stayprob;
-        double norm = source.subtreeTokenCounts.getCount(dd)
-                - source.tokenCounts.getCount(dd) + lAlpha;
-
-        // existing children
-        boolean foundTarget = false;
-        for (Node child : source.getChildren()) {
-            double pathprob;
-            double wordprob;
-            if (child.newNode) { // newly created child
-                wordprob = 1.0 / V;
-                pathprob = lAlpha * source.theta.get(NEW_CHILD_INDEX) / norm;
-            } else {
-                try {
-                    pathprob = (child.subtreeTokenCounts.getCount(dd)
-                            + lAlpha * source.theta.get(child.getIndex())) / norm;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    System.out.println("source: " + source.toString());
-                    System.out.println("target: " + target.toString());
-                    System.out.println("child: " + child.toString());
-                    System.out.println("subtree: " + child.subtreeTokenCounts.getCount(dd));
-                    System.out.println("theta: " + source.theta.get(child.getIndex()));
-                    throw new RuntimeException("Exception");
-                }
-
-                wordprob = child.getPhi(words[dd][nn]);
-            }
-
-            double aVal = passprob * pathprob;
-            aDen += aVal;
-
-            double pVal = passprob * pathprob * wordprob;
-            pDen += pVal;
-
-            if (target.equals(child)) { // including a new child
-                pNum = pVal;
-                aNum = aVal;
-                foundTarget = true;
-            }
-        }
-
-        // staying at the current node
-        double wordprob = source.getPhi(words[dd][nn]);
-        double pVal = stayprob * wordprob;
-        pDen += pVal;
-        aDen += stayprob;
-
-        if (target.equals(source)) {
-            pNum = pVal;
-            aNum = stayprob;
-            foundTarget = true;
-        }
-
-        if (!foundTarget) {
-            if (!target.isEmpty()) {
-                throw new RuntimeException("Target node is not empty and could not be found");
-            }
-
-            double wProb = 1.0 / V;
-            double pProb = lAlpha * source.theta.get(NEW_CHILD_INDEX) / norm;
-            double aVal = passprob * pProb;
-            aDen += aVal;
-            pVal = passprob * pProb * wProb;
-            pDen += pVal;
-
-            pNum = pVal;
-            aNum = aVal;
-        }
-
-        double[] lps = new double[2];
-        lps[PROPOSAL_INDEX] = Math.log(pNum / pDen);
-        lps[ACTUAL_INDEX] = Math.log(aNum / aDen);
-        return lps;
+//    private double[] getTransLogProbabilities(int dd, int nn, Node source, Node target) {
+//        int level = source.getLevel();
+//        if (level == L - 1) { // leaf node
+//            if (!source.equals(target)) {
+//                throw new RuntimeException("At leaf node. " + source.toString()
+//                        + ". " + target.toString());
+//            }
+//            return new double[2]; // stay with probabilities 1
+//        }
+//
+//        double pNum = 0.0;
+//        double pDen = 0.0;
+//        double aNum = 0.0;
+//        double aDen = 0.0;
+//
+//        double lAlpha = getLocalAlpha(level);
+//        double gamma = getGamma(level);
+//        double stayprob = (source.nodeDocCounts.getCount(dd) + gamma * source.pi)
+//                / (source.subtreeDocCounts.getCount(dd) + gamma);
+//        double passprob = 1.0 - stayprob;
+//        double norm = source.subtreeDocCounts.getCount(dd)
+//                - source.nodeDocCounts.getCount(dd) + lAlpha;
+//
+//        // existing children
+//        boolean foundTarget = false;
+//        for (Node child : source.getChildren()) {
+//            double pathprob;
+//            double wordprob;
+//            if (child.newNode) { // newly created child
+//                wordprob = 1.0 / V;
+//                pathprob = lAlpha * source.theta.get(NEW_CHILD_INDEX) / norm;
+//            } else {
+//                try {
+//                    pathprob = (child.subtreeDocCounts.getCount(dd)
+//                            + lAlpha * source.theta.get(child.getIndex())) / norm;
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                    System.out.println("source: " + source.toString());
+//                    System.out.println("target: " + target.toString());
+//                    System.out.println("child: " + child.toString());
+//                    System.out.println("subtree: " + child.subtreeDocCounts.getCount(dd));
+//                    System.out.println("theta: " + source.theta.get(child.getIndex()));
+//                    throw new RuntimeException("Exception");
+//                }
+//
+//                wordprob = child.getPhi(words[dd][nn]);
+//            }
+//
+//            double aVal = passprob * pathprob;
+//            aDen += aVal;
+//
+//            double pVal = passprob * pathprob * wordprob;
+//            pDen += pVal;
+//
+//            if (target.equals(child)) { // including a new child
+//                pNum = pVal;
+//                aNum = aVal;
+//                foundTarget = true;
+//            }
+//        }
+//
+//        // staying at the current node
+//        double wordprob = source.getPhi(words[dd][nn]);
+//        double pVal = stayprob * wordprob;
+//        pDen += pVal;
+//        aDen += stayprob;
+//
+//        if (target.equals(source)) {
+//            pNum = pVal;
+//            aNum = stayprob;
+//            foundTarget = true;
+//        }
+//
+//        if (!foundTarget) {
+//            if (!target.isEmpty()) {
+//                throw new RuntimeException("Target node is not empty and could not be found");
+//            }
+//
+//            double wProb = 1.0 / V;
+//            double pProb = lAlpha * source.theta.get(NEW_CHILD_INDEX) / norm;
+//            double aVal = passprob * pProb;
+//            aDen += aVal;
+//            pVal = passprob * pProb * wProb;
+//            pDen += pVal;
+//
+//            pNum = pVal;
+//            aNum = aVal;
+//        }
+//
+//        double[] lps = new double[2];
+//        lps[PROPOSAL_INDEX] = Math.log(pNum / pDen);
+//        lps[ACTUAL_INDEX] = Math.log(aNum / aDen);
+//        return lps;
+//    }
+    /**
+     * Compute the log likelihood of an author's response variable given that a
+     * token from the author is assigned to a given node.
+     *
+     * @param dd
+     * @param nn
+     * @param node The node
+     * @return
+     */
+    private double getResponseLogLikelihood(int dd, int nn, Node node) {
+        return getResponseLogLikelihood(dd, nn, node.pathEta);
     }
 
     /**
      * Compute the log likelihood of an author's response variable given that a
      * token from the author is assigned to a given node.
      *
-     * @param dd The author
-     * @param node The node
+     * @param dd
+     * @param nn
+     * @param pathEta
      * @return
      */
-    private double getResponseLogLikelihood(int dd, int nn, Node node) {
-        double aMean = dotprods[dd] + node.pathEta / this.words[dd].length;
+    private double getResponseLogLikelihood(int dd, int nn, double pathEta) {
+        double aMean = dotprods[dd] + pathEta / this.words[dd].length;
         double resLLh;
         if (mode == Mode.SUPERVISED_BINARY) {
             resLLh = getLabelLogLikelihood(labels[dd], aMean);
@@ -1612,8 +1717,8 @@ public class HTM extends AbstractSampler {
         // topic regression
         for (int kk = 0; kk < N; kk++) {
             Node node = nodeList.get(kk);
-            for (int dd : node.subtreeTokenCounts.getIndices()) {
-                int count = node.subtreeTokenCounts.getCount(dd);
+            for (int dd : node.subtreeDocCounts.getIndices()) {
+                int count = node.subtreeDocCounts.getCount(dd);
                 double val = (double) count / this.words[dd].length;
                 designMatrix[dd].change(kk, val);
             }
@@ -1702,8 +1807,8 @@ public class HTM extends AbstractSampler {
 
         for (int kk = 0; kk < N; kk++) {
             Node node = nodeList.get(kk);
-            for (int dd : node.subtreeTokenCounts.getIndices()) {
-                int count = node.subtreeTokenCounts.getCount(dd);
+            for (int dd : node.subtreeDocCounts.getIndices()) {
+                int count = node.subtreeDocCounts.getCount(dd);
                 double val = (double) count / this.words[dd].length;
                 designMatrix[dd].change(kk, val);
             }
@@ -1916,13 +2021,12 @@ public class HTM extends AbstractSampler {
             modelStr.append(node.getPathString()).append("\n");
             modelStr.append(node.eta).append("\n");
             modelStr.append(node.pi).append("\n");
-            modelStr.append(SparseCount.output(node.tokenCounts)).append("\n");
-            modelStr.append(SparseCount.output(node.subtreeTokenCounts)).append("\n");
             if (node.theta != null) {
                 modelStr.append(hashMapToString(node.theta));
             }
             modelStr.append("\n");
             modelStr.append(DirMult.output(node.getContent())).append("\n");
+            modelStr.append(SparseCount.output(node.subtreeWordCounts)).append("\n");
             for (Node child : node.getChildren()) {
                 stack.add(child);
             }
@@ -1996,14 +2100,13 @@ public class HTM extends AbstractSampler {
                 String pathStr = reader.readLine();
                 double eta = Double.parseDouble(reader.readLine());
                 double pi = Double.parseDouble(reader.readLine());
-                SparseCount tokenCounts = SparseCount.input(reader.readLine());
-                SparseCount subtreeTokenCounts = SparseCount.input(reader.readLine());
                 line = reader.readLine().trim();
                 HashMap<Integer, Double> theta = new HashMap<>();
                 if (!line.isEmpty()) {
                     theta = stringToHashMap(line);
                 }
                 DirMult topic = DirMult.input(reader.readLine());
+                SparseCount subtreeWordCounts = SparseCount.input(reader.readLine());
 
                 // create node
                 int lastColonIndex = pathStr.lastIndexOf(":");
@@ -2019,11 +2122,8 @@ public class HTM extends AbstractSampler {
                 node.changeStatus();
                 node.pi = pi;
                 node.theta = theta;
-//                node.tokenCounts = tokenCounts;
-//                node.subtreeTokenCounts = subtreeTokenCounts;
-//                node.tokenCounts = new SparseCount();
-//                node.subtreeTokenCounts = new SparseCount();
-                node.setPhi(topic.getDistribution());
+                node.setContent(topic);
+                node.subtreeWordCounts = subtreeWordCounts;
 
                 if (node.getLevel() == 0) {
                     root = node;
@@ -2158,8 +2258,8 @@ public class HTM extends AbstractSampler {
             Node node = stack.pop();
             int level = node.getLevel();
             nodeCountPerLevel.increment(level);
-            obsCountPerLevel.changeCount(level, node.getContent().getCountSum());
-            subtreeObsCountPerLvl.changeCount(level, node.subtreeTokenCounts.getCountSum());
+            obsCountPerLevel.changeCount(level, node.nodeDocCounts.getCountSum());
+            subtreeObsCountPerLvl.changeCount(level, node.subtreeDocCounts.getCountSum());
 
             totalObs += node.getContent().getCountSum();
 
@@ -2211,7 +2311,7 @@ public class HTM extends AbstractSampler {
                 if (isSupervised()) {
                     rankChildren.add(new RankingItem<Node>(child, child.eta));
                 } else {
-                    rankChildren.add(new RankingItem<Node>(child, child.subtreeTokenCounts.getCountSum()));
+                    rankChildren.add(new RankingItem<Node>(child, child.subtreeDocCounts.getCountSum()));
                 }
             }
             Collections.sort(rankChildren);
@@ -2221,8 +2321,8 @@ public class HTM extends AbstractSampler {
 
             int level = node.getLevel();
             nodeCountPerLvl.increment(level);
-            obsCountPerLvl.changeCount(level, node.getContent().getCountSum());
-            subtreeObsCountPerLvl.changeCount(level, node.subtreeTokenCounts.getCountSum());
+            obsCountPerLvl.changeCount(level, node.nodeDocCounts.getCountSum());
+            subtreeObsCountPerLvl.changeCount(level, node.subtreeDocCounts.getCountSum());
 
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("\t");
@@ -2234,17 +2334,17 @@ public class HTM extends AbstractSampler {
                         .append("]");
             }
             str.append("\n");
-
-            // top words according to distribution
+            
+            // top words according to subtree distribution
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("\t");
             }
-            String[] topWords = node.getTopWords(10);
-            for (String w : topWords) {
+            String[] subtreeTopWords = node.getSubtreeTopWords(10);
+            for (String w : subtreeTopWords) {
                 str.append(w).append(" ");
             }
             str.append("\n");
-
+            
             // top assigned words
             if (!node.getContent().isEmpty()) {
                 for (int i = 0; i < node.getLevel(); i++) {
@@ -2333,7 +2433,7 @@ public class HTM extends AbstractSampler {
                 if (isSupervised()) {
                     rankChildren.add(new RankingItem<Node>(child, child.eta));
                 } else {
-                    rankChildren.add(new RankingItem<Node>(child, child.subtreeTokenCounts.getCountSum()));
+                    rankChildren.add(new RankingItem<Node>(child, child.subtreeDocCounts.getCountSum()));
                 }
             }
             Collections.sort(rankChildren);
@@ -2341,7 +2441,7 @@ public class HTM extends AbstractSampler {
                 stack.add(item.getObject());
             }
 
-            String[] topWords = getTopWords(node.phi, numWords);
+            String[] topWords = node.getNodeTopWords(numWords);
 
             // top words according to the distribution
             for (int i = 0; i < node.getLevel(); i++) {
@@ -2444,28 +2544,46 @@ public class HTM extends AbstractSampler {
 
         protected final int born;
         protected final boolean extensible;
-        protected SparseCount subtreeTokenCounts;
-        protected SparseCount tokenCounts;
+        protected SparseCount subtreeDocCounts;
+        protected SparseCount nodeDocCounts;
         protected double eta; // regression parameter
         protected double pathEta;
         protected double pi;
         protected HashMap<Integer, Double> theta;
         protected boolean newNode; // whether this node is newly created
-        protected double[] phi;
+        protected SparseCount subtreeWordCounts;
 
-        protected SparseCount propagatedCounts;
-
+//        protected double[] phi;
         public Node(int iter, int index, int level, boolean extendable,
                 DirMult content, Node parent, double eta) {
             super(index, level, content, parent);
             this.born = iter;
             this.extensible = extendable;
             this.eta = eta;
-            this.subtreeTokenCounts = new SparseCount();
-            this.tokenCounts = new SparseCount();
+            this.subtreeDocCounts = new SparseCount();
+            this.nodeDocCounts = new SparseCount();
             this.theta = new HashMap<>();
             this.newNode = true;
-            this.propagatedCounts = new SparseCount();
+            this.subtreeWordCounts = new SparseCount();
+        }
+
+        void incrementSubtreeWordCount(int vv) {
+            this.subtreeWordCounts.increment(vv); // MAXIMAL only
+        }
+
+        void decrementSubtreeWordCount(int vv) {
+            this.subtreeWordCounts.decrement(vv); // MAXIMAL only
+        }
+
+        double getNodeWordProbability(int vv) {
+            return this.content.getProbability(vv);
+        }
+
+        double getSubtreeWordProbability(int vv) {
+            return (content.getCount(vv) + subtreeWordCounts.getCount(vv)
+                    + content.getConcentration() * content.getCenterElement(vv))
+                    / (content.getCountSum() + subtreeWordCounts.getCountSum()
+                    + content.getConcentration());
         }
 
         public void removeChildUpdate(int childIndex) {
@@ -2490,11 +2608,15 @@ public class HTM extends AbstractSampler {
          * @param dd Document index
          */
         int getPassingCount(int dd) {
-            return subtreeTokenCounts.getCount(dd) - tokenCounts.getCount(dd);
+            return subtreeDocCounts.getCount(dd) - nodeDocCounts.getCount(dd);
         }
 
+        /**
+         * Return the number of tokens from all documents which are assigned to
+         * any descendant node of this node.
+         */
         int getPassingCountSum() {
-            return subtreeTokenCounts.getCountSum() - tokenCounts.getCountSum();
+            return subtreeDocCounts.getCountSum() - nodeDocCounts.getCountSum();
         }
 
         void changeStatus() {
@@ -2505,66 +2627,65 @@ public class HTM extends AbstractSampler {
             return this.extensible;
         }
 
-        void computePropagatedCountsFromChildren() {
-            this.propagatedCounts = new SparseCount();
-            for (Node child : this.getChildren()) {
-                SparseCount childCount = child.getContent().getSparseCounts();
-                for (int vv : childCount.getIndices()) {
-                    if (path == PathAssumption.MINIMAL) {
-                        this.propagatedCounts.increment(vv);
-                    } else if (path == PathAssumption.MAXIMAL) {
-                        this.propagatedCounts.changeCount(vv, childCount.getCount(vv));
-                    } else if (path == PathAssumption.NONE) {
-                        // do nothing, no propagation
-                    } else {
-                        throw new RuntimeException("Path assumption " + path
-                                + " is not supported.");
-                    }
-                }
-            }
-        }
-
-        void updateTopic() {
-            phi = new double[V];
-            if (this.isRoot()) {
-                for (int vv = 0; vv < V; vv++) {
-                    phi[vv] = getContent().getProbability(vv);
-                }
-            } else { // might try to sample instead
-                double beta = getBeta(getLevel());
-
-                double[] meanPrior = new double[V];
-                Arrays.fill(meanPrior, uniform);
-                if (this.getLevel() == 1 && priors != null) {
-                    meanPrior = priors[this.getIndex()];
-                }
-
-                double norm = this.getContent().getCountSum()
-                        + this.propagatedCounts.getCountSum()
-                        + beta * V;
-                for (int vv = 0; vv < V; vv++) {
-                    phi[vv] = (getContent().getCount(vv)
-                            + propagatedCounts.getCount(vv)
-                            + beta * V * meanPrior[vv]) / norm;
-                }
-            }
-        }
-
-        double[] getPhi() {
-            return phi;
-        }
-
-        public void setPhi(double[] p) {
-            this.phi = p;
-        }
-
-        double getPhi(int v) {
-            if (this.phi == null) {
-                return getContent().getProbability(v);
-            }
-            return phi[v];
-        }
-
+//        void computePropagatedCountsFromChildren() {
+//            this.subtreeWordCounts = new SparseCount();
+//            for (Node child : this.getChildren()) {
+//                SparseCount childCount = child.getContent().getSparseCounts();
+//                for (int vv : childCount.getIndices()) {
+//                    if (path == PathAssumption.MINIMAL) {
+//                        this.subtreeWordCounts.increment(vv);
+//                    } else if (path == PathAssumption.MAXIMAL) {
+//                        this.subtreeWordCounts.changeCount(vv, childCount.getCount(vv));
+//                    } else if (path == PathAssumption.NONE) {
+//                        // do nothing, no propagation
+//                    } else {
+//                        throw new RuntimeException("Path assumption " + path
+//                                + " is not supported.");
+//                    }
+//                }
+//            }
+//        }
+//
+//        void updateTopic() {
+//            phi = new double[V];
+//            if (this.isRoot()) {
+//                for (int vv = 0; vv < V; vv++) {
+//                    phi[vv] = getContent().getProbability(vv);
+//                }
+//            } else { // might try to sample instead
+//                double beta = getBeta(getLevel());
+//
+//                double[] meanPrior = new double[V];
+//                Arrays.fill(meanPrior, uniform);
+//                if (this.getLevel() == 1 && priors != null) {
+//                    meanPrior = priors[this.getIndex()];
+//                }
+//
+//                double norm = this.getContent().getCountSum()
+//                        + this.subtreeWordCounts.getCountSum()
+//                        + beta * V;
+//                for (int vv = 0; vv < V; vv++) {
+//                    phi[vv] = (getContent().getCount(vv)
+//                            + subtreeWordCounts.getCount(vv)
+//                            + beta * V * meanPrior[vv]) / norm;
+//                }
+//            }
+//        }
+//
+//        double[] getPhi() {
+//            return phi;
+//        }
+//
+//        public void setPhi(double[] p) {
+//            this.phi = p;
+//        }
+//
+//        double getPhi(int v) {
+//            if (this.phi == null) {
+//                return getContent().getProbability(v);
+//            }
+//            return phi[v];
+//        }
         boolean isEmpty() {
             return this.getContent().isEmpty();
         }
@@ -2588,7 +2709,25 @@ public class HTM extends AbstractSampler {
             return str.toString();
         }
 
-        String[] getTopWords(int numTopWords) {
+        String[] getSubtreeTopWords(int numTopWords) {
+            double[] subtreePhi = new double[V];
+            for (int vv = 0; vv < V; vv++) {
+                subtreePhi[vv] = getSubtreeWordProbability(vv);
+            }
+            ArrayList<RankingItem<String>> topicSortedVocab
+                    = IOUtils.getSortedVocab(subtreePhi, wordVocab);
+            String[] topWords = new String[numTopWords];
+            for (int i = 0; i < numTopWords; i++) {
+                topWords[i] = topicSortedVocab.get(i).getObject();
+            }
+            return topWords;
+        }
+
+        String[] getNodeTopWords(int numTopWords) {
+            double[] phi = new double[V];
+            for (int vv = 0; vv < V; vv++) {
+                phi[vv] = getNodeWordProbability(vv);
+            }
             ArrayList<RankingItem<String>> topicSortedVocab
                     = IOUtils.getSortedVocab(phi, wordVocab);
             String[] topWords = new String[numTopWords];
@@ -2640,8 +2779,8 @@ public class HTM extends AbstractSampler {
             SparseCount approxThetaCounts = new SparseCount();
             for (Node child : getChildren()) {
                 int childIdx = child.getIndex();
-                for (int dd : child.subtreeTokenCounts.getIndices()) {
-                    int rawCount = child.subtreeTokenCounts.getCount(dd);
+                for (int dd : child.subtreeDocCounts.getIndices()) {
+                    int rawCount = child.subtreeDocCounts.getCount(dd);
                     Double thetaVal = this.theta.get(childIdx);
                     if (thetaVal == null) { // this child has just been added
                         thetaVal = theta.get(NEW_CHILD_INDEX);
@@ -2682,15 +2821,15 @@ public class HTM extends AbstractSampler {
 
         public void validate(String msg) {
             this.content.validate(msg);
-            this.subtreeTokenCounts.validate(msg);
-            this.tokenCounts.validate(msg);
+            this.subtreeDocCounts.validate(msg);
+            this.nodeDocCounts.validate(msg);
             int childCountSum = 0;
             for (Node child : getChildren()) {
-                childCountSum += child.subtreeTokenCounts.getCountSum();
+                childCountSum += child.subtreeDocCounts.getCountSum();
             }
-            if (childCountSum + tokenCounts.getCountSum() != subtreeTokenCounts.getCountSum()) {
-                throw new MismatchRuntimeException(subtreeTokenCounts.getCountSum(),
-                        (childCountSum + tokenCounts.getCountSum()));
+            if (childCountSum + nodeDocCounts.getCountSum() != subtreeDocCounts.getCountSum()) {
+                throw new MismatchRuntimeException(subtreeDocCounts.getCountSum(),
+                        (childCountSum + nodeDocCounts.getCountSum()));
             }
         }
 
@@ -2701,8 +2840,8 @@ public class HTM extends AbstractSampler {
             str.append(", ").append(born);
             str.append(", c (").append(getChildren().size()).append(")");
             str.append(", (").append(getContent().getCountSum())
-                    .append(", ").append(subtreeTokenCounts.getCountSum())
-                    .append(", ").append(tokenCounts.getCountSum())
+                    .append(", ").append(subtreeDocCounts.getCountSum())
+                    .append(", ").append(nodeDocCounts.getCountSum())
                     .append(")");
             if (isSupervised()) {
                 str.append(", ").append(MiscUtils.formatDouble(eta));
@@ -2826,11 +2965,11 @@ public class HTM extends AbstractSampler {
                     sampler.initialize(priorTopics);
                     sampler.metaIterate();
                     sampler.outputTopicTopWords(new File(samplerFolder, TopWordFile), numTopWords);
-                    
+
                     File trResultFolder = new File(samplerFolder,
                             AbstractExperiment.TRAIN_PREFIX + AbstractExperiment.RESULT_FOLDER);
                     IOUtils.createFolder(trResultFolder);
-                    
+
                 }
 
                 if (isTesting()) {
