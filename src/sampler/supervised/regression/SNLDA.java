@@ -296,8 +296,8 @@ public class SNLDA extends AbstractSampler {
         if (sigmas.length != L) {
             throw new MismatchRuntimeException(sigmas.length, L - 1);
         }
-        if (rho == 0.0) {
-            throw new RuntimeException("Rho should not be 0");
+        if (!isBinary && rho == 0.0) {
+            throw new RuntimeException("Rho should not be 0 when the response is continuous");
         }
     }
 

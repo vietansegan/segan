@@ -337,7 +337,7 @@ public class RegressionBenchmark<D extends ResponseTextDataset> extends Abstract
         boolean isRooted = cmd.hasOption("root");
 
         sampler.configureContinuous(new File(foldFolder, modelFolder).getAbsolutePath(),
-                trainData.getWordVocab().size(), L, Ks, null,
+                trainData.getWordVocab().size(), L, Ks, null, null,
                 globalAlphas, localAlphas, betas,
                 pis, gammas, rho, mu, sigmas, sigma,
                 initState, pathAssumption, isRooted, paramOpt,

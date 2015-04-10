@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -94,10 +95,8 @@ public class HTM extends AbstractSampler {
     protected double[][] priors; // priors for first-level nodes
     protected Mode mode;
     protected boolean isRooted; // whether tokens are assigned to root node
-    // number of first-level topics: set K to 0 if the number of first-level 
-    // topics is unbounded
-    protected int[] Ks;
-    protected boolean[] unbounded;
+    protected int[] Ks; // initial number of nodes per level
+    protected boolean[] unbounded; // whether a level is unbounded
 
     // derived
     protected int D; // number of documents
@@ -160,6 +159,10 @@ public class HTM extends AbstractSampler {
         return (level < L - 1 && this.Ks[level] == 0);
     }
 
+    protected boolean isUnbounded(int level) {
+        return this.unbounded[level];
+    }
+
     /**
      * *
      * Check whether a given level is terminal.
@@ -191,7 +194,7 @@ public class HTM extends AbstractSampler {
             this.configure(sampler.folder,
                     sampler.V,
                     sampler.L,
-                    sampler.Ks, sampler.priors,
+                    sampler.Ks, sampler.unbounded, sampler.priors,
                     sampler.globalAlphas,
                     sampler.localAlphas,
                     sampler.betas,
@@ -209,7 +212,7 @@ public class HTM extends AbstractSampler {
             this.configureBinary(sampler.folder,
                     sampler.V,
                     sampler.L,
-                    sampler.Ks, sampler.priors,
+                    sampler.Ks, sampler.unbounded, sampler.priors,
                     sampler.globalAlphas,
                     sampler.localAlphas,
                     sampler.betas,
@@ -231,7 +234,7 @@ public class HTM extends AbstractSampler {
             this.configureContinuous(sampler.folder,
                     sampler.V,
                     sampler.L,
-                    sampler.Ks, sampler.priors,
+                    sampler.Ks, sampler.unbounded, sampler.priors,
                     sampler.globalAlphas,
                     sampler.localAlphas,
                     sampler.betas,
@@ -256,7 +259,7 @@ public class HTM extends AbstractSampler {
 
     public void configure(String folder,
             int V, int L,
-            int[] Ks, double[][] priors,
+            int[] Ks, boolean[] unbounded, double[][] priors,
             double[] globalAlphas,
             double[] localAlphas,
             double[] betas,
@@ -275,6 +278,7 @@ public class HTM extends AbstractSampler {
         this.uniform = 1.0 / V;
         this.L = L;
         this.Ks = Ks;
+        this.unbounded = unbounded;
         this.priors = priors;
         this.isExtendable = false;
         for (int K : Ks) {
@@ -333,7 +337,7 @@ public class HTM extends AbstractSampler {
 
     public void configureBinary(String folder,
             int V, int L,
-            int[] Ks, double[][] priors,
+            int[] Ks, boolean[] unbounded, double[][] priors,
             double[] globalAlphas,
             double[] localAlphas,
             double[] betas,
@@ -355,6 +359,7 @@ public class HTM extends AbstractSampler {
         this.uniform = 1.0 / V;
         this.L = L;
         this.Ks = Ks;
+        this.unbounded = unbounded;
         this.priors = priors;
         this.isExtendable = false;
         for (int K : Ks) {
@@ -422,7 +427,7 @@ public class HTM extends AbstractSampler {
 
     public void configureContinuous(String folder,
             int V, int L,
-            int[] Ks, double[][] priors,
+            int[] Ks, boolean[] unbounded, double[][] priors,
             double[] globalAlphas,
             double[] localAlphas,
             double[] betas,
@@ -445,6 +450,7 @@ public class HTM extends AbstractSampler {
         this.uniform = 1.0 / V;
         this.L = L;
         this.Ks = Ks;
+        this.unbounded = unbounded;
         this.priors = priors;
         this.isExtendable = false;
         for (int K : Ks) {
@@ -593,8 +599,7 @@ public class HTM extends AbstractSampler {
 
     @Override
     public String getCurrentState() {
-        return this.getSamplerFolderPath() + "\n"
-                + printGlobalTreeSummary() + "\n";
+        return this.getSamplerFolderPath() + "\n" + printGlobalTreeSummary() + "\n";
     }
 
     /**
@@ -836,6 +841,33 @@ public class HTM extends AbstractSampler {
             outputTopicTopWords(new File(getSamplerFolderPath(), "init-" + TopWordFile), 20);
             validate("Initialized");
         }
+    }
+
+    protected void initializeModelFirstLevelNodes(double[][] priorTopics, double[] initEtas) {
+//        int level = 1;
+//        for (int kk = 0; kk < Ks[0]; kk++) {
+//            // prior topic
+//            double[] prior;
+//            if (priorTopics == null) {
+//                prior = new double[V];
+//                Arrays.fill(prior, uniform);
+//            } else {
+//                prior = priorTopics[kk];
+//            }
+//
+//            // initial eta
+//            double eta;
+//            if (initEtas != null) {
+//                eta = initEtas[kk];
+//            } else {
+//                eta = SamplerUtils.getGaussian(mu, getSigma(level));
+//            }
+//
+//            // initialize
+//            DirMult topic = new DirMult(V, getBeta(1) * V, prior);
+//            Node node = new Node(iter, kk, level, topic, root, eta);
+//            this.root.addChild(kk, node);
+//        }
     }
 
     private void initializeModelStructure(double[][] priors) {
@@ -1175,8 +1207,7 @@ public class HTM extends AbstractSampler {
 
                 // sample
                 Node sampledNode = sampleNode(dd, nn, root, extend, false);
-                if (z[dd][nn] == null
-                        || (z[dd][nn] != null && !z[dd][nn].equals(sampledNode))) {
+                if (z[dd][nn] == null || !z[dd][nn].equals(sampledNode)) {
                     numTokensChanged++;
                 }
                 z[dd][nn] = sampledNode;
@@ -2334,7 +2365,7 @@ public class HTM extends AbstractSampler {
                         .append("]");
             }
             str.append("\n");
-            
+
             // top words according to subtree distribution
             for (int i = 0; i < node.getLevel(); i++) {
                 str.append("\t");
@@ -2344,7 +2375,7 @@ public class HTM extends AbstractSampler {
                 str.append(w).append(" ");
             }
             str.append("\n");
-            
+
             // top assigned words
             if (!node.getContent().isEmpty()) {
                 for (int i = 0; i < node.getLevel(); i++) {
@@ -2553,7 +2584,6 @@ public class HTM extends AbstractSampler {
         protected boolean newNode; // whether this node is newly created
         protected SparseCount subtreeWordCounts;
 
-//        protected double[] phi;
         public Node(int iter, int index, int level, boolean extendable,
                 DirMult content, Node parent, double eta) {
             super(index, level, content, parent);
@@ -2627,65 +2657,6 @@ public class HTM extends AbstractSampler {
             return this.extensible;
         }
 
-//        void computePropagatedCountsFromChildren() {
-//            this.subtreeWordCounts = new SparseCount();
-//            for (Node child : this.getChildren()) {
-//                SparseCount childCount = child.getContent().getSparseCounts();
-//                for (int vv : childCount.getIndices()) {
-//                    if (path == PathAssumption.MINIMAL) {
-//                        this.subtreeWordCounts.increment(vv);
-//                    } else if (path == PathAssumption.MAXIMAL) {
-//                        this.subtreeWordCounts.changeCount(vv, childCount.getCount(vv));
-//                    } else if (path == PathAssumption.NONE) {
-//                        // do nothing, no propagation
-//                    } else {
-//                        throw new RuntimeException("Path assumption " + path
-//                                + " is not supported.");
-//                    }
-//                }
-//            }
-//        }
-//
-//        void updateTopic() {
-//            phi = new double[V];
-//            if (this.isRoot()) {
-//                for (int vv = 0; vv < V; vv++) {
-//                    phi[vv] = getContent().getProbability(vv);
-//                }
-//            } else { // might try to sample instead
-//                double beta = getBeta(getLevel());
-//
-//                double[] meanPrior = new double[V];
-//                Arrays.fill(meanPrior, uniform);
-//                if (this.getLevel() == 1 && priors != null) {
-//                    meanPrior = priors[this.getIndex()];
-//                }
-//
-//                double norm = this.getContent().getCountSum()
-//                        + this.subtreeWordCounts.getCountSum()
-//                        + beta * V;
-//                for (int vv = 0; vv < V; vv++) {
-//                    phi[vv] = (getContent().getCount(vv)
-//                            + subtreeWordCounts.getCount(vv)
-//                            + beta * V * meanPrior[vv]) / norm;
-//                }
-//            }
-//        }
-//
-//        double[] getPhi() {
-//            return phi;
-//        }
-//
-//        public void setPhi(double[] p) {
-//            this.phi = p;
-//        }
-//
-//        double getPhi(int v) {
-//            if (this.phi == null) {
-//                return getContent().getProbability(v);
-//            }
-//            return phi[v];
-//        }
         boolean isEmpty() {
             return this.getContent().isEmpty();
         }
@@ -2926,7 +2897,7 @@ public class HTM extends AbstractSampler {
                 sampler.setBasename("NHDP");
                 sampler.setWordVocab(textData.getWordVocab());
                 sampler.configure(outputFolder, textData.getWordVocab().size(),
-                        L, Ks, priorTopics,
+                        L, Ks, null, priorTopics,
                         globalAlphas, localAlphas, betas,
                         pis, gammas,
                         initState, pathAssumption, isRooted, paramOpt,
@@ -2950,7 +2921,7 @@ public class HTM extends AbstractSampler {
 
                 sampler.setWordVocab(binData.getWordVocab());
                 sampler.configureBinary(outputFolder, binData.getWordVocab().size(),
-                        L, Ks, priorTopics,
+                        L, Ks, null, priorTopics,
                         globalAlphas, localAlphas, betas,
                         pis, gammas, mu, sigmas, sigma,
                         initState, pathAssumption, isRooted, paramOpt,
@@ -3013,7 +2984,7 @@ public class HTM extends AbstractSampler {
 
                 sampler.setWordVocab(contData.getWordVocab());
                 sampler.configureContinuous(outputFolder, contData.getWordVocab().size(),
-                        L, Ks, priorTopics,
+                        L, Ks, null, priorTopics,
                         globalAlphas, localAlphas, betas,
                         pis, gammas, rho, mu, sigmas, sigma,
                         initState, pathAssumption, isRooted, paramOpt,
