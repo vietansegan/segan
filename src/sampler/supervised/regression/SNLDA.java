@@ -1713,36 +1713,37 @@ public class SNLDA extends AbstractSampler {
             // top words according to the distribution
             str.append(indentation);
             str.append(node.getPathString())
-                    .append(" (").append(node.born)
-                    .append("; ").append(node.getContent().getCountSum())
-                    .append("; ").append(MiscUtils.formatDouble(node.eta))
-                    .append("; eta: ").append(MiscUtils.formatDouble(node.pathEta))
+                    .append(" (")
+                    .append(node.born).append("; ")
+                    .append(node.getContent().getCountSum()).append("; ")
+                    //.append(MiscUtils.formatDouble(node.eta)).append("; eta: ")
+                    .append(MiscUtils.formatDouble(node.pathEta))
                     .append(")");
-            str.append("\n");
+            str.append(" ");
 
             if (!node.isEmpty()) {
                 // words with highest probabilities at subtree
                 if (node.getLevel() < L - 1) {
                     String[] subtreeTopWords = node.getSubtreeTopWords(numWords);
-                    str.append(indentation).append("@ subtree: ");
+//                    str.append(indentation);
                     for (String topWord : subtreeTopWords) {
-                        str.append(" ").append(topWord);
+                        str.append(topWord).append(" ");
+                    }
+                    str.append("\n");
+                } else { // words with highest probabilities at node
+                    String[] nodeTopWords = node.getNodeTopWords(numWords);
+//                    str.append(indentation);
+                    for (String topWord : nodeTopWords) {
+                        str.append(topWord).append(" ");
                     }
                     str.append("\n");
                 }
 
-                // words with highest probabilities at node
-                String[] nodeTopWords = node.getNodeTopWords(numWords);
-                str.append(indentation).append("@ node: ");
-                for (String topWord : nodeTopWords) {
-                    str.append(" ").append(topWord);
-                }
-                str.append("\n");
-
                 // top assigned words
-                str.append(indentation);
-                str.append(node.getTopObservations()).append("\n\n");
+//                str.append(indentation);
+//                str.append(node.getTopObservations()).append("\n\n");
             }
+            str.append("\n");
         }
 
         try {

@@ -37,23 +37,26 @@ class TopicNode:
         count_fields = count_fields.split(";")
         self.words = map(strip, word_fields.split(" "))
         self.response = float(count_fields[-1])
-        self.token_count = int(count_fields[2])
-        self.doc_count = int(count_fields[1])
+        self.token_count = int(count_fields[1])
+        #self.doc_count = int(count_fields[1])
         self.iter_created = int(count_fields[0])
     
         #print("Node ids: %s" % str(node_fields[-1]))
-		#print("Count: %s" % str(count_fields))
-		#print("Word: %s" % str(word_fields))
-		#print("response = %f" % self.response)
-		#print("doc count = %d" % self.doc_count)
-		#print("token count = %d" % self.token_count)
-		#print("iter created = %d" % self.iter_created)
+        #print("Count: %s" % str(count_fields))
+	#print("Word: %s" % str(word_fields))
+	#print("response = %f" % self.response)
+	#print("doc count = %d" % self.doc_count)
+	#print("token count = %d" % self.token_count)
+	#print("iter created = %d" % self.iter_created)
 
     def graphviz(self, color):
         text = ""
-        for ii in range(0, 10):
-            text += " " + self.words[ii]
-        text += "\n(" + str(self.id).replace('\"', '') + ", " + str(self.response) + ", " + str(self.doc_count) + ", " + str(self.token_count) + ")"
+        if len(self.words) == 2:
+            text += "root"
+        else:
+            for ii in range(0, 10):
+                text += " " + self.words[ii]
+        text += "\n(" + str(self.id).replace('\"', '') + ", " + str(self.response) + ", " + str(self.token_count) + ")"
         return '\t%s [color="#%s" label="%s"];' % \
             (self.id, color, text)
 
@@ -77,8 +80,8 @@ class TopicGraph:
     def add_node(self, line, reverse=False):
         node = TopicNode(line)
 
-        if node.doc_count < self._doc_lim:
-            return None
+        #if node.doc_count < self._doc_lim:
+        #    return None
         
         if node.iter_created > 100:
             return None
