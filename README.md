@@ -16,12 +16,12 @@ A `segan-YYYYMMDD.jar` file for a "stable" version is provided in folder `dist`.
 
 # LDA
 ```
-java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.LDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta>
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.LDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta> -train
 ```
 
 # HDP
 ```
-java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.HDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <initial-num-topics> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --init <initialization>
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.unsupervised.HDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <initial-num-topics> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --init <initialization> -train
 ```
 
 # SLDA
@@ -29,7 +29,7 @@ This provides an implementation of Supervised Latent Dirichlet allocation (Blei 
 
 ### Running SLDA
 ```
-java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SLDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization>
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SLDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --K <number-topics> --alpha <alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization> -train
 ```
 
 - `<dataset-name>`: Name of the dataset
@@ -93,7 +93,7 @@ java -cp 'dist/segan.jar:lib/*' data.ResponseTextDataset --dataset amazon-data -
 ```
 
 ```
-java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/supervised-models --burnIn 250 --maxIter 500 --sampleLag 25 --report 5 --K 50 --alpha 0.1 --beta 0.1 --rho 1.0 --sigma 1.0 --mu 0.0 --init random -v -d -z
+java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/supervised-models --burnIn 250 --maxIter 500 --sampleLag 25 --report 5 --K 50 --alpha 0.1 --beta 0.1 --rho 1.0 --sigma 1.0 --mu 0.0 --init random -v -d -z -train
 ```
 
 Notes:
@@ -106,7 +106,7 @@ SNLDA takes in the same input as SLDA to learn a hierarchy of topics instead of 
 
 Example cmd:
 ```
-java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SNLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/model-supervised  --Ks 15,4 --burnIn 50 --maxIter 100 --sampleLag 25 --report 5 --init random --alphas 0.1,0.1 --betas 1.0,0.5,0.1 --gamma-means 0.2,0.2 --gamma-scales 100,10 --rho 1.0 --mu 0.0 --sigma 2.5 -v -d -z
+java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SNLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-supervised/amazon-data.wvoc --word-file demo/amazon-data/format-supervised/amazon-data.dat --info-file demo/amazon-data/format-supervised/amazon-data.docinfo --output-folder demo/amazon-data/model-supervised  --Ks 15,4 --burnIn 50 --maxIter 100 --sampleLag 25 --report 5 --init random --alphas 0.1,0.1 --betas 1.0,0.5,0.1 --gamma-means 0.2,0.2 --gamma-scales 100,10 --rho 1.0 --mu 0.0 --sigma 2.5 -v -d -z -train
 ```
 - `Ks`: The branching factors of the hierarchy. Default: [15, 4], i.e., the root node has 15 children nodes and each 1st-level node has 4 children nodes. This will given a tree of L=3 levels.
 - `alphas`: Dirichlet parameters of distribution over children nodes at each level. Default: [0.1, 0.1]. Array length = L-1.
@@ -119,7 +119,7 @@ java -cp "dist/segan.jar:lib/*" sampler.supervised.regression.SNLDA --dataset am
 SLDA for a set of documents, each of which is associated with a binary response variable (0 or 1). 
 ### Running BinarySLDA
 ```
-java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.classification.BinarySLDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder>
+java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.classification.BinarySLDA --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> -train
 ```
 - `<dataset-name>`:	The name of the dataset
 - `<output-folder>`: Folder to output results
@@ -176,10 +176,10 @@ java -cp 'dist/segan.jar:dist/lib/*' data.LabelTextDataset --dataset amazon-data
 ```
 - To run BinarySLDA on formatted data in `demo/amazon-data/format-binary`:
 ```
-java -cp "dist/segan.jar:lib/*" sampler.supervised.classification.BinarySLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc --word-file demo/amazon-data/format-binary/amazon-data.dat --info-file demo/amazon-data/format-binary/amazon-data.docinfo --output-folder demo/amazon-data/binary-supervised-models --burnIn 100 --maxIter 250 --sampleLag 30 --report 5 --K 50 --alpha 0.1 --beta 0.1 --sigma 1.0 --mu 0.0 --init random -v -d
+java -cp "dist/segan.jar:lib/*" sampler.supervised.classification.BinarySLDA --dataset amazon-data --word-voc-file demo/amazon-data/format-binary/amazon-data.wvoc --word-file demo/amazon-data/format-binary/amazon-data.dat --info-file demo/amazon-data/format-binary/amazon-data.docinfo --output-folder demo/amazon-data/binary-supervised-models --burnIn 100 --maxIter 250 --sampleLag 30 --report 5 --K 50 --alpha 0.1 --beta 0.1 --sigma 1.0 --mu 0.0 --init random -v -d -train
 ```
 
 # SHDP
 ```
- java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SHDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization>
+ java -cp "$SEGAN_PATH/dist/segan.jar:$SEGAN_PATH/lib/*" sampler.supervised.regression.SHDP --dataset <dataset-name> --word-voc-file <word-vocab-file> --word-file <doc-word-file> --info-file <doc-info-file> --output-folder <output-folder> --burnIn <number-burn-in-iterations> --maxIter <max-number-iterations> --sampleLag <sample-lag> --report <report-interval> --global-alpha <global-alpha> --local-alpha <local-alpha> --beta <beta> --rho <rho> --sigma <sigma> --mu <mu> --init <initialization> -train
 ```
