@@ -71,7 +71,7 @@ public class CorpusProcessor {
     private int[][] numericDocs;
     private int[][][] numericSentences;
     private String[][] rawSentences;
-    private final Pattern p = Pattern.compile("\\p{Punct}");
+    private final Pattern p = Pattern.compile("\\p{Punct}&&[^_]");
 
     public CorpusProcessor(CorpusProcessor corp) {
         this(corp.unigramCountCutoff,
@@ -240,9 +240,10 @@ public class CorpusProcessor {
         try {
             this.vocabulary = new ArrayList<String>();
             BufferedReader reader = IOUtils.getBufferedReader(filepath);
-	    String line;
-	    while ((line = reader.readLine()) != null)
-		this.vocabulary.add(line.trim());
+            String line;
+            while ((line = reader.readLine()) != null) {
+                this.vocabulary.add(line.trim());
+            }
             reader.close();
         } catch (IOException e) {
             e.printStackTrace();
@@ -369,10 +370,8 @@ public class CorpusProcessor {
                         // if the bigram is in the vocab, add the bigram
                         tokens.add(bigram);
                         i++;
-                    } else {
-                        if (voc.contains(curToken)) {
-                            tokens.add(curToken);
-                        }
+                    } else if (voc.contains(curToken)) {
+                        tokens.add(curToken);
                     }
                 }
                 normTexts[d][s] = tokens.toArray(new String[tokens.size()]);
@@ -762,16 +761,8 @@ public class CorpusProcessor {
             reduced = this.stemmer.stem(reduced);
         }
 
-        if (reduced.length() < minWordLength
-                || token.matches("[^A-Za-z]+")
-                || Character.isDigit(token.charAt(0))) {
+        if (reduced.length() < minWordLength) {
             return "";
-        }
-
-        for (int i = 0; i < token.length(); i++) {
-            if (!Character.isLetterOrDigit(token.charAt(i))) {
-                return "";
-            }
         }
 
         if (filterStopwords && stopwordRemoval.isStopword(reduced)) {
